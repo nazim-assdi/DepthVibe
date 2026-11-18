@@ -77,9 +77,9 @@ def add_camera_compile_dependency(path: Path) -> None:
     if path.name.endswith(".kts"):
         block = """
 subprojects {
-    if (name == "camera_android_camerax") {
-        dependencies {
-            add("implementation", "androidx.concurrent:concurrent-futures:1.2.0")
+    afterEvaluate {
+        if (name == "camera_android_camerax") {
+            dependencies.add("implementation", "androidx.concurrent:concurrent-futures:1.2.0")
         }
     }
 }
@@ -87,9 +87,11 @@ subprojects {
     else:
         block = """
 subprojects {
-    if (name == 'camera_android_camerax') {
-        dependencies {
-            implementation 'androidx.concurrent:concurrent-futures:1.2.0'
+    afterEvaluate {
+        if (name == 'camera_android_camerax') {
+            dependencies {
+                implementation 'androidx.concurrent:concurrent-futures:1.2.0'
+            }
         }
     }
 }
@@ -101,13 +103,16 @@ def add_camera_entitlements(path: Path) -> None:
         return
     tree = ET.parse(path)
     root = tree.getroot()
-    keys = {node.text for node in root.findall("key")}
+    dictionary = root.find("dict") if root.tag == "plist" else root
+    if dictionary is None or dictionary.tag != "dict":
+        raise ValueError(f"{path} does not contain an entitlements dictionary")
+    keys = {node.text for node in dictionary.findall("key")}
     for key in ("com.apple.security.device.camera", "com.apple.security.device.audio-input"):
         if key not in keys:
             key_node = ET.Element("key")
             key_node.text = key
             value_node = ET.Element("true")
-            root.extend([key_node, value_node])
+            dictionary.extend([key_node, value_node])
     tree.write(path, encoding="utf-8", xml_declaration=True)
 
 replace_min_sdk(ROOT / "android/app/build.gradle.kts")
@@ -125,7 +130,7 @@ update_plist(ROOT / "macos/Runner/Info.plist", {
     "NSCameraUsageDescription": "DepthVibe uses your camera to record video for editing.",
     "NSMicrophoneUsageDescription": "DepthVibe uses your microphone to record audio with video.",
 })
-for name in ("DebugProfile.entitlements", "DebugProfile.entitlements", "Release.entitlements"):
+for name in ("DebugProfile.entitlements", "Release.entitlements"):
     add_camera_entitlements(ROOT / "macos/Runner/" / name)
 replace_deployment_target(ROOT / "ios/Runner.xcodeproj/project.pbxproj", "ios", "14.0")
 replace_deployment_target(ROOT / "macos/Runner.xcodeproj/project.pbxproj", "macos", "13.0")
