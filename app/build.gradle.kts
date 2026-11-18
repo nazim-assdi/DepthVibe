@@ -44,9 +44,9 @@ dependencies {
     implementation("androidx.media3:media3-effect:1.11.1")
 
     implementation("com.google.ar:core:1.56.0")
-    implementation("com.google.android.filament:filament-android:1.81.0")
-    implementation("com.google.android.filament:gltfio-android:1.81.0")
-    implementation("com.google.android.filament:filament-utils-android:1.81.0")
+    implementation("com.google.android.filament:filament-android:1.80.1")
+    implementation("com.google.android.filament:gltfio-android:1.80.1")
+    implementation("com.google.android.filament:filament-utils-android:1.80.1")
     implementation("com.google.ai.edge.litert:litert:2.3.0")
     implementation("com.google.ai.edge.litert:litert-gpu:2.3.0")
     implementation("org.opencv:opencv:4.11.0")
