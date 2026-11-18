@@ -94,5 +94,5 @@ update_plist(ROOT / "macos/Runner/Info.plist", {
 })
 for name in ("DebugProfile.entitlements", "DebugProfile.entitlements", "Release.entitlements"):
     add_camera_entitlements(ROOT / "macos/Runner/" / name)
-replace_deployment_target(ROOT / "ios/Runner.xcodeproj/project.pbxproj", "ios", "13.0")
+replace_deployment_target(ROOT / "ios/Runner.xcodeproj/project.pbxproj", "ios", "14.0")
 replace_deployment_target(ROOT / "macos/Runner.xcodeproj/project.pbxproj", "macos", "13.0")

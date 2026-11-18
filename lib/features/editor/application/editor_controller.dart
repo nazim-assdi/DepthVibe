@@ -9,6 +9,12 @@ class EditorController extends ChangeNotifier {
   EditorProject get project => _project;
   int get playheadMs => _playheadMs;
 
+  int _clampInt(int value, int lower, int upper) {
+    if (value < lower) return lower;
+    if (value > upper) return upper;
+    return value;
+  }
+
   void _update(EditorProject next) {
     _project = next;
     notifyListeners();
@@ -30,7 +36,7 @@ class EditorController extends ChangeNotifier {
     if (totalMs <= 0) return;
     _update(_project.copyWith(
       sourceDurationMs: totalMs,
-      trimInMs: _project.trimInMs.clamp(0, totalMs - 1).toInt(),
+      trimInMs: _clampInt(_project.trimInMs, 0, totalMs - 1),
       trimOutMs: totalMs,
     ));
   }
@@ -38,34 +44,38 @@ class EditorController extends ChangeNotifier {
   void setPlayhead(Duration position) {
     final total = _project.sourceDurationMs;
     _playheadMs = total > 0
-        ? position.inMilliseconds.clamp(0, total).toInt()
-        : position.inMilliseconds.clamp(0, 1 << 30).toInt();
+        ? _clampInt(position.inMilliseconds, 0, total)
+        : _clampInt(position.inMilliseconds, 0, 1 << 30);
     notifyListeners();
   }
 
   void setTrimIn(double value) {
     final total = _project.sourceDurationMs;
     if (total <= 1) return;
-    final next = value.round().clamp(0, total - 1).toInt();
+    final next = _clampInt(value.round(), 0, total - 1);
     final end = _project.trimOutMs > next
         ? _project.trimOutMs
-        : (next + 1).clamp(1, total).toInt();
+        : _clampInt(next + 1, 1, total);
     _update(_project.copyWith(trimInMs: next, trimOutMs: end));
   }
 
   void setTrimOut(double value) {
     final total = _project.sourceDurationMs;
     if (total <= 1) return;
-    final next = value.round().clamp(1, total).toInt();
+    final next = _clampInt(value.round(), 1, total);
     final start = _project.trimInMs < next
         ? _project.trimInMs
-        : (next - 1).clamp(0, total - 1).toInt();
+        : _clampInt(next - 1, 0, total - 1);
     _update(_project.copyWith(trimInMs: start, trimOutMs: next));
   }
 
   void setSpeed(double value) {
     if (value < 0.25 || value > 2.0) {
-      throw RangeError.range(value, 0.25, 2.0, 'speed');
+      throw RangeError.value(
+        value,
+        'speed',
+        'Playback speed must be between 0.25x and 2.0x.',
+      );
     }
     _update(_project.copyWith(speed: value));
   }

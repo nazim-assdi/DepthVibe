@@ -49,7 +49,7 @@ iOS App Store distribution requires Apple signing/provisioning configured separa
 
 - Flutter 3.50 / Dart 3.14.
 - Android API 26 or newer.
-- iOS 13 or newer.
+- iOS 14 or newer.
 - macOS 13 or newer for the selected FFmpeg runtime bundle.
 - Linux x86_64 with glibc 2.28 or newer for the selected FFmpeg runtime.
 - Windows x86_64 / ARM64 depending on the chosen native bundle architecture.

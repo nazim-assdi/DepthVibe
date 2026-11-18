@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -67,6 +66,7 @@ class _EditorScreenState extends State<EditorScreen> {
     _editor.loadVideo(path);
     await _player.open(Media(path), play: false);
     await _player.setRate(_editor.project.speed);
+    await _player.setVolume(_editor.project.muted ? 0 : 100);
     if (!mounted) return;
     setState(() {
       _ready = true;
@@ -88,6 +88,11 @@ class _EditorScreenState extends State<EditorScreen> {
     final position = Duration(milliseconds: value.round());
     await _player.seek(position);
     _editor.setPlayhead(position);
+  }
+
+  Future<void> _setMuted(bool value) async {
+    _editor.setMuted(value);
+    if (_ready) await _player.setVolume(value ? 0 : 100);
   }
 
   Future<void> _changeSpeed(double value) async {
@@ -136,10 +141,10 @@ class _EditorScreenState extends State<EditorScreen> {
         title: const Text('Export complete'),
         content: SelectableText(
           result.galleryUri != null
-              ? 'MP4 saved to Movies/DepthVibe/videos.\\nGallery reference: ${result.galleryUri}\\nApp copy: ${file.path}'
+              ? 'MP4 saved to Movies/DepthVibe/videos.\nGallery reference: ${result.galleryUri}\nApp copy: ${file.path}'
               : result.gallerySaveError != null
-                  ? 'The MP4 was exported successfully, but saving to the gallery failed.\\n\\nApp copy: ${file.path}\\n\\n${result.gallerySaveError}'
-                  : 'MP4 saved to:\\n${file.path}',
+                  ? 'The MP4 was exported successfully, but saving to the gallery failed.\n\nApp copy: ${file.path}\n\n${result.gallerySaveError}'
+                  : 'MP4 saved to:\n${file.path}',
         ),
         actions: [
           TextButton(
@@ -403,7 +408,7 @@ class _EditorScreenState extends State<EditorScreen> {
             )
           : Column(
               children: [
-                Expanded(child: Center(child: ConstrainedBox(maxWidth: 920, child: previewContent))),
+                Expanded(child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 920), child: previewContent))),
                 const SizedBox(height: 12),
                 _buildPlaybackControls(),
               ],
@@ -495,7 +500,7 @@ class _EditorScreenState extends State<EditorScreen> {
             ),
             IconButton.filledTonal(
               tooltip: 'Mute original audio',
-              onPressed: !_ready ? null : () => _editor.setMuted(!_editor.project.muted),
+              onPressed: !_ready ? null : () => _setMuted(!_editor.project.muted),
               icon: Icon(_editor.project.muted ? Icons.volume_off : Icons.volume_up),
             ),
           ],
@@ -504,7 +509,7 @@ class _EditorScreenState extends State<EditorScreen> {
           contentPadding: EdgeInsets.zero,
           title: const Text('Remove original audio', style: TextStyle(fontSize: 13)),
           value: _editor.project.muted,
-          onChanged: !_ready ? null : _editor.setMuted,
+          onChanged: !_ready ? null : _setMuted,
         ),
         const SizedBox(height: 6),
         _sectionTitle('PLAYBACK SPEED', Icons.speed),

@@ -4,42 +4,25 @@ class MediaPickerService {
   const MediaPickerService._();
 
   static Future<String?> pickVideo() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.video,
-      allowMultiple: false,
-      withData: false,
-    );
-    return result?.files.single.path;
+    final file = await FilePicker.pickFile(type: FileType.video);
+    return file?.path;
   }
 
   static Future<List<String>> pickVideos() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.video,
-      allowMultiple: true,
-      withData: false,
-    );
-    return result?.files
-            .map((file) => file.path)
-            .whereType<String>()
-            .toList(growable: false) ??
-        const [];
+    final files = await FilePicker.pickFiles(type: FileType.video);
+    return files
+        .map((file) => file.path)
+        .whereType<String>()
+        .toList(growable: false);
   }
 
   static Future<String?> pickAudio() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.audio,
-      allowMultiple: false,
-      withData: false,
-    );
-    return result?.files.single.path;
+    final file = await FilePicker.pickFile(type: FileType.audio);
+    return file?.path;
   }
 
   static Future<String?> pickImage() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      allowMultiple: false,
-      withData: false,
-    );
-    return result?.files.single.path;
+    final file = await FilePicker.pickFile(type: FileType.image);
+    return file?.path;
   }
 }
