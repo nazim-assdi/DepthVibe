@@ -28,9 +28,9 @@ DepthVibe is being built around a hybrid Easy / Pro editor. The first repository
 
 Requirements:
 
-- Android Studio with Android SDK Platform 37.
+- Android Studio with Android SDK Platform 36.
 - JDK 17.
-- Gradle 9.5.0 (the CI workflow installs this version).
+- Gradle 8.13 (the CI workflow installs this version).
 
 From the repository root:
 
