@@ -1,0 +1,37 @@
+name: depthvibe
+description: A cross-platform AI-first video and 3D creative studio by N Tech.
+publish_to: none
+version: 0.4.0+1
+
+environment:
+  sdk: ">=3.12.0 <4.0.0"
+  flutter: ">=3.50.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  camera: ^0.11.3
+  camera_desktop: ^2.0.0
+  file_picker: ^13.4.0
+  ffmpeg_kit_extended_flutter: ^1.0.0
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+  media_kit_libs_video: ^1.0.7
+  path_provider: ^2.1.5
+  share_plus: ^12.0.1
+  cross_file: ^0.3.5+2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+hooks:
+  user_defines:
+    ffmpeg_kit_extended_flutter:
+      type: "video"
+      gpl: false
+      small: true

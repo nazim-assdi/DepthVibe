@@ -1,12 +1,36 @@
-*.iml
-.gradle/
-.idea/
-local.properties
-.DS_Store
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
 /build/
-**/build/
-captures/
-.externalNativeBuild/
-.cxx/
-*.apk
-*.aab
+coverage/
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+*.iml
+
+# Native build products
+.gradle/
+local.properties
+android/.gradle/
+android/local.properties
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+macos/Flutter/GeneratedPluginRegistrant.swift
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+
+# IDE and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+
+# Signing keys and local secrets
+*.jks
+*.keystore
+key.properties
+.env
+.env.*

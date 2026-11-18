@@ -1,71 +1,93 @@
 # DepthVibe
 
-**Android video studio with AI depth, AR, 3D assets and procedural VFX experiments.**
+**One creative studio. Five operating systems. One Flutter codebase.**
 
-DepthVibe is an Android app by **N Tech**. The 0.3.0 development branch adds an advanced 3D/VFX lab alongside the video studio and virtual 3D camera.
+DepthVibe is an AI-first video, motion-design and 3D creative studio from **N Tech**. Starting with 0.4.0, the primary app is Flutter and targets Android, iOS, Windows, macOS and Linux.
 
-## Development features
+## Cross-platform editor foundation
 
-### Video Studio
-- Import a source video and add sequential video clips.
-- Import a separate music track; the export compositor can loop the background audio under the video sequence.
-- Trim the first source clip, apply rotation and constant playback speed.
-- Export aspect-ratio fit/crop, static title burn-in, brightness and grayscale.
-- Save MP4 files to Movies/DepthVibe and share the result.
-- Preview 16:9, 9:16, 1:1 and 4:5 canvases, title overlays, speed and color controls.
+- Import local video files and preview with MediaKit.
+- Record video from supported device cameras on mobile and desktop.
+- Trim In / Out and add split markers.
+- Playback speed from 0.25x to 2x.
+- 90-degree rotation and original-audio mute.
+- 16:9, 9:16, 1:1 and 4:5 export canvases.
+- Fit or Fill/Crop.
+- Title and caption preview, with a generated image overlay in export.
+- MP4 export with progress reporting.
+- Save exports in the app Documents folder at `DepthVibe/Exports`, then share them.
 
-### AI Depth / 2.5D
-- First-use MiDaS Small model download (approximately 33 MB).
-- LiteRT GPU inference with CPU fallback.
-- Grayscale estimated depth map and an interactive mesh-displacement parallax preview.
-- The depth output is relative depth. It does not reconstruct invisible geometry or create a complete watertight 3D human/object model.
+The initial shared exporter processes a single source clip. Split markers are currently edit metadata, not separate renderable clips. Multi-clip timeline compositing, audio mixing, transitions, LUTs, image layers, AI depth and 3D scene rendering are on the roadmap; they are not claimed as complete.
 
-### Live AR
-- ARCore live camera background and plane detection.
-- Tap a tracked plane to place an anchored 3D marker.
-- Requires camera permission, Google Play Services for AR and a supported Android device.
+## Platforms
 
-### Recorded video motion solve
-- OpenCV ORB feature detection/matching.
-- Essential-matrix and relative pose recovery on sampled frames.
-- This is a first-pass monocular visual-odometry solver. It does not yet provide metric scale, loop closure, global bundle adjustment, lens calibration or production-grade full SLAM.
+| Platform | Target |
+|---|---|
+| Android | APK / App Bundle |
+| iOS | Unsigned build in CI; signing required for distribution |
+| Windows | Desktop application |
+| macOS | Desktop application |
+| Linux | Desktop application |
 
-### 3D Assets and VFX
-- GLB loading using Filament glTF renderer.
-- Static OBJ geometry import with orbit/zoom preview.
-- Filament key-light intensity control and real-time 3D scene preview.
-- Fire, smoke and shatter-style particle simulation preview with gravity and particle lifetime.
-- Typed node-graph model, editable graph links, keyframe interpolation and curve preview.
+## Requirements
 
-## Important limitations
+- Flutter 3.50 / Dart 3.14
+- Android API 26+, iOS 13+, macOS 13+
+- Desktop build toolchains for Windows, macOS and Linux
+- Linux camera capture requires GStreamer runtime plugins
 
-This is an actively developing mobile editor, not yet a complete After Effects replacement. The following are not complete: MTL texture/material import for OBJ, IBL/HDR environment relighting controls, mesh-fragment shatter, particle baking into final video, image/overlay compositing in export, overlapping multi-track video layers, audio mixing/ducking, cross-fade transitions, LUT import, masks, full graph execution, and export-linked keyframe animation. Split markers are still timeline markers, not independently editable clip segments.
+## Getting started
 
-ARCore and GPU behavior must be checked on physical phones. AI depth needs a first-use network model download. Lower-end devices may need reduced preview resolution/particle counts.
-
-## Build
-
-Requirements: Android SDK Platform 36, JDK 17 and Gradle 8.13.
+Install Flutter 3.50, then run:
 
 ```bash
-gradle :app:assembleDebug
-gradle :app:testDebugUnitTest
+bash tool/bootstrap_platforms.sh
+flutter analyze
+flutter test
+flutter run
 ```
 
-Open the root folder in Android Studio and run the `app` configuration on an Android device or emulator.
+Build an Android APK:
 
-## Stack
+```bash
+flutter build apk --release --split-per-abi
+```
 
-- Kotlin 2.4.0, Jetpack Compose and AndroidX Media3
-- LiteRT 2.3.0 and MiDaS Small model
-- ARCore 1.56.0
-- Filament 1.70.1
-- OpenCV 4.11.0
-- OpenGL ES 2.0
-- GitHub Actions APK artifacts
+Build desktop applications:
 
-## Project
-- Product: DepthVibe
-- Developer: N Tech
-- Package: `com.ntech.depthvibe`
-- Version: 0.3.0
+```bash
+flutter build windows --release
+flutter build linux --release
+flutter build macos --release
+```
+
+Build iOS without signing:
+
+```bash
+flutter build ios --release --no-codesign
+```
+
+## Architecture
+
+- `lib/features/editor`: timeline state, preview, inspector and export pipeline.
+- `lib/features/media`: platform file import and camera recording.
+- `tool/bootstrap_platforms.sh`: generate the Flutter platform runners.
+- `legacy/android-native`: preserved Kotlin/Compose Android implementation from 0.3.0.
+- `docs/FLUTTER_MIGRATION.md`: migration scope, requirements and known gaps.
+
+## Media engine
+
+- MediaKit for cross-platform video playback.
+- FFmpegKit Extended for shared native FFmpeg processing.
+- Flutter camera + camera_desktop for capture.
+- File Picker for native file selection.
+
+The selected FFmpeg build keeps GPL-only components disabled. Review all third-party codec licences and the final binary bundle before distributing store builds. Video bundle size can be substantial.
+
+## Product goal
+
+The long-term target is a high-end editor combining a non-linear multi-track timeline, color and audio finishing, AI-assisted media, 3D compositing, camera tracking, procedural effects and an executable node graph. Matching or exceeding established tools is an ambition, not a present performance claim. Quality will be measured by features that work in preview and export, platform tests, stability and real-world projects.
+
+**Product:** DepthVibe  
+**Developer:** N Tech  
+**Primary stack:** Flutter / Dart
