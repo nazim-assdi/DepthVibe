@@ -18,8 +18,7 @@ void main() {
       ),
     );
 
-    final renderAspect =
-        tester.renderObject<RenderAspectRatio>(find.byType(AspectRatio));
-    expect(renderAspect.aspectRatio, 9 / 16);
+    final canvasSize = tester.getSize(find.byType(AspectRatio));
+    expect(canvasSize.width / canvasSize.height, closeTo(9 / 16, 0.001));
   });
 }
