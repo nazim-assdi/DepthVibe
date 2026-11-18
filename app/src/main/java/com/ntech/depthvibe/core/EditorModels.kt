@@ -1,17 +1,8 @@
 package com.ntech.depthvibe.core
 
-enum class WorkspaceMode {
-    EASY,
-    PRO
-}
-
-enum class EditorTool {
-    SELECT,
-    DEPTH,
-    TRACKING,
-    PARTICLES,
-    MODEL
-}
+enum class WorkspaceMode { EASY, PRO }
+enum class EditorTool { SELECT, DEPTH, TRACKING, PARTICLES, MODEL }
+enum class TimelineLayerType { VIDEO, AUDIO, IMAGE, TEXT, EFFECT, THREE_D }
 
 data class Transform3D(
     val positionX: Float = 0f,
@@ -23,6 +14,20 @@ data class Transform3D(
     val scale: Float = 1f
 )
 
+data class TrimRange(
+    val startMs: Long,
+    val endMs: Long,
+    val sourceDurationMs: Long
+) {
+    init {
+        require(sourceDurationMs > 0L)
+        require(startMs >= 0L)
+        require(endMs <= sourceDurationMs)
+        require(endMs > startMs)
+    }
+    val durationMs: Long get() = endMs - startMs
+}
+
 data class TimelineClip(
     val id: String,
     val sourceUri: String,
@@ -30,12 +35,26 @@ data class TimelineClip(
     val durationMs: Long
 ) {
     init {
-        require(startMs >= 0L) { "Clip start must not be negative." }
-        require(durationMs > 0L) { "Clip duration must be positive." }
+        require(startMs >= 0L)
+        require(durationMs > 0L)
     }
+    val endMs: Long get() = startMs + durationMs
+}
 
-    val endMs: Long
-        get() = startMs + durationMs
+data class TimelineLayer(
+    val id: String,
+    val name: String,
+    val type: TimelineLayerType,
+    val startMs: Long,
+    val durationMs: Long,
+    val sourceUri: String? = null,
+    val enabled: Boolean = true
+) {
+    init {
+        require(startMs >= 0L)
+        require(durationMs > 0L)
+    }
+    val endMs: Long get() = startMs + durationMs
 }
 
 data class EditorProject(
@@ -43,5 +62,6 @@ data class EditorProject(
     val name: String,
     val mode: WorkspaceMode = WorkspaceMode.EASY,
     val clips: List<TimelineClip> = emptyList(),
-    val selectedClipId: String? = null
+    val selectedClipId: String? = null,
+    val layers: List<TimelineLayer> = emptyList()
 )
