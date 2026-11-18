@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 
+import '../../media/data/gallery_permission_service.dart';
+
 import '../domain/editor_project.dart';
 
 typedef ExportProgress = void Function(double progress);
@@ -89,13 +91,19 @@ class VideoExportService {
       String? gallerySaveError;
       if (Platform.isAndroid || Platform.isIOS) {
         try {
-          final saved = await SaverGallery.saveFile(
-            filePath: output.path,
-            skipIfExists: false,
-            fileName: output.uri.pathSegments.last,
-            albumPath: 'DepthVibe/videos',
-          );
-          galleryUri = saved.savedUri;
+          final permissionGranted =
+              await GalleryPermissionService.requestSavePermission();
+          if (!permissionGranted) {
+            gallerySaveError = 'Gallery permission was denied. The export remains in app storage.';
+          } else {
+            final saved = await SaverGallery.saveFile(
+              filePath: output.path,
+              skipIfExists: false,
+              fileName: output.uri.pathSegments.last,
+              albumPath: 'DepthVibe/videos',
+            );
+            galleryUri = saved.savedUri;
+          }
         } catch (error) {
           // Keep the rendered MP4 in the app folder even if gallery access is denied.
           gallerySaveError = error.toString();

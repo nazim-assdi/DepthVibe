@@ -33,6 +33,28 @@ def replace_min_sdk(path: Path) -> None:
     text = re.sub(r"minSdkVersion\s+flutter\.minSdkVersion", "minSdkVersion 26", text)
     path.write_text(text, encoding="utf-8")
 
+def add_android_gallery_permission(path: Path) -> None:
+    if not path.exists():
+        return
+    android_ns = "http://schemas.android.com/apk/res/android"
+    tools_ns = "http://schemas.android.com/tools"
+    ET.register_namespace("android", android_ns)
+    ET.register_namespace("tools", tools_ns)
+    tree = ET.parse(path)
+    root = tree.getroot()
+    existing = {
+        node.get(f"{{{android_ns}}}name")
+        for node in root.findall("uses-permission")
+    }
+    permission = "android.permission.WRITE_EXTERNAL_STORAGE"
+    if permission not in existing:
+        ET.SubElement(root, "uses-permission", {
+            f"{{{android_ns}}}name": permission,
+            f"{{{android_ns}}}maxSdkVersion": "28",
+            f"{{{tools_ns}}}ignore": "ScopedStorage",
+        })
+    tree.write(path, encoding="utf-8", xml_declaration=True)
+
 def replace_deployment_target(path: Path, platform: str, version: str) -> None:
     if not path.exists():
         return
@@ -59,10 +81,12 @@ def add_camera_entitlements(path: Path) -> None:
 
 replace_min_sdk(ROOT / "android/app/build.gradle.kts")
 replace_min_sdk(ROOT / "android/app/build.gradle")
+add_android_gallery_permission(ROOT / "android/app/src/main/AndroidManifest.xml")
 update_plist(ROOT / "ios/Runner/Info.plist", {
     "NSCameraUsageDescription": "DepthVibe uses your camera to record video for editing.",
     "NSMicrophoneUsageDescription": "DepthVibe uses your microphone to record audio with video.",
     "NSPhotoLibraryUsageDescription": "DepthVibe needs access to import videos from your library.",
+    "NSPhotoLibraryAddUsageDescription": "DepthVibe saves exported videos to your Photos library.",
 })
 update_plist(ROOT / "macos/Runner/Info.plist", {
     "NSCameraUsageDescription": "DepthVibe uses your camera to record video for editing.",
