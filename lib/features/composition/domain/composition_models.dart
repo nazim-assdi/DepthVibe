@@ -501,6 +501,7 @@ class CompositionLayer {
     this.sourceUri,
     this.sourceDocumentUri,
     this.sourceLayerIndex,
+    this.textContent,
     this.sourceWidth = 0,
     this.sourceHeight = 0,
     this.transform = const LayerTransform(),

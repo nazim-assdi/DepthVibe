@@ -1,8 +1,11 @@
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image/image.dart' as img;
 import 'package:material_ui/material_ui.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../application/composition_controller.dart';
 import '../data/effect_catalog.dart';

@@ -61,7 +61,13 @@ class PhotoshopImportService {
           );
           final pngBytes = img.encodePng(raster, level: 3);
           final output = File(
-            '${cache.path}${Platform.pathSeparator}psd_${stamp}_layer_${index}.png',
+            cache.path +
+                Platform.pathSeparator +
+                'psd_' +
+                stamp.toString() +
+                '_layer_' +
+                index.toString() +
+                '.png',
           );
           await output.writeAsBytes(pngBytes, flush: true);
           assetPath = output.path;
