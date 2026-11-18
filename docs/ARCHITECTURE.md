@@ -1,52 +1,43 @@
 # DepthVibe architecture
 
-## Android editor
+## Platforms and build
+The current target is Android. Kotlin 2.4.0, AGP 8.11.1, Gradle 8.13 and API 36 are used. Jetpack Compose provides the editor UI. Media3 ExoPlayer provides source playback; Media3 Transformer creates export compositions.
 
-The Android application uses Kotlin, Jetpack Compose and AndroidX Media3. ExoPlayer previews source footage. Media3 Transformer exports a selected trim range. The current render path applies trim, rotation, playback speed, aspect-ratio fit/crop, optional static title burn-in and source-audio removal, then publishes the MP4 to Android's shared Movies/DepthVibe collection.
+## Video composition
+The current export composition supports:
+- A sequential list of video items (first video is clipped to its selected in/out range).
+- Per-item constant speed and video effects, including rotation, presentation fit/crop, brightness, grayscale and static title overlay.
+- Optional separate audio-only sequence which loops through the video composition.
+- Publishing the rendered MP4 into Movies/DepthVibe.
 
-## 3D camera viewport
+The current export is not yet a full nonlinear editor render graph. Split markers do not generate sub-clips. There is no independent overlapping video track, audio mixing/ducking, image/text sticker overlay sequence, LUT pipeline or cross-fade transition. Preview and export parity must be tested.
 
-The 3D workspace uses OpenGL ES 2.0 and a perspective view/projection matrix. It draws a perspective grid, wireframe cube and red/green/blue axes. Dragging changes camera azimuth/elevation; pinching changes orbit distance; the field-of-view slider adjusts the virtual lens.
+## AI depth
+MiDaS Small is downloaded on first use instead of bundled inside the APK. LiteRT CompiledModel runs 256×256 normalized RGB inference using GPU first and CPU fallback. The output is normalized to a relative grayscale depth map. A separate OpenGL ES parallax view builds a subdivided image mesh and displaces vertices by depth.
 
-This is a true virtual 3D scene camera. It is not the device camera and does not currently provide ARCore world tracking or camera-locked 3D placement in captured footage.
+Relative monocular depth is not metric distance or complete geometry. The first single-frame parallax preview cannot fill unseen back surfaces. Temporal consistency, segmentation and disocclusion fill remain future work. The model runtime must be warmed, reused and closed with screen lifecycle for production performance.
 
-## Current edit state
+## Live AR camera
+ARCore owns the live phone camera session, camera background texture, pose updates, horizontal/vertical plane detection and anchor lifecycle. The current demo places wireframe marker cubes on detected planes. It requires camera permission, Google Play Services for AR and an ARCore-capable device. This is separate from solving motion in an already-recorded video.
 
-- Source video URI and discovered duration
-- Editable trim in/out points
-- Split markers (not yet independent clip segments)
-- Imported audio and image source references
-- Preview playback speed, mute and rotation
-- Preview canvas aspect-ratio preset
-- Preview title text
+## Recorded-video motion solve
+OpenCV samples frames from an imported recording, detects ORB features, matches descriptors, estimates an essential matrix and calls recoverPose to produce relative monocular camera motion. Absolute scale is unknown. There is no loop closure, global bundle adjustment, distortion calibration, manual track correction or robust reconstruction mesh yet. This is a first-pass visual-odometry solver, not production-grade full SLAM.
 
-Important behavior boundaries:
-- Playback speed is applied to preview and single-source MP4 export using Media3's speed provider.
-- Aspect ratio is applied to preview and export with selectable fit or crop behavior.
-- The current static title text can be burned into the output MP4.
-- Audio and image imports are stored as project references; they are not composited into export yet.
-- Split controls add timeline markers; they do not yet create independently rendered clips.
-- Export currently applies trim, rotation, speed, aspect ratio, optional static title and source-audio removal to one video source.
+## 3D assets and lighting
+Filament glTF viewer loads GLB, frames the object and exposes key-light intensity. Filament's physically based material renderer and shadow-capable direct light provide the base for real-time model preview. Environment HDR/IBL, reflection probes, custom shadow controls and camera-matched relighting still need integration.
 
-## Media export
+Static OBJ support parses positions, normals and polygon faces, triangulates faces and renders the geometry in a simple lit OpenGL ES viewport. It records material names but does not yet parse MTL texture maps or animation rigs.
 
-The export manager constructs a clipped MediaItem, wraps it in an EditedMediaItem, and starts Media3 Transformer asynchronously. Output is written to a temporary app-cache file. After a successful render it is copied to Movies/DepthVibe and exposed as a shareable content URI. Temporary render files are deleted after publish or failure.
+## Physics / particles
+A deterministic bounded CPU simulation produces fire, smoke and shatter-style particles with velocity, gravity, lifetime and simple floor bounce. OpenGL ES renders them as point sprites for preview. It is not a mesh-fragment rigid-body shatter engine, and particle output is not yet inserted into final video export.
 
-## Future engines
+## Pro graph and keyframes
+The current Pro Lab contains typed node definitions, graph connections, a starter graph, float animation tracks, HOLD/LINEAR/EASE_IN_OUT interpolation and a curve preview. It is not yet a fully draggable node canvas with live render evaluation. Keyframes are not yet bound to exported scene transforms or camera motion.
 
-- Depth: mobile monocular-depth inference, temporal smoothing, foreground masks and disocclusion fill.
-- AR: ARCore live pose tracking, camera background and anchored virtual objects.
-- Offline camera solve: feature detection, matching, bundle adjustment and diagnostics for imported footage.
-- 3D assets: GLB/glTF and OBJ/MTL loading with a physically based renderer.
-- Effects: GPU particles, deterministic shatter and a render graph shared by preview and export.
-
-A depth map estimates relative distance; it cannot recover hidden geometry from one image. Live AR tracking is not a replacement for offline tracking of imported video.
-
-## Performance and reliability
-
-- Keep decode, inference and render work off the UI thread.
-- Use lower-resolution preview and full-resolution export separately.
-- Bound frame queues and release decoded buffers promptly.
-- Keep original media read-only and use cache files for temporary renders.
-- Check encoder and graphics capabilities before enabling advanced effects.
-- Test URI permissions, camera capture and export on representative physical devices.
+## Performance and safety
+- Run decoding, inference and rendering off the main thread.
+- Use model/proxy caches with size limits and release native buffers.
+- Adapt mesh resolution and particle counts to GPU/RAM capability.
+- Keep original source media read-only; use temporary files for export.
+- Check camera/GPU/ARCore capability before exposing advanced tools.
+- Physical-device profiling and export validation are required before Play release.

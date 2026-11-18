@@ -1,69 +1,70 @@
 # DepthVibe delivery roadmap
 
-Status labels refer to code present in this repository, not product aspirations.
+Status labels refer to implemented code in the repository. CI compile status and physical-device verification are recorded separately.
 
 ## Stage 0 — Android foundation
+- [x] Native Android shell and Compose UI
+- [x] Video import and Media3 playback
+- [x] Easy / Pro entry points and a virtual 3D camera viewport
+- [x] GitHub Actions debug build and artifact upload
 
-- [x] Native Android app shell and dark editor theme
-- [x] Easy / Pro starter workspaces
-- [x] Android document-picker video import
-- [x] Media3 ExoPlayer preview
-- [x] GitHub Actions debug build and APK artifact
+## Stage 1 — Video Studio / timeline
+- [x] Main video import and trim in/out export
+- [x] Sequential additional video clip export
+- [x] Separate looping background audio sequence in export
+- [x] Rotation, constant speed, fit/crop output ratio
+- [x] Static title burn-in
+- [x] Brightness and grayscale effects in preview/export
+- [x] Export to Movies/DepthVibe and share
+- [x] Import image source reference
+- [ ] Image/sticker overlay compositing and independent audio mixing/ducking
+- [ ] Actual split-to-independent-clips, clip reorder and ripple editing
+- [ ] Overlapping video layers, transitions and cross-fades
+- [ ] LUT import, colour wheels, curves and masks
+- [ ] Persistent projects, undo/redo and crash recovery
 
-## Stage 1 — video studio and virtual 3D camera (current)
+## Stage 2 — AI Depth / 2.5D
+- [x] MiDaS Small model download path
+- [x] LiteRT GPU inference with CPU fallback path
+- [x] Depth map visualization and depth-displaced 2.5D mesh preview
+- [ ] Validate model tensor layout/preprocessing and model inference on physical devices
+- [ ] Temporal depth smoothing and foreground segmentation
+- [ ] Disocclusion fill and edge-aware refinement
+- [ ] Depth parallax output integrated into the video compositor
 
-- [x] Import a video source
-- [x] Capture a source clip using the device's camera app
-- [x] Read source duration and set trim in/out points
-- [x] Export the selected trim range to MP4 with Media3 Transformer
-- [x] Export rotation and source-audio removal
-- [x] Save export to Movies/DepthVibe and share it
-- [x] Preview playback-speed adjustment and mute
-- [x] Preview canvas presets for 16:9, 9:16, 1:1 and 4:5
-- [x] Preview-only title overlay
-- [x] Import audio and image references into the editor
-- [x] Add visual split markers to the timeline
-- [x] OpenGL ES perspective camera viewport with orbit, dolly and FOV control
-- [ ] Actual split editing with independently selectable timeline segments
-- [ ] Persistent projects, undo/redo and clip reorder
-- [ ] Multi-clip assembly and independent audio/image compositing in export
-- [x] Burn-in one static title layer in the export
-- [ ] Animated captions, text animation, filters and transitions in export
-- [x] Exported aspect-ratio fit/crop and constant speed control
-- [ ] Multi-track audio mixing
+## Stage 3 — Camera tracking
+- [x] ARCore live camera view and plane tracking integration
+- [x] Anchored 3D marker placement on detected surfaces
+- [x] OpenCV ORB + essential-matrix relative camera motion solver for recorded clips
+- [ ] Verify AR session/anchor stability on certified ARCore phones
+- [ ] Offline lens calibration, loop closure, global bundle adjustment and scale constraints
+- [ ] Track confidence, manual correction and export-linked tracking data
 
-## Stage 2 — AI depth and 2.5D scene
+## Stage 4 — 3D assets and VFX
+- [x] Filament GLB/glTF model-loading path
+- [x] Static OBJ geometry loader and viewport
+- [x] Filament key light intensity control and sun-shadow renderer
+- [x] CPU physics particle simulation and OpenGL particle preview
+- [ ] OBJ/MTL maps and textures; more model validation
+- [ ] Environment HDR/IBL relighting and reflection probes
+- [ ] Mesh-fragment shatter, collisions and particle render-to-video
+- [ ] 3D text, models and shadows composed over tracked footage
+- [ ] Shared render graph for real-time preview and final export
 
-- [ ] Select and benchmark a commercially usable mobile monocular-depth model
-- [ ] On-device inference with GPU / NNAPI fallback and CPU-safe mode
-- [ ] Temporal depth smoothing and depth-map visualisation
-- [ ] Foreground masks, mesh displacement and disocclusion fill
-- [ ] Interactive virtual camera motion through the estimated depth scene
+## Stage 5 — Pro animation / finishing
+- [x] Typed node graph data model and starter graph UI
+- [x] Editable graph connections
+- [x] Keyframe interpolation and curve preview
+- [ ] Drag-wire node editor, node ports, graph validation and execution
+- [ ] Keyframes bound to actual 3D transforms/camera and export renderer
+- [ ] Graph editor handles, easing controls and motion paths
+- [ ] LUT, colour grading, masks, titles and transitions in the final render graph
 
-## Stage 3 — camera tracking and AR
+## Quality gate
+Every advanced capability requires:
+1. Successful automated build and unit tests.
+2. Functional testing on physical devices covering ARCore/GPU support and memory limits.
+3. A test export showing the effect is actually baked into the video.
+4. Clear fallback/error messaging on unsupported devices.
 
-- [ ] ARCore session for supported Android devices
-- [ ] Tracked 3D object and text placement in live camera footage
-- [ ] Separate offline camera solve for imported video
-- [ ] Track quality diagnostics and manual correction
-
-## Stage 4 — 3D and visual effects
-
-- [ ] GLB / glTF renderer
-- [ ] OBJ + MTL + texture import
-- [ ] PBR materials, environment lighting and shadows
-- [ ] GPU particles, gravity, collisions and shatter
-- [ ] 3D animation and camera keyframes
-
-## Stage 5 — pro finishing
-
-- [ ] Typed node graph and shared preview/export render graph
-- [ ] Curve editor, keyframe interpolation and masks
-- [ ] Multi-track audio mixing, ducking and audio effects
-- [ ] Proxy media, background render queue and crash recovery
-- [ ] Export presets, device capability checks and physical-device testing
-- [ ] Privacy and Play release validation
-
-## Product principle
-
-Keep editing responsive on ordinary phones. Decode, infer and render off the UI thread, bound frame queues, use proxy previews and adapt quality to device capability. A button, preview overlay or interface placeholder does not count as a completed render feature.
+A screen, contract or preview-only effect is not considered a completed export feature.

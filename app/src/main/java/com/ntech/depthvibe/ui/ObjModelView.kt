@@ -17,6 +17,7 @@ import javax.microedition.khronos.opengles.GL10
 
 class ObjModelView(context: Context) : GLSurfaceView(context) {
     private val modelRenderer = ObjRenderer()
+    private var currentMesh: ObjMesh? = null
     private var lastX = 0f
     private var lastY = 0f
     private var lastSpan = 0f
@@ -29,6 +30,8 @@ class ObjModelView(context: Context) : GLSurfaceView(context) {
     }
 
     fun setMesh(mesh: ObjMesh) {
+        if (currentMesh === mesh) return
+        currentMesh = mesh
         queueEvent { modelRenderer.setMesh(mesh) }
     }
 

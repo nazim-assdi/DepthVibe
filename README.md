@@ -1,51 +1,71 @@
 # DepthVibe
 
-**A mobile video-editing studio with a real-time 3D perspective camera workspace.**
+**Android video studio with AI depth, AR, 3D assets and procedural VFX experiments.**
 
-DepthVibe is an Android application by **N Tech**. Version 0.2.0 adds media import, trim controls, timeline split markers, preview playback controls, a Media3 MP4 export path and an interactive OpenGL ES 3D viewport.
+DepthVibe is an Android app by **N Tech**. The 0.3.0 development branch adds an advanced 3D/VFX lab alongside the video studio and virtual 3D camera.
 
-## Current capabilities
+## Development features
 
-- Import video, audio and image references through Android's document picker.
-- Capture a new source video using the device's camera app.
-- Preview source video with playback-speed, mute and rotation controls.
-- Set trim in/out points and export the selected range to MP4.
-- Apply rotation and remove source audio during export.
-- Save rendered MP4 files to Movies/DepthVibe and share the result.
-- Preview 16:9, 9:16, 1:1 and 4:5 canvas presets.
-- Add a title overlay to the editor preview.
-- Use an interactive perspective 3D camera: drag to orbit, pinch to dolly and adjust field of view.
+### Video Studio
+- Import a source video and add sequential video clips.
+- Import a separate music track; the export compositor can loop the background audio under the video sequence.
+- Trim the first source clip, apply rotation and constant playback speed.
+- Export aspect-ratio fit/crop, static title burn-in, brightness and grayscale.
+- Save MP4 files to Movies/DepthVibe and share the result.
+- Preview 16:9, 9:16, 1:1 and 4:5 canvases, title overlays, speed and color controls.
 
-## Current limitations
+### AI Depth / 2.5D
+- First-use MiDaS Small model download (approximately 33 MB).
+- LiteRT GPU inference with CPU fallback.
+- Grayscale estimated depth map and an interactive mesh-displacement parallax preview.
+- The depth output is relative depth. It does not reconstruct invisible geometry or create a complete watertight 3D human/object model.
 
-Animated titles, keyframed text and multi-style captions are not yet included. Audio and image imports are currently project references and are not mixed into the exported video. Split markers are visible on the timeline but do not yet produce independent clips. ARCore tracking, AI depth reconstruction, GLB/OBJ rendering, GPU particles, multi-clip composition and advanced colour grading remain future engine work.
+### Live AR
+- ARCore live camera background and plane detection.
+- Tap a tracked plane to place an anchored 3D marker.
+- Requires camera permission, Google Play Services for AR and a supported Android device.
+
+### Recorded video motion solve
+- OpenCV ORB feature detection/matching.
+- Essential-matrix and relative pose recovery on sampled frames.
+- This is a first-pass monocular visual-odometry solver. It does not yet provide metric scale, loop closure, global bundle adjustment, lens calibration or production-grade full SLAM.
+
+### 3D Assets and VFX
+- GLB loading using Filament glTF renderer.
+- Static OBJ geometry import with orbit/zoom preview.
+- Filament key-light intensity control and real-time 3D scene preview.
+- Fire, smoke and shatter-style particle simulation preview with gravity and particle lifetime.
+- Typed node-graph model, editable graph links, keyframe interpolation and curve preview.
+
+## Important limitations
+
+This is an actively developing mobile editor, not yet a complete After Effects replacement. The following are not complete: MTL texture/material import for OBJ, IBL/HDR environment relighting controls, mesh-fragment shatter, particle baking into final video, image/overlay compositing in export, overlapping multi-track video layers, audio mixing/ducking, cross-fade transitions, LUT import, masks, full graph execution, and export-linked keyframe animation. Split markers are still timeline markers, not independently editable clip segments.
+
+ARCore and GPU behavior must be checked on physical phones. AI depth needs a first-use network model download. Lower-end devices may need reduced preview resolution/particle counts.
 
 ## Build
 
 Requirements: Android SDK Platform 36, JDK 17 and Gradle 8.13.
 
-From the repository root:
-
-```
+```bash
 gradle :app:assembleDebug
 gradle :app:testDebugUnitTest
 ```
 
-Open the repository root in Android Studio to import the Gradle project and run the app on an Android device or emulator.
+Open the root folder in Android Studio and run the `app` configuration on an Android device or emulator.
 
-## Technology
+## Stack
 
-- Kotlin and Jetpack Compose
-- AndroidX Media3 ExoPlayer
-- AndroidX Media3 Transformer
+- Kotlin 2.4.0, Jetpack Compose and AndroidX Media3
+- LiteRT 2.3.0 and MiDaS Small model
+- ARCore 1.56.0
+- Filament 1.70.1
+- OpenCV 4.11.0
 - OpenGL ES 2.0
-- GitHub Actions build and APK artifacts
-
-See docs/ARCHITECTURE.md and docs/ROADMAP.md.
+- GitHub Actions APK artifacts
 
 ## Project
-
 - Product: DepthVibe
 - Developer: N Tech
-- Package: com.ntech.depthvibe
-- Version: 0.2.0
+- Package: `com.ntech.depthvibe`
+- Version: 0.3.0

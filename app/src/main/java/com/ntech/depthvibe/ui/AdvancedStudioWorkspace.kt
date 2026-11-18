@@ -223,14 +223,6 @@ fun AdvancedStudioWorkspace() {
         modelInstalled = runCatching { depthEngine.isModelInstalled() }.getOrDefault(false)
     }
 
-    LaunchedEffect(arEnabled, arGranted, selectedTab) {
-        if (selectedTab == LabTab.AR.name && arEnabled && arGranted) {
-            arView?.resumeTracking()
-        } else {
-            arView?.pauseTracking()
-        }
-    }
-
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("DEPTHVIBE 3D / VFX LAB", color = StudioMint, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
         Text(

@@ -77,6 +77,8 @@ class DepthParallaxView(context: Context) : GLSurfaceView(context) {
 private class DepthParallaxRenderer : GLSurfaceView.Renderer {
     @Volatile private var source: Bitmap? = null
     @Volatile private var depth: Bitmap? = null
+    private var sourceIdentity: Bitmap? = null
+    private var depthIdentity: Bitmap? = null
     @Volatile private var strength = 1.25f
     @Volatile private var yaw = 0f
     @Volatile private var pitch = 12f
@@ -97,9 +99,19 @@ private class DepthParallaxRenderer : GLSurfaceView.Renderer {
     private var aspect = 1f
 
     fun setScene(color: Bitmap, depthMap: Bitmap, strength: Float) {
-        source = color.copy(Bitmap.Config.ARGB_8888, false)
-        depth = depthMap.copy(Bitmap.Config.ARGB_8888, false)
-        this.strength = strength.coerceIn(0.2f, 3f)
+        val nextStrength = strength.coerceIn(0.2f, 3f)
+        if (sourceIdentity === color && depthIdentity === depthMap && this.strength == nextStrength) {
+            return
+        }
+        val newSource = color.copy(Bitmap.Config.ARGB_8888, false)
+        val newDepth = depthMap.copy(Bitmap.Config.ARGB_8888, false)
+        source?.takeIf { !it.isRecycled }?.recycle()
+        depth?.takeIf { !it.isRecycled }?.recycle()
+        source = newSource
+        depth = newDepth
+        sourceIdentity = color
+        depthIdentity = depthMap
+        this.strength = nextStrength
         vertices = null
         textureUploaded = false
     }
