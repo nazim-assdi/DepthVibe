@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../data/effect_catalog.dart';
 import '../domain/composition_models.dart';
 import 'ffmpeg_animation_compiler.dart';
 import 'ffmpeg_filter_compiler.dart';
