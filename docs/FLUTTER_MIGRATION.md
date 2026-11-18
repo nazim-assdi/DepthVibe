@@ -18,7 +18,7 @@ DepthVibe is moving to one Flutter application codebase for Android, iOS, Window
 
 ## Export implementation notes
 
-The shared FFmpeg render path trims video and audio, adjusts playback tempo, rotates, scales/pads or crops, overlays title/caption pixels and writes an MP4. Android also saves into `Movies/DepthVibe/videos`; iOS saves into the Photos album `DepthVibe/videos`; desktop keeps the project copy under app Documents/DepthVibe/Exports. Gallery-save failure does not delete the rendered MP4. The current profile uses the built-in MPEG-4 video encoder to avoid enabling GPL-only libx264. Codec availability and playback quality still need verification on every target.
+The shared FFmpeg render path trims video and audio, adjusts playback tempo, rotates, scales/pads or crops, overlays title/caption pixels and writes an MP4. Android also saves into `Movies/DepthVibe`; iOS saves into the Photos album `DepthVibe`; desktop keeps the project copy under app Documents/DepthVibe/Exports. Gallery-save failure does not delete the rendered MP4. The current profile uses the built-in MPEG-4 video encoder to avoid enabling GPL-only libx264. Codec availability and playback quality still need verification on every target.
 
 Split markers are currently persisted as edit markers; they do not yet create independent clip segments. Additional imported clips, music mixing, image overlays, transitions, multi-track compositing, color grading, masks and export-linked 3D effects remain planned.
 

@@ -16,7 +16,7 @@ The next architecture step is a true non-destructive timeline graph: ordered cli
 - **Preview:** MediaKit provides the same Dart playback API on Android, iOS, Windows, macOS and Linux.
 - **Capture:** Flutter camera provides capture on Android/iOS; camera_desktop provides Windows/Linux/macOS capture.
 - **Export:** FFmpegKit Extended executes an asynchronous FFmpeg filter graph. The current shared render handles one source clip, trim, playback-rate change, 90-degree rotations, fit/pad or fill/crop, audio mute or tempo correction, title/caption overlay burn-in and MP4 output.
-- **Output:** Android copies MP4s into `Movies/DepthVibe/videos`; iOS creates/saves into the Photos album `DepthVibe/videos`; desktop keeps the app Documents/DepthVibe/Exports copy. The output can be shared through the OS share sheet.
+- **Output:** Android copies MP4s into `Movies/DepthVibe`; iOS creates/saves into the Photos album `DepthVibe`; desktop keeps the app Documents/DepthVibe/Exports copy. The output can be shared through the OS share sheet.
 
 The first export profile uses FFmpeg's built-in MPEG-4 video encoder to avoid turning on GPL-only codecs by default. Per-platform codec availability and decoded quality must still be verified. The selected video bundle is significantly larger than a UI-only Flutter application.
 

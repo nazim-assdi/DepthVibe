@@ -100,7 +100,7 @@ class VideoExportService {
               filePath: output.path,
               skipIfExists: false,
               fileName: output.uri.pathSegments.last,
-              albumPath: 'DepthVibe/videos',
+              albumPath: 'DepthVibe',
             );
             galleryUri = saved.savedUri;
           }

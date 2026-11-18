@@ -117,7 +117,7 @@ class _EditorScreenState extends State<EditorScreen> {
       if (!mounted) return;
       setState(() {
         _status = result.galleryUri != null
-            ? 'Saved to Movies/DepthVibe/videos'
+            ? 'Saved to Movies/DepthVibe'
             : result.gallerySaveError != null
                 ? 'Saved in app storage; gallery save needs permission'
                 : 'Saved to Documents/DepthVibe/Exports';
@@ -141,7 +141,7 @@ class _EditorScreenState extends State<EditorScreen> {
         title: const Text('Export complete'),
         content: SelectableText(
           result.galleryUri != null
-              ? 'MP4 saved to Movies/DepthVibe/videos.\nGallery reference: ${result.galleryUri}\nApp copy: ${file.path}'
+              ? 'MP4 saved to Movies/DepthVibe.\nGallery reference: ${result.galleryUri}\nApp copy: ${file.path}'
               : result.gallerySaveError != null
                   ? 'The MP4 was exported successfully, but saving to the gallery failed.\n\nApp copy: ${file.path}\n\n${result.gallerySaveError}'
                   : 'MP4 saved to:\n${file.path}',

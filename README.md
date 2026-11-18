@@ -15,7 +15,7 @@ DepthVibe is an AI-first video, motion-design and 3D creative studio from **N Te
 - Fit or Fill/Crop.
 - Title and caption preview, with a generated image overlay in export.
 - MP4 export with progress reporting.
-- Save Android exports in `Movies/DepthVibe/videos`, iOS exports to a Photos album, and desktop exports in the app Documents folder at `DepthVibe/Exports`; then share them.
+- Save Android exports in `Movies/DepthVibe`, iOS exports to a Photos album, and desktop exports in the app Documents folder at `DepthVibe/Exports`; then share them.
 
 The initial shared exporter processes a single source clip. Split markers are currently edit metadata, not separate renderable clips. Multi-clip timeline compositing, audio mixing, transitions, LUTs, image layers, AI depth and 3D scene rendering are on the roadmap; they are not claimed as complete.
 
