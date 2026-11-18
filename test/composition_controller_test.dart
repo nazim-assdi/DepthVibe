@@ -47,6 +47,43 @@ void main() {
       expect(eased.sample(500), closeTo(50, 0.001));
     });
 
+    test('tracking samples become inverse stabilizing position keyframes', () {
+      final controller = CompositionController();
+      final layerId = controller.addLayer(LayerKind.video);
+      final layer = controller.selectedLayer!;
+
+      controller.applyMotionTrack(
+        layerId: layerId,
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+        stabilize: true,
+        samples: const [
+          MotionTrackSample(timeMs: 0, x: 300, y: 200, score: 0.9),
+          MotionTrackSample(timeMs: 100, x: 320, y: 230, score: 0.8),
+        ],
+      );
+
+      final tracked = controller.document.layers.single;
+      final xTrack = tracked.keyframeTracks.firstWhere(
+        (track) => track.property == 'position.x',
+      );
+      final yTrack = tracked.keyframeTracks.firstWhere(
+        (track) => track.property == 'position.y',
+      );
+
+      expect(xTrack.keyframes, hasLength(2));
+      expect(yTrack.keyframes, hasLength(2));
+      expect(xTrack.keyframes.last.value, closeTo(
+        layer.transform.position.x - 20,
+        0.001,
+      ));
+      expect(yTrack.keyframes.last.value, closeTo(
+        layer.transform.position.y - 30,
+        0.001,
+      ));
+      controller.dispose();
+    });
+
     test('photoshop assets become separate layers with document geometry', () {
       final controller = CompositionController();
       controller.addPhotoshopLayers(

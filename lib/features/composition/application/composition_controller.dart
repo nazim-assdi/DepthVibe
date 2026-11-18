@@ -492,6 +492,68 @@ class CompositionController extends ChangeNotifier {
     _replace(layer.copyWith(audioSettings: settings));
   }
 
+  void applyMotionTrack({
+    required String layerId,
+    required List<MotionTrackSample> samples,
+    required int sourceWidth,
+    required int sourceHeight,
+    bool stabilize = true,
+  }) {
+    final layer = _find(layerId);
+    if (layer == null || layer.kind != LayerKind.video ||
+        samples.length < 2 || sourceWidth <= 0 || sourceHeight <= 0) {
+      return;
+    }
+
+    final initial = samples.first;
+    final scaleX = _document.width / sourceWidth;
+    final scaleY = _document.height / sourceHeight;
+    final xIndex = layer.keyframeTracks.indexWhere(
+      (track) => track.property == 'position.x',
+    );
+    final yIndex = layer.keyframeTracks.indexWhere(
+      (track) => track.property == 'position.y',
+    );
+    var xTrack = xIndex < 0
+        ? const KeyframeTrack(property: 'position.x')
+        : layer.keyframeTracks[xIndex];
+    var yTrack = yIndex < 0
+        ? const KeyframeTrack(property: 'position.y')
+        : layer.keyframeTracks[yIndex];
+
+    for (final sample in samples) {
+      final timeMs = layer.startMs + sample.timeMs;
+      final direction = stabilize ? -1.0 : 1.0;
+      final x = layer.transform.position.x +
+          (sample.x - initial.x) * scaleX * direction;
+      final y = layer.transform.position.y +
+          (sample.y - initial.y) * scaleY * direction;
+      xTrack = xTrack.upsert(ScalarKeyframe(
+        timeMs: timeMs,
+        value: x,
+        interpolation: Interpolation.easeInOut,
+      ));
+      yTrack = yTrack.upsert(ScalarKeyframe(
+        timeMs: timeMs,
+        value: y,
+        interpolation: Interpolation.easeInOut,
+      ));
+    }
+
+    final tracks = [...layer.keyframeTracks];
+    if (xIndex < 0) {
+      tracks.add(xTrack);
+    } else {
+      tracks[xIndex] = xTrack;
+    }
+    if (yIndex < 0) {
+      tracks.add(yTrack);
+    } else {
+      tracks[yIndex] = yTrack;
+    }
+    _replace(layer.copyWith(keyframeTracks: tracks));
+  }
+
   void setAudioGain(double value, {bool keyframe = false}) {
     final layer = selectedLayer;
     if (layer == null ||

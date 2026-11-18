@@ -45,7 +45,8 @@ Status describes working source paths, not release-ready feature parity. A model
 - [x] Camera and light layer data models and controls.
 - [ ] Cross-platform GLB/OBJ scene renderer integrated with composition preview and export.
 - [ ] Camera projection, depth of field, environment maps, real lights and shadow maps.
-- [ ] Template/point/planar tracking, 2D/3D track data, track-to-null and stabilization.
+- [x] Basic 2D template matching from a manually entered ROI with translation keyframes for stabilization.
+- [ ] Optical-flow/planar tracking, perspective/rotation/scale solve, track-to-null, occlusion handling and 3D camera solve.
 - [ ] Camera-matched 3D composites and shadow catcher.
 - [ ] Physics, mesh shatter, fluid/smoke/fire and particles rendered into final output.
 

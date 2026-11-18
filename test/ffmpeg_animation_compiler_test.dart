@@ -17,12 +17,12 @@ void main() {
         KeyframeTrack(
           property: 'position.x',
           keyframes: [
-            ScalarKeyframe(timeMs: 0, value: 100),
             ScalarKeyframe(
-              timeMs: 1000,
-              value: 500,
+              timeMs: 0,
+              value: 100,
               interpolation: Interpolation.easeInOut,
             ),
+            ScalarKeyframe(timeMs: 1000, value: 500),
           ],
         ),
       ],
@@ -77,7 +77,7 @@ void main() {
         id: 'poly',
         name: 'Polygon',
         shape: MaskShape.polygon,
-        operation: MaskOperation.difference,
+        operation: MaskOperation.subtract,
         vertices: [
           MaskVertex(anchor: Vector2(0.2, 0.2)),
           MaskVertex(anchor: Vector2(0.8, 0.2)),

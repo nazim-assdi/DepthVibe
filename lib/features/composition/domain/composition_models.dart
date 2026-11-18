@@ -109,6 +109,20 @@ class AudioSettings {
   );
 }
 
+class MotionTrackSample {
+  const MotionTrackSample({
+    required this.timeMs,
+    required this.x,
+    required this.y,
+    this.score = 1,
+  });
+
+  final int timeMs;
+  final double x;
+  final double y;
+  final double score;
+}
+
 class Vector2 {
   const Vector2(this.x, this.y);
 

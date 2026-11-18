@@ -13,6 +13,7 @@ import '../data/photoshop_import_service.dart';
 import '../domain/composition_models.dart';
 import '../engine/parent_transform_resolver.dart';
 import '../engine/composition_export_service.dart';
+import '../engine/motion_tracking_service.dart';
 
 class CompositionWorkspace extends StatefulWidget {
   const CompositionWorkspace({super.key});
@@ -25,6 +26,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
   final CompositionController _controller = CompositionController();
   final PhotoshopImportService _photoshop = const PhotoshopImportService();
   final CompositionExportService _exporter = const CompositionExportService();
+  final MotionTrackingService _tracker = const MotionTrackingService();
+  bool _tracking = false;
+  double _trackingLeft = 100;
+  double _trackingTop = 100;
+  double _trackingWidth = 100;
+  double _trackingHeight = 100;
+  double _trackingThreshold = 0.30;
+  bool _stabilizeTracking = true;
   bool _rendering = false;
   double _renderProgress = 0;
   String _panel = 'Layers';
@@ -47,6 +56,68 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
   ];
 
   CompositionLayer? get _selected => _controller.selectedLayer;
+
+  Future<void> _runMotionTracking() async {
+    final layer = _selected;
+    if (layer == null || layer.kind != LayerKind.video || layer.sourceUri == null) {
+      setState(() => _notice = 'Select a video layer before running tracking.');
+      return;
+    }
+    setState(() {
+      _tracking = true;
+      _notice = 'Extracting the tracking region and analysing the clip…';
+    });
+    try {
+      final result = await _tracker.track(
+        sourcePath: layer.sourceUri!,
+        left: _trackingLeft.round(),
+        top: _trackingTop.round(),
+        width: _trackingWidth.round(),
+        height: _trackingHeight.round(),
+        threshold: _trackingThreshold,
+      );
+      _controller.applyMotionTrack(
+        layerId: layer.id,
+        samples: result.samples,
+        sourceWidth: result.sourceWidth,
+        sourceHeight: result.sourceHeight,
+        stabilize: _stabilizeTracking,
+      );
+      if (!mounted) return;
+      setState(() {
+        _notice = 'Tracked ' + result.samples.length.toString() +
+            ' samples. Position keyframes added to ' + layer.name + '.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _notice = 'Tracking failed: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _tracking = false);
+    }
+  }
+
+  Widget _trackingField(
+    String label,
+    double value,
+    ValueChanged<double> onChanged,
+  ) {
+    return SizedBox(
+      width: 112,
+      child: TextFormField(
+        initialValue: value.toStringAsFixed(0),
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(
+          labelText: label,
+          isDense: true,
+          border: const OutlineInputBorder(),
+        ),
+        onChanged: (text) {
+          final parsed = double.tryParse(text);
+          if (parsed != null) onChanged(parsed);
+        },
+      ),
+    );
+  }
 
   Future<void> _importPhotoshop() async {
     try {
@@ -571,7 +642,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                for (final panel in const ['Layers', 'Transform', 'Shape', 'Effects', 'Masks', 'Audio', 'Parent', '3D'])
+                for (final panel in const ['Layers', 'Transform', 'Shape', 'Effects', 'Masks', 'Audio', 'Tracking', 'Parent', '3D'])
                   TextButton(
                     onPressed: () => setState(() => _panel = panel),
                     child: Text(panel, style: TextStyle(fontSize: 10, fontWeight: _panel == panel ? FontWeight.w900 : FontWeight.normal)),
@@ -605,6 +676,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         return _buildMasksPanel(layer);
       case 'Audio':
         return _buildAudioPanel(layer);
+      case 'Tracking':
+        return _buildTrackingPanel(layer);
       case 'Parent':
         return _buildParentPanel(layer);
       case '3D':
@@ -853,6 +926,85 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                 ),
               ),
             ),
+      ],
+    );
+  }
+
+  Widget _buildTrackingPanel(CompositionLayer layer) {
+    if (layer.kind != LayerKind.video || layer.sourceUri == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _panelHeader('MOTION TRACKING', Icons.track_changes),
+          const Text(
+            'Select a video layer to track a fixed object region and convert its movement into position keyframes.',
+            style: TextStyle(fontSize: 11),
+          ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _panelHeader('MOTION TRACKING', Icons.track_changes),
+        const Text(
+          'Choose a rectangle around a high-contrast object in the first source frame. Coordinates are source-video pixels.',
+          style: TextStyle(fontSize: 10, color: Color(0xFF9BAAC1)),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _trackingField('Left (px)', _trackingLeft,
+                (value) => setState(() => _trackingLeft = value)),
+            _trackingField('Top (px)', _trackingTop,
+                (value) => setState(() => _trackingTop = value)),
+            _trackingField('Width (px)', _trackingWidth,
+                (value) => setState(() => _trackingWidth = value)),
+            _trackingField('Height (px)', _trackingHeight,
+                (value) => setState(() => _trackingHeight = value)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Match threshold  ' + _trackingThreshold.toStringAsFixed(2),
+          style: const TextStyle(fontSize: 10),
+        ),
+        Slider(
+          min: 0.01,
+          max: 0.99,
+          value: _trackingThreshold,
+          onChanged: (value) => setState(() => _trackingThreshold = value),
+        ),
+        DropdownButtonFormField<bool>(
+          initialValue: _stabilizeTracking,
+          decoration: const InputDecoration(labelText: 'Tracking action'),
+          items: const [
+            DropdownMenuItem(value: true, child: Text('Stabilize the object')),
+            DropdownMenuItem(value: false, child: Text('Follow the object motion')),
+          ],
+          onChanged: (value) => setState(
+            () => _stabilizeTracking = value ?? true,
+          ),
+        ),
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed: _tracking ? null : _runMotionTracking,
+          icon: _tracking
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.center_focus_strong),
+          label: Text(_tracking ? 'TRACKING…' : 'TRACK OBJECT & CREATE KEYFRAMES'),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Tracker type: template matching at 10 samples/second. It handles translation on a mostly unchanged object; fast scale changes, rotation, occlusion and planar perspective need a stronger optical-flow/planar tracker.',
+          style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
+        ),
       ],
     );
   }

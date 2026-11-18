@@ -39,6 +39,10 @@ The current graph does not yet provide a full DAW-style rack, EQ automation, wav
 
 The compositor combines video/image/PSD raster layers in timeline order. Supported non-normal modes use FFmpeg blend, with a separately extracted layer-alpha matte to preserve transparency. The current FFmpeg path is CPU/native 2D compositing; it is not a Vulkan/Metal/OpenGL render graph and it does not render camera/light layers as real 3D scenes.
 
+## Basic motion tracking
+
+MotionTrackingService extracts a grayscale template from a manually entered source-video rectangle, runs FFmpeg find_rect at a configurable sample rate and converts detected rectangle centres into inverse translation keyframes on the selected video layer. This can stabilize a mostly unchanged, high-contrast target. It is not optical flow, homography/planar tracking, rotation/scale solving, face/object recognition or occlusion-aware tracking; manual ROI selection and correct threshold tuning are required.
+
 ## Photoshop ingestion
 
 PsdKit reads PSD/PSB. The importer decodes visible raster layers into cached PNGs while retaining source document, layer index, name, bounds, opacity, visibility and blend metadata. Text and adjustment records are retained as editable metadata where available.

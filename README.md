@@ -30,7 +30,7 @@ DepthVibe is being developed as a combined nonlinear editor (NLE) and layer comp
 
 The current final-render path is a CPU/native FFmpeg 2D compositor, not a complete GPU scene renderer. It renders animated 2D transforms, basic layer mattes, blend compositing, supported transitions and audio tracks. Polygon Bézier handles are not yet a true vector path renderer. Audio effects racks, waveform editing, source clip trimming UI in the composition timeline, and animated effect parameter expressions remain to be built.
 
-Camera and Light are currently parameter models/controls; real mesh-based 3D rendering, camera projection, depth of field, environment lighting and shadow maps are not wired to the final compositor. Tracking/rotoscoping, full PSD groups/clipping/smart objects and Photoshop-style adjustment rendering remain open work. Glow, Drop Shadow and advanced VFX require a dedicated multi-pass GPU render graph. An effect-library entry does not mean that effect is complete in final export.
+Camera and Light are currently parameter models/controls; real mesh-based 3D rendering, camera projection, depth of field, environment lighting and shadow maps are not wired to the final compositor. A basic 2D template tracker can track a manually selected rectangle and write translation keyframes; planar/perspective tracking, scale/rotation solving, occlusion handling and rotoscoping remain open work. Full PSD groups/clipping/smart objects and Photoshop-style adjustment rendering also remain open. Glow, Drop Shadow and advanced VFX require a dedicated multi-pass GPU render graph. An effect-library entry does not mean that effect is complete in final export.
 
 ## FFmpeg bundle
 
