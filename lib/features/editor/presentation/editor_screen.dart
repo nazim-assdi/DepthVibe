@@ -200,7 +200,6 @@ class _EditorScreenState extends State<EditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final project = _editor.project;
     return Scaffold(
       body: SafeArea(
         child: Column(

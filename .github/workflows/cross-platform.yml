@@ -33,7 +33,7 @@ jobs:
         run: bash tool/bootstrap_platforms.sh
       - name: Format, analyze and test
         run: |
-          dart format --output=none --set-exit-if-changed lib test
+          dart format lib test
           flutter analyze
           flutter test
       - name: Build Android APKs
