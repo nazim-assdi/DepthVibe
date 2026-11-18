@@ -1,93 +1,82 @@
 # DepthVibe
 
-**One creative studio. Five operating systems. One Flutter codebase.**
+One creative studio. Five operating systems. One Flutter codebase.
 
-DepthVibe is an AI-first video, motion-design and 3D creative studio from **N Tech**. Starting with 0.4.0, the primary app is Flutter and targets Android, iOS, Windows, macOS and Linux.
+DepthVibe is an AI-first video, motion-design and 3D creative studio from N Tech. The primary application is Flutter for Android, iOS, Windows, macOS and Linux.
 
-## Cross-platform editor foundation
+## Video Studio
 
-- Import local video files and preview with MediaKit.
-- Record video from supported device cameras on mobile and desktop.
-- Trim In / Out and add split markers.
-- Playback speed from 0.25x to 2x.
-- 90-degree rotation and original-audio mute.
-- 16:9, 9:16, 1:1 and 4:5 export canvases.
-- Fit or Fill/Crop.
-- Title and caption preview, with a generated image overlay in export.
-- MP4 export with progress reporting.
-- Save Android exports in `Movies/DepthVibe`, iOS exports to a Photos album, and desktop exports in the app Documents folder at `DepthVibe/Exports`; then share them.
+- Video import, device-camera recording and MediaKit preview.
+- Trim In / Out, split markers, playback speed 0.25x–2x, 90-degree rotation and mute.
+- 16:9, 9:16, 1:1 and 4:5 canvases, Fit and Fill/Crop.
+- Title/caption preview and burn-in, MP4 export and share.
+- Android Movies/DepthVibe save, iOS Photos save and desktop Documents export.
 
-The initial shared exporter processes a single source clip. Split markers are currently edit metadata, not separate renderable clips. Multi-clip timeline compositing, audio mixing, transitions, LUTs, image layers, AI depth and 3D scene rendering are on the roadmap; they are not claimed as complete.
+## Composition / Motion Design
+
+The new Composition workspace introduces an AE-style layer and animation model:
+
+- Video, image, Photoshop raster, text, shape, audio, Null, Adjustment, Camera, Light, 3D Model, Particle and Precomposition layer types.
+- Layer visibility/lock, parent links and cycle checking.
+- Position, anchor, scale, rotation, opacity, blend-mode metadata, masks, effects and transitions.
+- Keyframe interpolation: Hold, Linear, Ease In, Ease Out and Ease In/Out.
+- Shape primitives and style controls; camera projection/DOF controls; light type/intensity/cone/shadow settings.
+- Effect registry with categories and editable parameters. Effect parameter keyframes use the same keyframe system.
+- PSD/PSB import extracts visible raster layers into individual cached PNGs and retains names, bounds, opacity, blend metadata, source index and text metadata where available.
+- ParentTransformResolver evaluates simplified Null/parent chains for the preview.
+
+The initial Compositor MP4 renderer uses the bundled FFmpeg engine for video/image/PSD raster layers, basic transform values and the subset of effects with an FFmpeg filter mapping. It is a first render pass, not a full nonlinear compositor: audio mixing, animated transform curves in export, masks, non-normal blend modes, adjustment-layer rendering, transitions, 3D scene rendering and GPU-only effects are not yet included in the final render.
+
+## Effects registry
+
+The initial catalog covers Brightness, Contrast, Saturation, Gamma, Gaussian/Box Blur, Sharpen, Vignette, Film Grain, Pixelate, Invert, Grayscale, Chromatic Aberration, Edge Detect, Mirror/Flip, Curves, Motion Blur, Lens Distortion, Chroma/Luma Key, Stabilize, Posterize and Color Balance.
+
+Glow, Drop Shadow, optical-flow effects, rotoscoping, particle simulation and other advanced operators need multi-pass GPU/render-graph work. An entry in the effect library does not mean it is fully rendered in every platform.
+
+## FFmpeg is bundled
+
+The app configures ffmpeg_kit_extended_flutter with the full LGPL native bundle: type=full, gpl=false, small=false. FFmpeg native libraries are included in the application package; no hosted backend is needed for this local composition render path. The full bundle can substantially increase installer/APK size. GPL-only codecs are intentionally disabled; review all codec and third-party licence obligations before distribution.
 
 ## Platforms
 
-| Platform | Target |
+| Platform | Build target |
 |---|---|
 | Android | APK / App Bundle |
-| iOS | Unsigned build in CI; signing required for distribution |
+| iOS | Unsigned CI build; Apple signing required for distribution |
 | Windows | Desktop application |
 | macOS | Desktop application |
 | Linux | Desktop application |
 
-## Requirements
+## Build
 
-- Flutter 3.50 / Dart 3.14
-- Android API 26+, iOS 14+, macOS 13+
-- Desktop build toolchains for Windows, macOS and Linux
-- Linux camera capture requires GStreamer runtime plugins
+Install Flutter 3.50 and Dart 3.12+, then run:
 
-## Getting started
+- bash tool/bootstrap_platforms.sh
+- flutter pub get
+- dart format lib test
+- flutter analyze
+- flutter test
 
-Install Flutter 3.50, then run:
+Build commands:
+- Android: flutter build apk --release --split-per-abi
+- Windows: flutter build windows --release
+- Linux: flutter build linux --release
+- macOS: flutter build macos --release
+- iOS unsigned: flutter build ios --release --no-codesign
 
-```bash
-bash tool/bootstrap_platforms.sh
-flutter analyze
-flutter test
-flutter run
-```
+## Source layout
 
-Build an Android APK:
-
-```bash
-flutter build apk --release --split-per-abi
-```
-
-Build desktop applications:
-
-```bash
-flutter build windows --release
-flutter build linux --release
-flutter build macos --release
-```
-
-Build iOS without signing:
-
-```bash
-flutter build ios --release --no-codesign
-```
-
-## Architecture
-
-- `lib/features/editor`: timeline state, preview, inspector and export pipeline.
-- `lib/features/media`: platform file import and camera recording.
-- `tool/bootstrap_platforms.sh`: generate the Flutter platform runners.
-- `legacy/android-native`: preserved Kotlin/Compose Android implementation from 0.3.0.
-- `docs/FLUTTER_MIGRATION.md`: migration scope, requirements and known gaps.
-
-## Media engine
-
-- MediaKit for cross-platform video playback.
-- FFmpegKit Extended for shared native FFmpeg processing.
-- Flutter camera + camera_desktop for capture.
-- File Picker for native file selection.
-
-The selected FFmpeg build keeps GPL-only components disabled. Review all third-party codec licences and the final binary bundle before distributing store builds. Video bundle size can be substantial.
+- lib/features/editor: video studio and first export workflow.
+- lib/features/composition: layer model, keyframes, effects, Photoshop importer, parent resolver, FFmpeg compositor and workspace.
+- lib/features/media: platform file import, capture and gallery permissions.
+- legacy/android-native: preserved Kotlin/Compose Android implementation and prior AI/AR/3D/VFX experiments.
+- docs/ARCHITECTURE.md: renderer architecture and known export gaps.
+- docs/ROADMAP.md: staged implementation and release quality gates.
 
 ## Product goal
 
-The long-term target is a high-end editor combining a non-linear multi-track timeline, color and audio finishing, AI-assisted media, 3D compositing, camera tracking, procedural effects and an executable node graph. Matching or exceeding established tools is an ambition, not a present performance claim. Quality will be measured by features that work in preview and export, platform tests, stability and real-world projects.
+DepthVibe aims to become a professional non-linear editor and compositor combining multi-track video/audio, colour finishing, Photoshop-aware animation, 2D/3D compositing, camera tracking, procedural VFX and a node graph. Matching or exceeding established creative suites is an ambition—not a present performance claim. A capability is complete only when it works in preview, is baked into final export and has been verified on supported devices and operating systems.
 
-**Product:** DepthVibe  
-**Developer:** N Tech  
-**Primary stack:** Flutter / Dart
+Product: DepthVibe
+Developer: N Tech
+Primary stack: Flutter / Dart

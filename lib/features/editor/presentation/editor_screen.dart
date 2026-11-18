@@ -7,6 +7,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../features/composition/presentation/composition_workspace.dart';
 import '../../../features/media/data/media_picker_service.dart';
 import '../../../features/media/presentation/camera_capture_screen.dart';
 import '../application/editor_controller.dart';
@@ -315,6 +316,18 @@ class _EditorScreenState extends State<EditorScreen> {
             icon: Icons.videocam,
             label: 'Record',
             onPressed: _exporting ? null : _recordVideo,
+          ),
+          const SizedBox(width: 8),
+          _toolButton(
+            icon: Icons.layers,
+            label: 'Compositor',
+            onPressed: _exporting
+                ? null
+                : () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const CompositionWorkspace(),
+                      ),
+                    ),
           ),
           const SizedBox(width: 8),
           _toolButton(

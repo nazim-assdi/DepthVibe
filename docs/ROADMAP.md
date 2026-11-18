@@ -1,44 +1,64 @@
 # DepthVibe roadmap
 
-## Stage 0 — Flutter core migration (0.4.x)
-- [x] Establish a single Flutter/Dart application root.
-- [x] Preserve the prior Android Kotlin/Compose code in legacy storage.
-- [x] Add responsive editor shell, media import and playback.
-- [x] Add camera recording adapters for mobile and desktop.
-- [x] Add core trim, speed, rotate, mute, aspect, fit/fill and title/caption editing state.
-- [x] Add shared FFmpeg MP4 export path and progress callbacks.
-- [x] Add multi-platform CI build jobs and controller tests.
-- [ ] Run CI on all runners and repair platform-specific dependency issues.
-- [ ] Validate output files and real device camera recording on physical hardware.
+Status describes source foundations, not release-ready feature parity. A model, parameter or UI control does not count as complete until the feature is visible in preview and baked into a tested export.
 
-## Stage 1 — Non-linear editing
-- [ ] Turn split markers into real clip segments.
-- [ ] Multiple clips, reorder, ripple/roll edits, proxy media and thumbnails.
-- [ ] Audio tracks, music replacement, volume/keyframes and ducking.
-- [ ] Image, text, logo and subtitle overlays in preview and export.
-- [ ] Transitions, speed ramps and audio waveforms.
-- [ ] Autosave, project files, undo/redo and crash recovery.
+## Stage 0 — Cross-platform Flutter foundation
+- [x] Flutter app for Android, iOS, Windows, macOS and Linux.
+- [x] Preserve the previous Android-native project under legacy/android-native.
+- [x] Video import, preview, camera capture, trim, speed, rotate, mute and MP4 export path.
+- [x] Configure the full LGPL FFmpeg native bundle (GPL disabled).
+- [ ] Validate actual binary size, codecs, playback and export on every platform/device.
 
-## Stage 2 — Professional finishing
-- [ ] Color wheels, curves, scopes, LUT import and masks.
-- [ ] HDR / 10-bit pipeline and export presets.
-- [ ] Proxy/background render queue and cache manager.
-- [ ] Render graph shared by preview and export.
+## Stage 1 — AE-style layer and animation foundation
+- [x] Composition document and layer registry: video, image, PSD raster, text, shape, audio, Null, Adjustment, Camera, Light, 3D model, particles and precomposition.
+- [x] Layer selection, visibility, lock and basic layer stack.
+- [x] Null/parent links with cycle checking and initial transform propagation.
+- [x] Position, anchor, scale, rotation and opacity properties.
+- [x] Keyframes with Hold, Linear, Ease In, Ease Out and Ease In/Out interpolation.
+- [x] Shape primitives/style controls and camera/light settings.
+- [x] PSD/PSB visible raster extraction into independent PNG assets.
+- [ ] Full PSD groups, clipping masks, smart objects, text formatting, vector paths and all adjustment layers.
+- [ ] Project save/open, autosave, undo/redo and crash recovery.
+- [ ] Full matrix parenting, anchors, skew, 3D constraints and expression engine.
 
-## Stage 3 — AI depth and 3D
-- [ ] Port MiDaS / relative depth inference behind a platform-aware engine.
-- [ ] Temporal depth smoothing, segmentation and disocclusion filling.
-- [ ] GLB/OBJ asset library and real-time 3D viewport.
-- [ ] AR camera support on eligible phones, with graceful desktop fallback.
-- [ ] Recorded-video camera tracking and calibrated camera solve.
-- [ ] 3D layer compositing, camera-matched shadows and relighting.
-- [ ] Physics, mesh shatter and particle baking into final output.
+## Stage 2 — Effect, mask and transition systems
+- [x] Effect catalog, categories, parameters and default ranges.
+- [x] Keyframe model and UI for effect parameters.
+- [x] FFmpeg filter compiler for a subset of common 2D effects.
+- [x] Mask model for rectangle, ellipse, polygon and Bezier, with operation/feather/expansion/invert controls.
+- [x] Transition model for dissolve, wipe, slide, zoom, blur and luma.
+- [ ] Bezier mask editor, animated paths, feather handles and rotoscoping.
+- [ ] Shared GPU effects runtime for glow, shadows, displacement, advanced keying, optical flow and deep blur.
+- [ ] Per-frame animated effect rendering, masks and every blend mode in final export.
+- [ ] Full transition timeline, handles and clip-aware crossfade output.
+- [ ] Colour wheels, curves, scopes, LUT library, HDR and 10-bit pipeline.
 
-## Stage 4 — Pro node and animation tools
-- [ ] Typed node canvas with ports, validation and live graph execution.
-- [ ] Keyframe tracks, bezier handles, motion paths and graph curves.
-- [ ] Export-linked transforms, camera animation and effect parameters.
+## Stage 3 — Composition render graph
+- [x] Initial FFmpeg compositor for video/image/PSD raster layers.
+- [x] Static position/scale/rotation/opacity and a subset of FFmpeg effects in the first export pass.
+- [ ] Multi-track video overlaps, audio tracks, volume/keyframes, ducking and waveforms.
+- [ ] Render shape/text layers and adjustment layers.
+- [ ] PSD blend modes, non-normal blending and mask operations in export.
+- [ ] Keyframe transform curves rendered for every frame.
+- [ ] Shared deterministic real-time preview and export graph.
+- [ ] Render queue, proxy media, cache manager and background rendering.
+
+## Stage 4 — 3D, tracking and simulation
+- [x] Camera and light layer data models and controls.
+- [x] 3D transform fields and keyframe-capable layer model.
+- [ ] Cross-platform GLB/OBJ render backend in the composition canvas.
+- [ ] Camera projection, depth-of-field, lights, environment maps and real shadow passes.
+- [ ] Planar/point tracking, 2D/3D track data, constraints and correction tools.
+- [ ] Port recorded-footage solve and AR workflows to shared platform backends.
+- [ ] Camera-matched 3D composites and shadow catcher.
+- [ ] Physics, mesh shatter, fluid/smoke/fire and particles rendered into final export.
+
+## Stage 5 — Pro experience
+- [ ] Draggable dockable panels, keyboard shortcuts, search/command palette and custom workspaces.
+- [ ] Node-based graph editor with executable nodes and graph validation.
+- [ ] Bezier graph editor, motion paths, expressions and reusable presets.
+- [ ] Full project interchange, asset relinking and template/preset ecosystem.
 
 ## Release gate
 
-A capability is complete only after it is available in the shared project model, visible in preview, present in final export, tested on supported platform targets and covered by automated or reproducible tests. A UI control or preview-only prototype does not count as a finished editor feature.
+A capability is complete only when it has a project model, working controls, real-time preview, final export implementation, automated tests and physical-device/platform validation.
