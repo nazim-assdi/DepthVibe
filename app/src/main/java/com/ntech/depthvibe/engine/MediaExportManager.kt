@@ -19,12 +19,15 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.audio.SpeedProvider
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.OverlayEffect
+import androidx.media3.effect.Brightness
+import androidx.media3.effect.RgbFilter
 import androidx.media3.effect.Presentation
 import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.effect.StaticOverlaySettings
 import androidx.media3.effect.TextOverlay
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
@@ -52,7 +55,11 @@ class MediaExportManager(
         playbackSpeed: Float = 1f,
         aspectRatio: Float = 16f / 9f,
         cropToAspectRatio: Boolean = false,
-        title: String = ""
+        title: String = "",
+        backgroundAudioUri: Uri? = null,
+        additionalVideoUris: List<Uri> = emptyList(),
+        brightness: Float = 0f,
+        grayscale: Boolean = false
     ) {
         require(startMs >= 0L && endMs > startMs) {
             "Choose a valid trim range before exporting."
@@ -61,6 +68,7 @@ class MediaExportManager(
             "Playback speed must be between 0.25x and 2.0x."
         }
         require(aspectRatio > 0f) { "Output aspect ratio must be positive." }
+        require(brightness in -1f..1f) { "Brightness must be between -1 and 1." }
 
         val directory = File(appContext.cacheDir, "depthvibe-exports")
         if (!directory.exists() && !directory.mkdirs()) {
@@ -95,6 +103,9 @@ class MediaExportManager(
                 Presentation.LAYOUT_SCALE_TO_FIT
             }
         )
+
+        if (brightness != 0f) videoEffects += Brightness(brightness)
+        if (grayscale) videoEffects += RgbFilter.createGrayscaleFilter()
 
         if (title.isNotBlank()) {
             val overlayText = SpannableString(title.take(120)).apply {
@@ -133,11 +144,47 @@ class MediaExportManager(
             override fun getNextSpeedChangeTimeUs(timeUs: Long): Long = C.TIME_UNSET
         }
 
-        val editedItem = EditedMediaItem.Builder(clip)
-            .setRemoveAudio(removeAudio)
-            .setSpeed(speedProvider)
-            .setEffects(Effects(emptyList(), videoEffects))
-            .build()
+        val allVideoUris = listOf(source) + additionalVideoUris
+        val editedVideoItems = allVideoUris.mapIndexed { index, uri ->
+            val mediaItem = if (index == 0) {
+                MediaItem.Builder()
+                    .setUri(uri)
+                    .setClippingConfiguration(
+                        MediaItem.ClippingConfiguration.Builder()
+                            .setStartPositionMs(startMs)
+                            .setEndPositionMs(endMs)
+                            .build()
+                    )
+                    .build()
+            } else {
+                MediaItem.fromUri(uri)
+            }
+            EditedMediaItem.Builder(mediaItem)
+                .setRemoveAudio(removeAudio || backgroundAudioUri != null)
+                .setSpeed(speedProvider)
+                .setEffects(Effects(emptyList(), videoEffects))
+                .build()
+        }
+
+        val videoSequence = if (backgroundAudioUri != null) {
+            EditedMediaItemSequence.withVideoFrom(editedVideoItems)
+        } else {
+            EditedMediaItemSequence.withAudioAndVideoFrom(editedVideoItems)
+        }
+
+        val composition = if (backgroundAudioUri != null) {
+            val musicItem = EditedMediaItem.Builder(
+                MediaItem.fromUri(backgroundAudioUri)
+            ).build()
+            val musicSequence = EditedMediaItemSequence
+                .withAudioFrom(listOf(musicItem))
+                .buildUpon()
+                .setIsLooping(true)
+                .build()
+            Composition.Builder(videoSequence, musicSequence).build()
+        } else {
+            Composition.Builder(videoSequence).build()
+        }
 
         val listener = object : Transformer.Listener {
             override fun onCompleted(composition: Composition, exportResult: ExportResult) {
@@ -158,7 +205,7 @@ class MediaExportManager(
 
         try {
             transformer = Transformer.Builder(appContext).addListener(listener).build()
-            transformer?.start(editedItem, file.absolutePath)
+            transformer?.start(composition, file.absolutePath)
         } catch (exception: Exception) {
             file.delete()
             transformer = null
