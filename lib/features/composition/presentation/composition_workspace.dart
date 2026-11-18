@@ -1422,18 +1422,6 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
               itemCount: layers.length,
               itemBuilder: (context, index) {
                 final layer = layers[index];
-                final count = layer.keyframeTracks.fold<int>(
-                      0,
-                      (sum, track) => sum + track.keyframes.length,
-                    ) +
-                    layer.effects.fold<int>(
-                      0,
-                      (sum, effect) => sum +
-                          effect.keyframeTracks.fold<int>(
-                            0,
-                            (trackSum, track) => trackSum + track.keyframes.length,
-                          ),
-                    );
                 return InkWell(
                   onTap: () => _controller.selectLayer(layer.id),
                   child: Padding(
