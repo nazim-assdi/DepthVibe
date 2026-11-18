@@ -1,50 +1,52 @@
 # DepthVibe architecture
 
-## Product boundary
+## Android editor
 
-The first delivery target is Android. The editor shell is native Kotlin + Jetpack Compose; video playback uses AndroidX Media3. Processing engines remain separate interfaces so the UI never pretends a feature is operational before a real backend exists.
+The Android application uses Kotlin, Jetpack Compose and AndroidX Media3. ExoPlayer previews source footage. Media3 Transformer exports a selected trim range. The current render path applies trim, rotation and source-audio removal, then publishes the MP4 to Android's shared Movies/DepthVibe collection.
 
-## Processing pipeline
+## 3D camera viewport
 
-1. **Ingest:** import source media through the Storage Access Framework; retain a content URI and create lightweight proxy metadata.
-2. **Decode:** decode video frames off the UI thread. Keep original media untouched.
-3. **Depth:** run a mobile monocular-depth model on sampled frames, then add temporal smoothing and edge-aware refinement. A depth map estimates relative distance; it does not recover hidden geometry or turn a single 2D recording into a fully modelled object.
-4. **Scene:** build a layered 2.5D scene (foreground, midground, background) with mesh displacement and disocclusion-fill passes. Offer bounded camera motion to avoid exposing unseen regions.
-5. **Tracking:** use ARCore pose tracking for a live camera session on supported devices. Imported footage needs its own visual feature tracking / SLAM or structure-from-motion solve; live phone sensor poses cannot directly track an old recording.
-6. **Compositing:** combine footage, depth layers, tracked transforms, 3D assets, lights, shadows and effects into a render graph.
-7. **Export:** render in background chunks, encode through Android media codecs, and expose progress / cancellation / recoverable errors.
+The 3D workspace uses OpenGL ES 2.0 and a perspective view/projection matrix. It draws a perspective grid, wireframe cube and red/green/blue axes. Dragging changes camera azimuth/elevation; pinching changes orbit distance; the field-of-view slider adjusts the virtual lens.
 
-## Engine boundaries
+This is a true virtual 3D scene camera. It is not the device camera and does not currently provide ARCore world tracking or camera-locked 3D placement in captured footage.
 
-- `DepthEstimationEngine`: frame-to-depth inference.
-- `CameraTrackingEngine`: live session pose and offline-video solve are explicitly separate calls.
-- `ParticleSimulationEngine`: deterministic simulation step for preview and render.
-- `ModelAssetLoader`: normalizes imported asset metadata before GPU upload.
+## Current edit state
 
-The interfaces are contracts only. They do not ship a model, ARCore session, GPU simulation, GLB renderer, or export encoder yet.
+- Source video URI and discovered duration
+- Editable trim in/out points
+- Split markers (not yet independent clip segments)
+- Imported audio and image source references
+- Preview playback speed, mute and rotation
+- Preview canvas aspect-ratio preset
+- Preview title text
 
-## Rendering choices
+Important behavior boundaries:
+- Playback speed currently affects preview only.
+- Aspect ratio currently changes the editor preview canvas only.
+- Title is a preview overlay, not burned into the output MP4.
+- Audio and image imports are stored as project references; they are not composited into export yet.
+- Split controls add timeline markers; they do not yet create independently rendered clips.
+- Export currently applies trim, rotation and source-audio removal to one video source.
 
-- **Depth preview:** start with a grayscale depth texture and edge overlay.
-- **2.5D scene:** use a subdivided plane / layered cards and conservative camera displacement.
-- **3D assets:** integrate a maintained physically based renderer (Filament is the preferred candidate) after validating Android ABI, native packaging, and memory costs.
-- **Particles:** use GPU instancing for large particle counts; keep deterministic CPU-side emitters and simulation parameters for repeatable exports.
-- **Timeline:** use a single project timebase and immutable clip/effect state. Preview and export must consume the same render graph.
+## Media export
+
+The export manager constructs a clipped MediaItem, wraps it in an EditedMediaItem, and starts Media3 Transformer asynchronously. Output is written to a temporary app-cache file. After a successful render it is copied to Movies/DepthVibe and exposed as a shareable content URI. Temporary render files are deleted after publish or failure.
+
+## Future engines
+
+- Depth: mobile monocular-depth inference, temporal smoothing, foreground masks and disocclusion fill.
+- AR: ARCore live pose tracking, camera background and anchored virtual objects.
+- Offline camera solve: feature detection, matching, bundle adjustment and diagnostics for imported footage.
+- 3D assets: GLB/glTF and OBJ/MTL loading with a physically based renderer.
+- Effects: GPU particles, deterministic shatter and a render graph shared by preview and export.
+
+A depth map estimates relative distance; it cannot recover hidden geometry from one image. Live AR tracking is not a replacement for offline tracking of imported video.
 
 ## Performance and reliability
 
-- Decode / inference / rendering must never run on the main thread.
-- Provide draft preview resolution (for example, 540p or 720p) and full-resolution export separately.
-- Use bounded frame queues and release decoded buffers promptly.
-- Cache depth maps and proxy frames on disk with size limits.
-- Detect low-memory conditions and reduce preview resolution / particle count.
-- Keep original source files read-only and make project saves atomic.
-- Add device capability checks before enabling AR or GPU features.
-
-## Important limitations
-
-- Monocular depth is an estimate, not measured LiDAR depth.
-- Moving the virtual camera in a 2D clip can expose missing pixels; inpainting can reduce but cannot eliminate this.
-- ARCore tracking depends on a supported device and suitable visual conditions.
-- OBJ may reference external MTL and texture files; robust import must resolve those dependencies.
-- Realistic relighting requires plausible normals / materials and environment-light estimation. A depth map alone is not enough.
+- Keep decode, inference and render work off the UI thread.
+- Use lower-resolution preview and full-resolution export separately.
+- Bound frame queues and release decoded buffers promptly.
+- Keep original media read-only and use cache files for temporary renders.
+- Check encoder and graphics capabilities before enabling advanced effects.
+- Test URI permissions, camera capture and export on representative physical devices.

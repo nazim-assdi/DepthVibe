@@ -1,52 +1,51 @@
 # DepthVibe
 
-**A lightweight, Android-first 2D video and 3D compositing workspace.**
+**A mobile video-editing studio with a real-time 3D perspective camera workspace.**
 
-DepthVibe is being built around a hybrid Easy / Pro editor. The first repository milestone establishes the native Android application shell, video import and preview, editable project/timeline state, and explicit integration contracts for the advanced engines.
+DepthVibe is an Android application by **N Tech**. Version 0.2.0 adds media import, trim controls, timeline split markers, preview playback controls, a Media3 MP4 export path and an interactive OpenGL ES 3D viewport.
 
-> **Current status:** foundation scaffold. AI depth estimation, full-video camera solving, real-time AR tracking, physics simulation, GLB/OBJ rendering, relighting, and final compositing export are not yet implemented. The UI must not represent these engines as working until their implementations and device tests are complete.
+## Current capabilities
 
-## Product direction
+- Import video, audio and image references through Android's document picker.
+- Capture a new source video using the device's camera app.
+- Preview source video with playback-speed, mute and rotation controls.
+- Set trim in/out points and export the selected range to MP4.
+- Apply rotation and remove source audio during export.
+- Save rendered MP4 files to Movies/DepthVibe and share the result.
+- Preview 16:9, 9:16, 1:1 and 4:5 canvas presets.
+- Add a title overlay to the editor preview.
+- Use an interactive perspective 3D camera: drag to orbit, pinch to dolly and adjust field of view.
 
-- **Easy Mode:** guided actions and effect presets for creators.
-- **Pro Mode:** timeline-oriented editing, transform controls, and a node-graph workspace.
-- **AI depth:** estimate per-frame depth, provide depth visualisation, and build a layered/parallax scene with disocclusion handling.
-- **Camera tracking:** use ARCore pose tracking for live camera sessions; use a separate visual-SLAM / structure-from-motion solve for imported footage.
-- **3D and physics:** import GLB/OBJ assets, render with physically based materials, and simulate particles and shatter effects.
-- **Performance:** proxy previews, adaptive render resolution, background processing, and memory-aware asset loading.
+## Current limitations
 
-## Implemented in this foundation
-
-- Native Android application shell using Kotlin and Jetpack Compose.
-- Video import through Android's Storage Access Framework.
-- In-app video preview using AndroidX Media3.
-- Easy / Pro workspace switch and starter timeline / node-workspace UI.
-- Explicit engine contracts and feature-readiness messaging.
-- GitHub Actions debug-build workflow.
+The title overlay, aspect-ratio preset and playback speed are preview-only. Audio and image imports are currently project references and are not mixed into the exported video. Split markers are visible on the timeline but do not yet produce independent clips. ARCore tracking, AI depth reconstruction, GLB/OBJ rendering, GPU particles, multi-clip composition and advanced colour grading remain future engine work.
 
 ## Build
 
-Requirements:
-
-- Android Studio with Android SDK Platform 36.
-- JDK 17.
-- Gradle 8.13 (the CI workflow installs this version).
+Requirements: Android SDK Platform 36, JDK 17 and Gradle 8.13.
 
 From the repository root:
 
-```bash
+```
 gradle :app:assembleDebug
 gradle :app:testDebugUnitTest
 ```
 
-Open the repository root in Android Studio to import the Gradle project and run the `app` configuration on an emulator or Android device.
+Open the repository root in Android Studio to import the Gradle project and run the app on an Android device or emulator.
 
-## Roadmap
+## Technology
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/ROADMAP.md](docs/ROADMAP.md) for engine boundaries, technical constraints, and delivery stages.
+- Kotlin and Jetpack Compose
+- AndroidX Media3 ExoPlayer
+- AndroidX Media3 Transformer
+- OpenGL ES 2.0
+- GitHub Actions build and APK artifacts
+
+See docs/ARCHITECTURE.md and docs/ROADMAP.md.
 
 ## Project
 
-- Product: **DepthVibe**
-- Developer: **N Tech**
-- Platform target for the first milestone: **Android**
+- Product: DepthVibe
+- Developer: N Tech
+- Package: com.ntech.depthvibe
+- Version: 0.2.0

@@ -1,55 +1,67 @@
 # DepthVibe delivery roadmap
 
-Status labels describe code actually present in this repository.
+Status labels refer to code present in this repository, not product aspirations.
 
-## Stage 0 — foundation (current)
+## Stage 0 — Android foundation
 
 - [x] Native Android app shell and dark editor theme
-- [x] Easy / Pro workspace switch
-- [x] Video picker and Media3 preview
-- [x] Starter timeline and node-workspace presentation
-- [x] Engine contracts and architecture notes
-- [x] GitHub Actions debug-build workflow
-- [ ] Persistent project serialization and relaunch recovery
-- [ ] Functional clip trimming, split, reorder and audio controls
+- [x] Easy / Pro starter workspaces
+- [x] Android document-picker video import
+- [x] Media3 ExoPlayer preview
+- [x] GitHub Actions debug build and APK artifact
 
-## Stage 1 — dependable 2D editor
+## Stage 1 — video studio and virtual 3D camera (current)
 
-- Import video / image / audio and model assets with explicit type validation
-- Timeline with trim handles, snapping, tracks, keyframe data and undo/redo
-- Project save / restore and proxy generation
-- Preview playback synchronised with timeline
-- Background render queue and a basic export pipeline
+- [x] Import a video source
+- [x] Capture a source clip using the device's camera app
+- [x] Read source duration and set trim in/out points
+- [x] Export the selected trim range to MP4 with Media3 Transformer
+- [x] Export rotation and source-audio removal
+- [x] Save export to Movies/DepthVibe and share it
+- [x] Preview playback-speed adjustment and mute
+- [x] Preview canvas presets for 16:9, 9:16, 1:1 and 4:5
+- [x] Preview-only title overlay
+- [x] Import audio and image references into the editor
+- [x] Add visual split markers to the timeline
+- [x] OpenGL ES perspective camera viewport with orbit, dolly and FOV control
+- [ ] Actual split editing with independently selectable timeline segments
+- [ ] Persistent projects, undo/redo and clip reorder
+- [ ] Multi-clip assembly and independent audio/image compositing in export
+- [ ] Burn-in text, animated captions, filters and transitions in export
+- [ ] Exported aspect-ratio scaling, speed changes and audio mixing
 
-## Stage 2 — AI depth and 2.5D
+## Stage 2 — AI depth and 2.5D scene
 
-- Select and benchmark a commercially usable monocular-depth model
-- On-device inference with GPU / NNAPI fallback and CPU-safe mode
-- Depth map visualisation and temporal smoothing
-- Foreground / background masks, mesh displacement and disocclusion fill
-- Camera-motion limits and performance controls for lower-memory devices
+- [ ] Select and benchmark a commercially usable mobile monocular-depth model
+- [ ] On-device inference with GPU / NNAPI fallback and CPU-safe mode
+- [ ] Temporal depth smoothing and depth-map visualisation
+- [ ] Foreground masks, mesh displacement and disocclusion fill
+- [ ] Interactive virtual camera motion through the estimated depth scene
 
-## Stage 3 — camera tracking
+## Stage 3 — camera tracking and AR
 
-- ARCore live camera session and anchor placement on supported devices
-- Imported-video feature detection, camera solve, bundle adjustment and solve diagnostics
-- Track quality indicators, lost-track recovery and manual correction points
+- [ ] ARCore session for supported Android devices
+- [ ] Tracked 3D object and text placement in live camera footage
+- [ ] Separate offline camera solve for imported video
+- [ ] Track quality diagnostics and manual correction
 
-## Stage 4 — 3D, lighting and effects
+## Stage 4 — 3D and visual effects
 
-- GLB / glTF import, then OBJ + MTL + texture support
-- PBR materials, environment lighting, shadow maps and reflection probes
-- 3D transform gizmos and animation keyframes
-- GPU particle emitters, gravity, collisions and shatter presets
+- [ ] GLB / glTF renderer
+- [ ] OBJ + MTL + texture import
+- [ ] PBR materials, environment lighting and shadows
+- [ ] GPU particles, gravity, collisions and shatter
+- [ ] 3D animation and camera keyframes
 
 ## Stage 5 — pro finishing
 
-- Node graph with typed ports and graph validation
-- Curve / graph editor and X/Y/Z keyframe interpolation
-- Render graph shared by preview and export
-- Audio mixing, colour controls, export presets and crash recovery
-- Device matrix testing, accessibility, privacy disclosures and Play release checks
+- [ ] Typed node graph and shared preview/export render graph
+- [ ] Curve editor, keyframe interpolation and masks
+- [ ] Multi-track audio mixing, ducking and audio effects
+- [ ] Proxy media, background render queue and crash recovery
+- [ ] Export presets, device capability checks and physical-device testing
+- [ ] Privacy and Play release validation
 
-## Acceptance rule
+## Product principle
 
-A stage is complete only after automated tests pass and the capability is verified on physical hardware representative of the target range. A UI control, interface, placeholder, or architecture note does not count as a completed processing feature.
+Keep editing responsive on ordinary phones. Decode, infer and render off the UI thread, bound frame queues, use proxy previews and adapt quality to device capability. A button, preview overlay or interface placeholder does not count as a completed render feature.

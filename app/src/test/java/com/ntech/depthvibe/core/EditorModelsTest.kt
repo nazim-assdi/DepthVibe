@@ -6,33 +6,45 @@ import org.junit.Test
 class EditorModelsTest {
     @Test
     fun timelineClipEndUsesStartPlusDuration() {
-        val clip = TimelineClip(
-            id = "clip-1",
-            sourceUri = "content://media/video/1",
-            startMs = 1_500L,
-            durationMs = 4_000L
-        )
-
+        val clip = TimelineClip("clip-1", "content://video/1", 1_500L, 4_000L)
         assertEquals(5_500L, clip.endMs)
     }
 
     @Test(expected = IllegalArgumentException::class)
     fun timelineClipRejectsNegativeStart() {
-        TimelineClip(
-            id = "clip-invalid",
-            sourceUri = "content://media/video/2",
-            startMs = -1L,
-            durationMs = 1_000L
-        )
+        TimelineClip("bad", "content://video/2", -1L, 1_000L)
     }
 
     @Test(expected = IllegalArgumentException::class)
     fun timelineClipRejectsZeroDuration() {
-        TimelineClip(
-            id = "clip-invalid",
-            sourceUri = "content://media/video/3",
-            startMs = 0L,
-            durationMs = 0L
+        TimelineClip("bad", "content://video/3", 0L, 0L)
+    }
+
+    @Test
+    fun trimRangeCalculatesSelectedDuration() {
+        val range = TrimRange(2_000L, 8_500L, 10_000L)
+        assertEquals(6_500L, range.durationMs)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun trimRangeRejectsEndPastSourceDuration() {
+        TrimRange(1_000L, 11_000L, 10_000L)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun trimRangeRejectsReversedPoints() {
+        TrimRange(9_000L, 2_000L, 10_000L)
+    }
+
+    @Test
+    fun timelineLayerEndUsesStartPlusDuration() {
+        val layer = TimelineLayer(
+            id = "title-1",
+            name = "Title",
+            type = TimelineLayerType.TEXT,
+            startMs = 500L,
+            durationMs = 2_000L
         )
+        assertEquals(2_500L, layer.endMs)
     }
 }

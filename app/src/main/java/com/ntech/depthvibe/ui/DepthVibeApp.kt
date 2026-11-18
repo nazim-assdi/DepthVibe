@@ -51,7 +51,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
@@ -608,7 +607,6 @@ private fun VideoPreview(uri: Uri, speed: Float, muted: Boolean, rotation: Float
 private fun Camera3DWorkspace() {
     var fov by rememberSaveable { mutableStateOf(48f) }
     var view by remember { mutableStateOf<DepthVibe3DView?>(null) }
-    val lifecycleOwner = LocalLifecycleOwner.current
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHeading("3D CAMERA", "Real-time perspective scene • OpenGL ES")
@@ -643,7 +641,7 @@ private fun Camera3DWorkspace() {
             }
         }
         val activeView = view
-        DisposableEffect(activeView, lifecycleOwner) {
+        DisposableEffect(activeView) {
             activeView?.onResume()
             onDispose { activeView?.onPause() }
         }
