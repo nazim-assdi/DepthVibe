@@ -24,14 +24,14 @@ DepthVibe is being developed as a combined nonlinear editor (NLE) and layer comp
 - Non-normal layer compositing uses FFmpeg blend modes with the layer alpha preserved.
 - Dissolve/fade, wipe, slide, zoom and luma transition models are evaluated in the final 2D compositor.
 - Dedicated audio layers and embedded video audio streams are probed and mixed. Gain keyframes, pan, fade-in/out, trigger/background roles and sidechain ducking are available.
-- The effect registry exposes parameters and effect keyframes; the current renderer still samples effect parameters at the playhead rather than animating all effect operators per frame.
+- Brightness, contrast, saturation and gamma effect keyframes are evaluated per frame. Glow and Drop Shadow use CPU FFmpeg multi-pass compositing; other effect parameters are still sampled at the playhead unless their filter has a dedicated animated path.
 - PSD/PSB import extracts visible raster layers to independent cached PNGs and keeps source metadata where available.
 
 ## Renderer boundaries
 
 The current final-render path is a CPU/native FFmpeg 2D compositor, not a complete GPU scene renderer. It renders animated 2D transforms, basic layer mattes, blend compositing, supported transitions and audio tracks. Polygon Bézier handles are not yet a true vector path renderer. Audio effects racks, waveform editing, source clip trimming UI in the composition timeline, and animated effect parameter expressions remain to be built.
 
-Camera and Light are currently parameter models/controls; real mesh-based 3D rendering, camera projection, depth of field, environment lighting and shadow maps are not wired to the final compositor. A basic 2D template tracker can track a manually selected rectangle and write translation keyframes; planar/perspective tracking, scale/rotation solving, occlusion handling and rotoscoping remain open work. Full PSD groups/clipping/smart objects and Photoshop-style adjustment rendering also remain open. Glow, Drop Shadow and advanced VFX require a dedicated multi-pass GPU render graph. An effect-library entry does not mean that effect is complete in final export.
+Camera and Light are currently parameter models/controls; real mesh-based 3D rendering, camera projection, depth of field, environment lighting and shadow maps are not wired to the final compositor. A basic 2D template tracker can track a manually selected rectangle and write translation keyframes; planar/perspective tracking, scale/rotation solving, occlusion handling and rotoscoping remain open work. Full PSD groups/clipping/smart objects and Photoshop-style adjustment rendering also remain open. Glow and Drop Shadow now have CPU multi-pass export paths, but there is no GPU render graph yet. Optical-flow effects, advanced denoise, displacement, volumetrics and high-end VFX still need a dedicated GPU renderer. An effect-library entry does not mean that effect is complete in final export.
 
 ## FFmpeg bundle
 

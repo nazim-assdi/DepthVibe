@@ -255,7 +255,9 @@ class CompositionExportService {
       );
       final alpha = '((' + mask + ')*(' + transition + ')*(' + opacity + ')/100)';
       final effects = filterCompiler.compileEffects(
-        layer, timeMs: document.playheadMs,
+        layer,
+        timeMs: document.playheadMs,
+        animationCompiler: animationCompiler,
       );
       final chain = <String>[
         'trim=duration=' + duration,
@@ -266,9 +268,16 @@ class CompositionExportService {
         'format=rgba',
         "geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='alpha(X,Y)*(" + alpha + ")'",
       ];
-      final layerLabel = 'layer' + index.toString();
+      final sourceLayerLabel = 'layerSource' + index.toString();
       filters.add('[' + inputIndex.toString() + ':v]' +
-          chain.join(',') + '[' + layerLabel + ']');
+          chain.join(',') + '[' + sourceLayerLabel + ']');
+      final layerLabel = _appendCompositingEffects(
+        filters: filters,
+        inputLabel: sourceLayerLabel,
+        layer: layer,
+        index: index,
+        timeMs: document.playheadMs,
+      );
       final x = '(' + posX + '-w/2)';
       final y = '(' + posY + '-h/2)';
 
@@ -320,6 +329,109 @@ class CompositionExportService {
     buffer.write('-c:v mpeg4 -q:v 3 -pix_fmt yuv420p -movflags +faststart ');
     buffer.write(_quote(outputPath));
     return buffer.toString();
+  }
+
+  String _appendCompositingEffects({
+    required List<String> filters,
+    required String inputLabel,
+    required CompositionLayer layer,
+    required int index,
+    required int timeMs,
+  }) {
+    var current = inputLabel;
+    var passIndex = 0;
+    for (final effect in layer.effects.where((item) =>
+        item.enabled &&
+        (item.effectId == 'glow' || item.effectId == 'drop_shadow'))) {
+      final definition = EffectCatalog.find(effect.effectId);
+      if (definition == null) continue;
+      double value(String id, double fallback) =>
+          effect.parameterAt(id, timeMs, fallback: fallback);
+      if (effect.effectId == 'glow') {
+        final threshold = value('threshold', 0.75).clamp(0, 1);
+        final radius = value('radius', 12).clamp(0.5, 50);
+        final intensity = value('intensity', 1).clamp(0, 3);
+        final suffix = index.toString() + '_' + passIndex.toString();
+        final body = 'glowBody' + suffix;
+        final source = 'glowSource' + suffix;
+        final padded = 'glowPadded' + suffix;
+        final blurred = 'glowBlur' + suffix;
+        final gained = 'glowGain' + suffix;
+        final output = 'glowOutput' + suffix;
+        final cut = (threshold * 255).toStringAsFixed(2);
+        final boost = intensity.toStringAsFixed(3);
+        final padding = (radius * 3).ceil().toString();
+        filters.add(
+          '[' + current + ']pad=w=iw+2*' + padding +
+          ':h=ih+2*' + padding + ':x=' + padding + ':y=' + padding +
+          ':color=black@0,format=rgba[' + padded + ']',
+        );
+        filters.add('[' + padded + ']split=2[' + body + '][' + source + ']');
+        filters.add(
+          '[' + source + "]format=rgba,lutrgb="
+          "r='if(gte(val," + cut + "),val,0)':"
+          "g='if(gte(val," + cut + "),val,0)':"
+          "b='if(gte(val," + cut + "),val,0)':a=val,"
+          "gblur=sigma=" + radius.toStringAsFixed(2) + '[' + blurred + ']',
+        );
+        filters.add(
+          '[' + blurred + "]lutrgb="
+          "r='clip(val*" + boost + ")':"
+          "g='clip(val*" + boost + ")':"
+          "b='clip(val*" + boost + ")':a=val[" + gained + ']',
+        );
+        filters.add(
+          '[' + body + '][' + gained +
+          ']blend=all_mode=screen:all_opacity=1[' + output + ']',
+        );
+        current = output;
+      } else {
+        final opacity = value('opacity', 0.6).clamp(0, 1);
+        final blur = value('blur', 8).clamp(0, 40);
+        final offset = value('offset', 8).clamp(-100, 100);
+        final padding = (blur * 3 + offset.abs() + 4).ceil();
+        final suffix = index.toString() + '_' + passIndex.toString();
+        final body = 'shadowBody' + suffix;
+        final source = 'shadowSource' + suffix;
+        final blurred = 'shadowBlur' + suffix;
+        final shadowCanvas = 'shadowCanvas' + suffix;
+        final bodyCanvas = 'shadowBodyCanvas' + suffix;
+        final placed = 'shadowPlaced' + suffix;
+        final output = 'shadowOutput' + suffix;
+        final pad = padding.toString();
+        final offsetValue = offset.toStringAsFixed(2);
+        filters.add('[' + current + ']split=2[' + body + '][' + source + ']');
+        filters.add(
+          '[' + source +
+          ']format=rgba,colorchannelmixer=rr=0:gg=0:bb=0:aa=' +
+          opacity.toStringAsFixed(3) +
+          ',gblur=sigma=' + blur.toStringAsFixed(2) +
+          '[' + blurred + ']',
+        );
+        filters.add(
+          '[' + blurred + ']pad=w=iw+2*' + pad +
+          ':h=ih+2*' + pad + ':x=' + pad + ':y=' + pad +
+          ':color=black@0,format=rgba[' + shadowCanvas + ']',
+        );
+        filters.add(
+          '[' + body + ']pad=w=iw+2*' + pad +
+          ':h=ih+2*' + pad + ':x=' + pad + ':y=' + pad +
+          ':color=black@0,format=rgba[' + bodyCanvas + ']',
+        );
+        filters.add(
+          '[' + shadowCanvas + ']overlay=x=' + pad + '+' + offsetValue +
+          ':y=' + pad + '+' + offsetValue +
+          ':shortest=1:format=auto[' + placed + ']',
+        );
+        filters.add(
+          '[' + placed + '][' + bodyCanvas + ']overlay=x=' + pad +
+          ':y=' + pad + ':shortest=1:format=auto[' + output + ']',
+        );
+        current = output;
+      }
+      passIndex++;
+    }
+    return current;
   }
 
   void _appendBlendPass({

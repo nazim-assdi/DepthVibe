@@ -31,7 +31,9 @@ Status describes working source paths, not release-ready feature parity. A model
 - [x] Fade/dissolve, wipe, slide, zoom and luma-style transition expressions.
 - [x] Multi-track audio mix, audio gain animation, fades and sidechain ducking.
 - [x] FFmpeg filter compiler for a subset of conventional 2D effects.
-- [ ] Animated effect-parameter expressions for every effect node.
+- [x] Per-frame parameter expressions for brightness, contrast, saturation and gamma.
+- [x] CPU multi-pass thresholded glow and alpha-derived drop shadow export.
+- [ ] Animated parameter expressions for all effects and GPU multi-pass nodes for high-end VFX.
 - [ ] Shape/text rasterization and Photoshop adjustment layer rendering.
 - [ ] Bezier mask curve editor, animated masks, tracking masks and rotoscoping.
 - [ ] Render queue, proxy media, cache manager, waveform cache and deterministic realtime preview.

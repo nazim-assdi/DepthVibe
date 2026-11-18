@@ -88,7 +88,7 @@ void main() {
 
     expect(expression, contains('sqrt('));
     expect(expression, contains('mod('));
-    expect(expression, contains('abs('));
+    expect(expression, contains('hypot('));
     expect(expression, contains('min(1,max(0,'));
   });
 

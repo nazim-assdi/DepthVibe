@@ -53,9 +53,9 @@ This is not equivalent to Photoshop's complete renderer. Group nesting/clipping,
 
 ## Effect registry
 
-EffectCatalog defines effect identity, categories, parameter ranges/defaults and an FFmpeg filter family. FfmpegFilterCompiler maps a subset of conventional 2D effects to filter strings. Effect parameters can be keyframed in the data model, but current FFmpeg export samples effect values at the composition playhead rather than evaluating every effect parameter as a per-frame expression.
+EffectCatalog defines effect identity, categories, parameter ranges/defaults and an FFmpeg filter family. FfmpegFilterCompiler maps a subset of conventional 2D effects to filter strings. Brightness, contrast, saturation and gamma parameter tracks compile to FFmpeg eq expressions evaluated on each frame. Other effect parameters currently sample values at the composition playhead unless a filter has a dedicated frame-evaluation path.
 
-Glow, Drop Shadow, advanced keying, optical-flow processing, rotoscoping, particles and many 3D operations still need dedicated multi-pass or GPU nodes.
+Glow uses a thresholded RGB split, blur and screen blend pass. Drop Shadow derives a blurred alpha matte, expands a transparent canvas and composites the original layer over the offset matte. These are CPU/native FFmpeg multi-pass effects, not GPU shaders. Advanced displacement, optical-flow processing, rotoscoping, particles and many 3D operations still need dedicated GPU or specialised render nodes.
 
 ## Current composition renderer
 

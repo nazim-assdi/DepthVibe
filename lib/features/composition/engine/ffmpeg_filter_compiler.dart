@@ -1,5 +1,6 @@
 import '../data/effect_catalog.dart';
 import '../domain/composition_models.dart';
+import 'ffmpeg_animation_compiler.dart';
 
 class FfmpegFilterCompiler {
   const FfmpegFilterCompiler();
@@ -7,6 +8,8 @@ class FfmpegFilterCompiler {
   List<String> compileEffects(
     CompositionLayer layer, {
     required int timeMs,
+    FfmpegAnimationCompiler animationCompiler =
+        const FfmpegAnimationCompiler(),
   }) {
     final filters = <String>[];
     for (final effect in layer.effects.where((item) => item.enabled)) {
@@ -20,10 +23,37 @@ class FfmpegFilterCompiler {
             fallback: parameter.defaultValue,
           ),
       };
-      final filter = _compileEffect(definition.id, values);
+      final filter = _compileAnimatedColorEffect(
+            definition.id,
+            effect,
+            definition,
+            animationCompiler,
+          ) ??
+          _compileEffect(definition.id, values);
       if (filter != null && filter.isNotEmpty) filters.add(filter);
     }
     return filters;
+  }
+
+  String? _compileAnimatedColorEffect(
+    String id,
+    EffectInstance effect,
+    EffectDefinition definition,
+    FfmpegAnimationCompiler animationCompiler,
+  ) {
+    const supported = {'brightness', 'contrast', 'saturation', 'gamma'};
+    if (!supported.contains(id)) return null;
+    final parameter = definition.parameters.first;
+    final tracks = effect.keyframeTracks.where(
+      (track) => track.property == parameter.id && track.enabled,
+    );
+    if (tracks.isEmpty || tracks.first.keyframes.isEmpty) return null;
+    final expression = animationCompiler.keyframeExpression(
+      tracks.first,
+      fallback: effect.parameters[parameter.id] ?? parameter.defaultValue,
+    );
+    final option = id == 'saturation' ? 'saturation' : id;
+    return "eq=" + option + "='" + expression + "':eval=frame";
   }
 
   String? _compileEffect(String id, Map<String, double> p) {
