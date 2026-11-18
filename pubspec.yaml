@@ -1,7 +1,7 @@
 name: depthvibe
 description: A cross-platform AI-first video and 3D creative studio by N Tech.
 publish_to: none
-version: 0.4.0+1
+version: 0.4.1+2
 
 environment:
   sdk: ">=3.12.0 <4.0.0"
@@ -18,7 +18,8 @@ dependencies:
   media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7
   path_provider: ^2.1.5
-  share_plus: ^12.0.1
+  saver_gallery: ^5.1.0
+  share_plus: ^13.3.1
   cross_file: ^0.3.5+2
 
 dev_dependencies:

@@ -12,5 +12,12 @@ flutter create \
   --platforms=android,ios,windows,linux,macos \
   .
 
-python3 tool/configure_platforms.py
+if command -v python3 >/dev/null 2>&1; then
+  python3 tool/configure_platforms.py
+elif command -v python >/dev/null 2>&1; then
+  python tool/configure_platforms.py
+else
+  echo "Python 3 is required to configure platform permissions." >&2
+  exit 1
+fi
 flutter pub get

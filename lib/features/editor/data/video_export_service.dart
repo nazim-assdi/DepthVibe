@@ -5,15 +5,24 @@ import 'dart:ui' as ui;
 import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:saver_gallery/saver_gallery.dart';
 
 import '../domain/editor_project.dart';
 
 typedef ExportProgress = void Function(double progress);
 
+class VideoExportResult {
+  const VideoExportResult({required this.file, this.galleryUri, this.gallerySaveError});
+
+  final File file;
+  final String? galleryUri;
+  final String? gallerySaveError;
+}
+
 class VideoExportService {
   const VideoExportService();
 
-  Future<File> export(EditorProject project, {ExportProgress? onProgress}) async {
+  Future<VideoExportResult> export(EditorProject project, {ExportProgress? onProgress}) async {
     if (!project.hasVideo || !project.hasValidTrim) {
       throw StateError('Choose a video and set a valid trim range before exporting.');
     }
@@ -76,8 +85,28 @@ class VideoExportService {
       if (!await output.exists() || await output.length() == 0) {
         throw StateError('The export completed but no MP4 file was created.');
       }
+      String? galleryUri;
+      String? gallerySaveError;
+      if (Platform.isAndroid || Platform.isIOS) {
+        try {
+          final saved = await SaverGallery.saveFile(
+            filePath: output.path,
+            skipIfExists: false,
+            fileName: output.uri.pathSegments.last,
+            albumPath: 'DepthVibe/videos',
+          );
+          galleryUri = saved.savedUri;
+        } catch (error) {
+          // Keep the rendered MP4 in the app folder even if gallery access is denied.
+          gallerySaveError = error.toString();
+        }
+      }
       onProgress?.call(1);
-      return output;
+      return VideoExportResult(
+        file: output,
+        galleryUri: galleryUri,
+        gallerySaveError: gallerySaveError,
+      );
     } catch (_) {
       if (await output.exists()) await output.delete();
       rethrow;
@@ -142,8 +171,12 @@ class VideoExportService {
       buffer.write('-an ');
     } else {
       buffer.write('-map 0:a? ');
-      final tempo = _audioTempo(project.speed);
-      if (tempo.isNotEmpty) buffer.write('-af ${_quote(tempo)} ');
+      final audioFilters = <String>[
+        'atrim=start=${_seconds(project.trimInMs)}:end=${_seconds(project.trimOutMs)}',
+        'asetpts=PTS-STARTPTS',
+        _audioTempo(project.speed),
+      ];
+      buffer.write('-af ${_quote(audioFilters.join(','))} ');
       buffer.write('-c:a aac -b:a 192k ');
     }
     buffer.write('-c:v mpeg4 -q:v 3 -pix_fmt yuv420p -movflags +faststart ');

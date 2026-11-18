@@ -103,7 +103,7 @@ class _EditorScreenState extends State<EditorScreen> {
       _status = 'Preparing MP4 export…';
     });
     try {
-      final file = await _exporter.export(
+      final result = await _exporter.export(
         _editor.project,
         onProgress: (value) {
           if (mounted) setState(() => _exportProgress = value);
@@ -111,10 +111,14 @@ class _EditorScreenState extends State<EditorScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _status = 'Saved: ${file.path}';
+        _status = result.galleryUri != null
+            ? 'Saved to Movies/DepthVibe/videos'
+            : result.gallerySaveError != null
+                ? 'Saved in app storage; gallery save needs permission'
+                : 'Saved to Documents/DepthVibe/Exports';
         _exportProgress = 1;
       });
-      await _showExportComplete(file);
+      await _showExportComplete(result);
     } catch (error) {
       _showMessage('Export failed: $error');
       if (mounted) setState(() => _status = 'Export failed');
@@ -123,13 +127,20 @@ class _EditorScreenState extends State<EditorScreen> {
     }
   }
 
-  Future<void> _showExportComplete(File file) async {
+  Future<void> _showExportComplete(VideoExportResult result) async {
+    final file = result.file;
     if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Export complete'),
-        content: SelectableText('MP4 saved to:\n${file.path}'),
+        content: SelectableText(
+          result.galleryUri != null
+              ? 'MP4 saved to Movies/DepthVibe/videos.\\nGallery reference: ${result.galleryUri}\\nApp copy: ${file.path}'
+              : result.gallerySaveError != null
+                  ? 'The MP4 was exported successfully, but saving to the gallery failed.\\n\\nApp copy: ${file.path}\\n\\n${result.gallerySaveError}'
+                  : 'MP4 saved to:\\n${file.path}',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
@@ -384,41 +395,51 @@ class _EditorScreenState extends State<EditorScreen> {
       width: width,
       padding: EdgeInsets.all(compact ? 0 : 18),
       child: compact
-          ? previewContent
+          ? Column(
+              children: [
+                previewContent,
+                const SizedBox(height: 8),
+                _buildPlaybackControls(),
+              ],
+            )
           : Column(
               children: [
                 Expanded(child: Center(child: ConstrainedBox(maxWidth: 920, child: previewContent))),
                 const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton.filledTonal(
-                      onPressed: !_ready ? null : () => _player.seek(Duration.zero),
-                      icon: const Icon(Icons.replay),
-                    ),
-                    const SizedBox(width: 12),
-                    IconButton.filled(
-                      onPressed: !_ready
-                          ? null
-                          : () async {
-                              if (_player.state.playing) {
-                                await _player.pause();
-                              } else {
-                                await _player.play();
-                              }
-                              if (mounted) setState(() {});
-                            },
-                      icon: Icon(_player.state.playing ? Icons.pause : Icons.play_arrow),
-                    ),
-                    const SizedBox(width: 12),
-                    IconButton.filledTonal(
-                      onPressed: _ready ? _editor.rotateClockwise : null,
-                      icon: const Icon(Icons.rotate_right),
-                    ),
-                  ],
-                ),
+                _buildPlaybackControls(),
               ],
             ),
+    );
+  }
+
+  Widget _buildPlaybackControls() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton.filledTonal(
+          onPressed: !_ready ? null : () => _player.seek(Duration.zero),
+          icon: const Icon(Icons.replay),
+        ),
+        const SizedBox(width: 12),
+        IconButton.filled(
+          onPressed: !_ready
+              ? null
+              : () async {
+                  if (_player.state.playing) {
+                    await _player.pause();
+                  } else {
+                    await _player.play();
+                  }
+                  if (mounted) setState(() {});
+                },
+          icon: Icon(_player.state.playing ? Icons.pause : Icons.play_arrow),
+        ),
+        const SizedBox(width: 12),
+        IconButton.filledTonal(
+          onPressed: _ready ? _editor.rotateClockwise : null,
+          icon: const Icon(Icons.rotate_right),
+        ),
+      ],
     );
   }
 
