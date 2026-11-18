@@ -413,10 +413,15 @@ class CompositionController extends ChangeNotifier {
     }
   }
 
-  void setInterpolation(String property, Interpolation interpolation) {
+  void setInterpolation(
+    String property,
+    Interpolation interpolation, {
+    String? effectId,
+  }) {
     final layer = selectedLayer;
     if (layer == null) return;
-    final tracks = layer.keyframeTracks.map((track) {
+
+    KeyframeTrack update(KeyframeTrack track) {
       if (track.property != property) return track;
       final frameIndex = track.keyframes.indexWhere(
         (item) => item.timeMs == _document.playheadMs,
@@ -432,8 +437,16 @@ class CompositionController extends ChangeNotifier {
         outTangent: old.outTangent,
       );
       return KeyframeTrack(property: track.property, keyframes: frames);
+    }
+
+    final tracks = layer.keyframeTracks.map(update).toList();
+    final effects = layer.effects.map((effect) {
+      if (effectId != null && effect.id != effectId) return effect;
+      return effect.copyWith(
+        keyframeTracks: effect.keyframeTracks.map(update).toList(),
+      );
     }).toList();
-    _replace(layer.copyWith(keyframeTracks: tracks));
+    _replace(layer.copyWith(keyframeTracks: tracks, effects: effects));
   }
 
   void addTransition(TransitionKind kind) {

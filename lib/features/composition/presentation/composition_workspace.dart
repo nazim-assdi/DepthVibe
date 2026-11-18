@@ -865,6 +865,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
               onPressed: () => _addKeyframe(property),
               icon: Icon(Icons.diamond, size: 16, color: keyframes > 0 ? const Color(0xFFB6A5FF) : const Color(0xFF8A98B0)),
             ),
+            if (keyframes > 0)
+              PopupMenuButton<Interpolation>(
+                tooltip: 'Set keyframe interpolation at playhead',
+                icon: const Icon(Icons.linear_scale, size: 16),
+                onSelected: (value) => _controller.setInterpolation(
+                  property,
+                  value,
+                ),
+                itemBuilder: (_) => Interpolation.values
+                    .map((value) => PopupMenuItem(
+                          value: value,
+                          child: Text(value.name),
+                        ))
+                    .toList(),
+              ),
             SizedBox(
               width: 54,
               child: Text(value.toStringAsFixed(1), textAlign: TextAlign.end, style: const TextStyle(fontSize: 10)),
@@ -958,6 +973,23 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                                       : const Color(0xFF8290A8),
                                 ),
                               ),
+                              if (effect.keyframeTracks.any((track) =>
+                                  track.property == parameter.id))
+                                PopupMenuButton<Interpolation>(
+                                  tooltip: 'Set effect keyframe interpolation',
+                                  icon: const Icon(Icons.linear_scale, size: 15),
+                                  onSelected: (value) => _controller.setInterpolation(
+                                    parameter.id,
+                                    value,
+                                    effectId: effect.id,
+                                  ),
+                                  itemBuilder: (_) => Interpolation.values
+                                      .map((value) => PopupMenuItem(
+                                            value: value,
+                                            child: Text(value.name),
+                                          ))
+                                      .toList(),
+                                ),
                             ],
                           ),
                           Slider(
@@ -999,18 +1031,23 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _panelHeader('CLIP TRANSITIONS', Icons.auto_awesome_motion),
-        FilledButton.tonalIcon(
-          onPressed: () => showMenu<TransitionKind>(
-            context: context,
-            position: const RelativeRect.fromLTRB(120, 180, 0, 0),
-            items: TransitionKind.values
-                .map((kind) => PopupMenuItem(value: kind, child: Text(kind.name)))
-                .toList(),
-          ).then((kind) {
-            if (kind != null) _controller.addTransition(kind);
-          }),
-          icon: const Icon(Icons.add, size: 16),
-          label: const Text('Add transition to adjacent clip'),
+        PopupMenuButton<TransitionKind>(
+          tooltip: 'Add transition to adjacent clip',
+          onSelected: _controller.addTransition,
+          itemBuilder: (_) => TransitionKind.values
+              .map((kind) => PopupMenuItem(value: kind, child: Text(kind.name)))
+              .toList(),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add, size: 16),
+                SizedBox(width: 6),
+                Text('Add transition to adjacent clip'),
+              ],
+            ),
+          ),
         ),
         if (transitions.isEmpty)
           const Padding(

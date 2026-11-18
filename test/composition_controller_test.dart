@@ -47,6 +47,28 @@ void main() {
       expect(eased.sample(500), closeTo(50, 0.001));
     });
 
+    test('setInterpolation updates the selected effect parameter keyframe', () {
+      final controller = CompositionController();
+      final layerId = controller.addLayer(LayerKind.video);
+      controller.addEffect('brightness');
+      final effectId = controller.selectedLayer!.effects.single.id;
+      controller.addEffectKeyframe(effectId, 'value');
+      controller.setInterpolation(
+        'value',
+        Interpolation.easeOut,
+        effectId: effectId,
+      );
+
+      final layer = controller.document.layers
+          .firstWhere((item) => item.id == layerId);
+      final track = layer.effects
+          .firstWhere((item) => item.id == effectId)
+          .keyframeTracks
+          .first;
+      expect(track.keyframes.first.interpolation, Interpolation.easeOut);
+      controller.dispose();
+    });
+
     test('transitions connect selected adjacent clips and can be edited', () {
       final controller = CompositionController();
       final first = controller.addLayer(LayerKind.video);
