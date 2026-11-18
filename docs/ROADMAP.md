@@ -27,8 +27,10 @@ Status labels refer to code present in this repository, not product aspirations.
 - [ ] Actual split editing with independently selectable timeline segments
 - [ ] Persistent projects, undo/redo and clip reorder
 - [ ] Multi-clip assembly and independent audio/image compositing in export
-- [ ] Burn-in text, animated captions, filters and transitions in export
-- [ ] Exported aspect-ratio scaling, speed changes and audio mixing
+- [x] Burn-in one static title layer in the export
+- [ ] Animated captions, text animation, filters and transitions in export
+- [x] Exported aspect-ratio fit/crop and constant speed control
+- [ ] Multi-track audio mixing
 
 ## Stage 2 — AI depth and 2.5D scene
 

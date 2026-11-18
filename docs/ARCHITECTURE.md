@@ -2,7 +2,7 @@
 
 ## Android editor
 
-The Android application uses Kotlin, Jetpack Compose and AndroidX Media3. ExoPlayer previews source footage. Media3 Transformer exports a selected trim range. The current render path applies trim, rotation and source-audio removal, then publishes the MP4 to Android's shared Movies/DepthVibe collection.
+The Android application uses Kotlin, Jetpack Compose and AndroidX Media3. ExoPlayer previews source footage. Media3 Transformer exports a selected trim range. The current render path applies trim, rotation, playback speed, aspect-ratio fit/crop, optional static title burn-in and source-audio removal, then publishes the MP4 to Android's shared Movies/DepthVibe collection.
 
 ## 3D camera viewport
 
@@ -21,12 +21,12 @@ This is a true virtual 3D scene camera. It is not the device camera and does not
 - Preview title text
 
 Important behavior boundaries:
-- Playback speed currently affects preview only.
-- Aspect ratio currently changes the editor preview canvas only.
-- Title is a preview overlay, not burned into the output MP4.
+- Playback speed is applied to preview and single-source MP4 export using Media3's speed provider.
+- Aspect ratio is applied to preview and export with selectable fit or crop behavior.
+- The current static title text can be burned into the output MP4.
 - Audio and image imports are stored as project references; they are not composited into export yet.
 - Split controls add timeline markers; they do not yet create independently rendered clips.
-- Export currently applies trim, rotation and source-audio removal to one video source.
+- Export currently applies trim, rotation, speed, aspect ratio, optional static title and source-audio removal to one video source.
 
 ## Media export
 

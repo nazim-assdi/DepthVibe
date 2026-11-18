@@ -84,6 +84,7 @@ fun DepthVibeApp() {
     var muted by rememberSaveable { mutableStateOf(false) }
     var titleText by rememberSaveable { mutableStateOf("") }
     var aspectPreset by rememberSaveable { mutableStateOf("16:9") }
+    var cropToAspectRatio by rememberSaveable { mutableStateOf(false) }
     var exporting by rememberSaveable { mutableStateOf(false) }
     var exportProgress by rememberSaveable { mutableStateOf(0f) }
     var exportMessage by rememberSaveable { mutableStateOf("Ready to edit") }
@@ -200,6 +201,7 @@ fun DepthVibeApp() {
                     muted = muted,
                     titleText = titleText,
                     aspectPreset = aspectPreset,
+                    cropToAspectRatio = cropToAspectRatio,
                     splitPoints = splitPoints,
                     exporting = exporting,
                     exportProgress = exportProgress,
@@ -231,6 +233,7 @@ fun DepthVibeApp() {
                     },
                     onTitleChange = { titleText = it },
                     onAspectChange = { aspectPreset = it },
+                    onCropModeChange = { cropToAspectRatio = it },
                     onExport = {
                         val source = selectedVideo?.let(Uri::parse)
                         if (source == null) {
@@ -260,7 +263,11 @@ fun DepthVibeApp() {
                                         startMs = trimStart.toLong(),
                                         endMs = trimEnd.toLong(),
                                         rotationDegrees = rotation,
-                                        removeAudio = muted
+                                        removeAudio = muted,
+                                        playbackSpeed = speed,
+                                        aspectRatio = aspectRatioFor(aspectPreset),
+                                        cropToAspectRatio = cropToAspectRatio,
+                                        title = titleText
                                     )
                                 } catch (exception: Exception) {
                                     exporting = false
@@ -336,6 +343,7 @@ private fun EditorWorkspace(
     muted: Boolean,
     titleText: String,
     aspectPreset: String,
+    cropToAspectRatio: Boolean,
     splitPoints: List<Long>,
     exporting: Boolean,
     exportProgress: Float,
@@ -353,6 +361,7 @@ private fun EditorWorkspace(
     onSplit: () -> Unit,
     onTitleChange: (String) -> Unit,
     onAspectChange: (String) -> Unit,
+    onCropModeChange: (Boolean) -> Unit,
     onExport: () -> Unit,
     onCancelExport: () -> Unit,
     onShareExport: () -> Unit
@@ -387,6 +396,10 @@ private fun EditorWorkspace(
                     label = { Text(preset) }
                 )
             }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = !cropToAspectRatio, onClick = { onCropModeChange(false) }, label = { Text("Fit whole frame") })
+            FilterChip(selected = cropToAspectRatio, onClick = { onCropModeChange(true) }, label = { Text("Fill & crop") })
         }
 
         SectionHeading("TRIM & SPLIT", "Set source in/out points")
@@ -458,7 +471,7 @@ private fun EditorWorkspace(
                 singleLine = true
             )
             Text(
-                "The title is shown on the preview. Text burn-in and animated captions are not yet included in export.",
+                "This title is also burned into the exported MP4. Animated captions and keyframed title effects are planned.",
                 color = MutedText,
                 fontSize = 10.sp
             )
@@ -511,12 +524,7 @@ private fun PreviewPanel(
     rotation: Float,
     onImport: () -> Unit
 ) {
-    val ratio = when (aspectPreset) {
-        "9:16" -> 9f / 16f
-        "1:1" -> 1f
-        "4:5" -> 4f / 5f
-        else -> 16f / 9f
-    }
+    val ratio = aspectRatioFor(aspectPreset)
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -716,6 +724,13 @@ private fun SectionHeading(title: String, subtitle: String) {
         Text(title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
         Text(subtitle, color = MutedText, fontSize = 10.sp)
     }
+}
+
+private fun aspectRatioFor(preset: String): Float = when (preset) {
+    "9:16" -> 9f / 16f
+    "1:1" -> 1f
+    "4:5" -> 4f / 5f
+    else -> 16f / 9f
 }
 
 private fun formatTime(ms: Long): String {

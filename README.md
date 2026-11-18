@@ -18,7 +18,7 @@ DepthVibe is an Android application by **N Tech**. Version 0.2.0 adds media impo
 
 ## Current limitations
 
-The title overlay, aspect-ratio preset and playback speed are preview-only. Audio and image imports are currently project references and are not mixed into the exported video. Split markers are visible on the timeline but do not yet produce independent clips. ARCore tracking, AI depth reconstruction, GLB/OBJ rendering, GPU particles, multi-clip composition and advanced colour grading remain future engine work.
+Animated titles, keyframed text and multi-style captions are not yet included. Audio and image imports are currently project references and are not mixed into the exported video. Split markers are visible on the timeline but do not yet produce independent clips. ARCore tracking, AI depth reconstruction, GLB/OBJ rendering, GPU particles, multi-clip composition and advanced colour grading remain future engine work.
 
 ## Build
 
