@@ -9,7 +9,10 @@ def update_plist(path: Path, values: dict[str, str]) -> None:
         return
     tree = ET.parse(path)
     root = tree.getroot()
-    children = list(root)
+    dictionary = root.find("dict") if root.tag == "plist" else root
+    if dictionary is None or dictionary.tag != "dict":
+        raise ValueError(f"{path} does not contain a plist dictionary")
+    children = list(dictionary)
     entries = {}
     for index in range(0, len(children), 2):
         if index + 1 < len(children) and children[index].tag == "key":
@@ -22,7 +25,7 @@ def update_plist(path: Path, values: dict[str, str]) -> None:
             key_node.text = key
             value_node = ET.Element("string")
             value_node.text = value
-            root.extend([key_node, value_node])
+            dictionary.extend([key_node, value_node])
     tree.write(path, encoding="utf-8", xml_declaration=True)
 
 def replace_min_sdk(path: Path) -> None:
@@ -65,6 +68,34 @@ def replace_deployment_target(path: Path, platform: str, version: str) -> None:
         text = re.sub(r"MACOSX_DEPLOYMENT_TARGET = [0-9.]+;", f"MACOSX_DEPLOYMENT_TARGET = {version};", text)
     path.write_text(text, encoding="utf-8")
 
+def add_camera_compile_dependency(path: Path) -> None:
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    if "androidx.concurrent:concurrent-futures:1.2.0" in text:
+        return
+    if path.name.endswith(".kts"):
+        block = """
+subprojects {
+    if (name == "camera_android_camerax") {
+        dependencies {
+            add("implementation", "androidx.concurrent:concurrent-futures:1.2.0")
+        }
+    }
+}
+"""
+    else:
+        block = """
+subprojects {
+    if (name == 'camera_android_camerax') {
+        dependencies {
+            implementation 'androidx.concurrent:concurrent-futures:1.2.0'
+        }
+    }
+}
+"""
+    path.write_text(text.rstrip() + "\n" + block, encoding="utf-8")
+
 def add_camera_entitlements(path: Path) -> None:
     if not path.exists():
         return
@@ -80,6 +111,8 @@ def add_camera_entitlements(path: Path) -> None:
     tree.write(path, encoding="utf-8", xml_declaration=True)
 
 replace_min_sdk(ROOT / "android/app/build.gradle.kts")
+add_camera_compile_dependency(ROOT / "android/build.gradle.kts")
+add_camera_compile_dependency(ROOT / "android/build.gradle")
 replace_min_sdk(ROOT / "android/app/build.gradle")
 add_android_gallery_permission(ROOT / "android/app/src/main/AndroidManifest.xml")
 update_plist(ROOT / "ios/Runner/Info.plist", {

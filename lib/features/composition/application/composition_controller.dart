@@ -236,6 +236,10 @@ class CompositionController extends ChangeNotifier {
     double? expansion,
     double? opacity,
     bool? inverted,
+    double? left,
+    double? top,
+    double? width,
+    double? height,
   }) {
     final layer = selectedLayer;
     if (layer == null) return;
@@ -248,6 +252,10 @@ class CompositionController extends ChangeNotifier {
           expansion: expansion,
           opacity: opacity,
           inverted: inverted,
+          left: left,
+          top: top,
+          width: width,
+          height: height,
         );
       }).toList(),
     ));
@@ -475,6 +483,41 @@ class CompositionController extends ChangeNotifier {
     final layer = selectedLayer;
     if (layer == null || layer.kind != LayerKind.light) return;
     _replace(layer.copyWith(light: settings));
+  }
+
+  void setAudioSettings(AudioSettings settings) {
+    final layer = selectedLayer;
+    if (layer == null || layer.kind != LayerKind.audio) return;
+    _replace(layer.copyWith(audioSettings: settings));
+  }
+
+  void setAudioGain(double value, {bool keyframe = false}) {
+    final layer = selectedLayer;
+    if (layer == null || layer.kind != LayerKind.audio) return;
+    if (!keyframe) {
+      _replace(layer.copyWith(
+        audioSettings: layer.audioSettings.copyWith(gainDb: value),
+      ));
+      return;
+    }
+    final index = layer.keyframeTracks.indexWhere(
+      (track) => track.property == 'audio.gainDb',
+    );
+    final track = index < 0
+        ? KeyframeTrack(property: 'audio.gainDb')
+        : layer.keyframeTracks[index];
+    final updated = track.upsert(ScalarKeyframe(
+      timeMs: _document.playheadMs,
+      value: value.clamp(-60, 12).toDouble(),
+      interpolation: Interpolation.easeInOut,
+    ));
+    final tracks = [...layer.keyframeTracks];
+    if (index < 0) {
+      tracks.add(updated);
+    } else {
+      tracks[index] = updated;
+    }
+    _replace(layer.copyWith(keyframeTracks: tracks));
   }
 
   void setLayerLocked(String id, bool locked) {

@@ -57,6 +57,58 @@ enum TransitionKind {
   luma,
 }
 
+enum AudioDuckingRole { none, background, trigger }
+
+class AudioSettings {
+  const AudioSettings({
+    this.gainDb = 0,
+    this.pan = 0,
+    this.muted = false,
+    this.fadeInMs = 0,
+    this.fadeOutMs = 0,
+    this.duckingRole = AudioDuckingRole.none,
+    this.duckingThreshold = 0.05,
+    this.duckingRatio = 8,
+    this.duckingAttackMs = 20,
+    this.duckingReleaseMs = 250,
+  });
+
+  final double gainDb;
+  final double pan;
+  final bool muted;
+  final int fadeInMs;
+  final int fadeOutMs;
+  final AudioDuckingRole duckingRole;
+  final double duckingThreshold;
+  final double duckingRatio;
+  final double duckingAttackMs;
+  final double duckingReleaseMs;
+
+  AudioSettings copyWith({
+    double? gainDb,
+    double? pan,
+    bool? muted,
+    int? fadeInMs,
+    int? fadeOutMs,
+    AudioDuckingRole? duckingRole,
+    double? duckingThreshold,
+    double? duckingRatio,
+    double? duckingAttackMs,
+    double? duckingReleaseMs,
+  }) => AudioSettings(
+    gainDb: gainDb ?? this.gainDb,
+    pan: pan ?? this.pan,
+    muted: muted ?? this.muted,
+    fadeInMs: fadeInMs ?? this.fadeInMs,
+    fadeOutMs: fadeOutMs ?? this.fadeOutMs,
+    duckingRole: duckingRole ?? this.duckingRole,
+    duckingThreshold: duckingThreshold ?? this.duckingThreshold,
+    duckingRatio: duckingRatio ?? this.duckingRatio,
+    duckingAttackMs: duckingAttackMs ?? this.duckingAttackMs,
+    duckingReleaseMs: duckingReleaseMs ?? this.duckingReleaseMs,
+  );
+}
+
 class Vector2 {
   const Vector2(this.x, this.y);
 
@@ -309,6 +361,10 @@ class MaskModel {
     this.feather = 0,
     this.expansion = 0,
     this.opacity = 100,
+    this.left = 0.05,
+    this.top = 0.05,
+    this.width = 0.9,
+    this.height = 0.9,
     this.vertices = const [],
   });
 
@@ -321,6 +377,10 @@ class MaskModel {
   final double feather;
   final double expansion;
   final double opacity;
+  final double left;
+  final double top;
+  final double width;
+  final double height;
   final List<MaskVertex> vertices;
 
   MaskModel copyWith({
@@ -331,6 +391,10 @@ class MaskModel {
     double? feather,
     double? expansion,
     double? opacity,
+    double? left,
+    double? top,
+    double? width,
+    double? height,
     List<MaskVertex>? vertices,
   }) =>
       MaskModel(
@@ -343,6 +407,10 @@ class MaskModel {
         feather: feather ?? this.feather,
         expansion: expansion ?? this.expansion,
         opacity: opacity ?? this.opacity,
+        left: left ?? this.left,
+        top: top ?? this.top,
+        width: width ?? this.width,
+        height: height ?? this.height,
         vertices: vertices ?? this.vertices,
       );
 }
@@ -512,6 +580,7 @@ class CompositionLayer {
     this.shapeStyle,
     this.camera,
     this.light,
+    this.audioSettings = const AudioSettings(),
   });
 
   final String id;
@@ -537,6 +606,7 @@ class CompositionLayer {
   final ShapeStyle? shapeStyle;
   final CameraSettings? camera;
   final LightSettings? light;
+  final AudioSettings audioSettings;
 
   int get endMs => startMs + durationMs;
 
@@ -573,6 +643,7 @@ class CompositionLayer {
     ShapeStyle? shapeStyle,
     CameraSettings? camera,
     LightSettings? light,
+    AudioSettings? audioSettings,
   }) =>
       CompositionLayer(
         id: id,
@@ -598,6 +669,7 @@ class CompositionLayer {
         shapeStyle: shapeStyle ?? this.shapeStyle,
         camera: camera ?? this.camera,
         light: light ?? this.light,
+        audioSettings: audioSettings ?? this.audioSettings,
       );
 }
 
