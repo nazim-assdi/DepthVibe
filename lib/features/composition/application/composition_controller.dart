@@ -487,13 +487,15 @@ class CompositionController extends ChangeNotifier {
 
   void setAudioSettings(AudioSettings settings) {
     final layer = selectedLayer;
-    if (layer == null || layer.kind != LayerKind.audio) return;
+    if (layer == null ||
+        (layer.kind != LayerKind.audio && layer.kind != LayerKind.video)) return;
     _replace(layer.copyWith(audioSettings: settings));
   }
 
   void setAudioGain(double value, {bool keyframe = false}) {
     final layer = selectedLayer;
-    if (layer == null || layer.kind != LayerKind.audio) return;
+    if (layer == null ||
+        (layer.kind != LayerKind.audio && layer.kind != LayerKind.video)) return;
     if (!keyframe) {
       _replace(layer.copyWith(
         audioSettings: layer.audioSettings.copyWith(gainDb: value),

@@ -571,7 +571,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                for (final panel in const ['Layers', 'Transform', 'Shape', 'Effects', 'Masks', 'Parent', '3D'])
+                for (final panel in const ['Layers', 'Transform', 'Shape', 'Effects', 'Masks', 'Audio', 'Parent', '3D'])
                   TextButton(
                     onPressed: () => setState(() => _panel = panel),
                     child: Text(panel, style: TextStyle(fontSize: 10, fontWeight: _panel == panel ? FontWeight.w900 : FontWeight.normal)),
@@ -603,6 +603,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         return _buildEffectsPanel(layer);
       case 'Masks':
         return _buildMasksPanel(layer);
+      case 'Audio':
+        return _buildAudioPanel(layer);
       case 'Parent':
         return _buildParentPanel(layer);
       case '3D':
@@ -855,6 +857,112 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     );
   }
 
+  Widget _buildAudioPanel(CompositionLayer layer) {
+    if (layer.kind != LayerKind.audio && layer.kind != LayerKind.video) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _panelHeader('AUDIO MIXER', Icons.graphic_eq),
+          const Text('Select an Audio or Video layer to edit audio gain, pan, fades and ducking.'),
+        ],
+      );
+    }
+    final audio = layer.audioSettings;
+    final gainTrack = layer.keyframeTracks.where(
+      (track) => track.property == 'audio.gainDb',
+    );
+    final animated = gainTrack.isNotEmpty && gainTrack.first.keyframes.isNotEmpty;
+    final gain = animated
+        ? gainTrack.first.sample(
+            _controller.document.playheadMs,
+            fallback: audio.gainDb,
+          )
+        : audio.gainDb;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _panelHeader('AUDIO MIXER', Icons.graphic_eq),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Mute this track', style: TextStyle(fontSize: 11)),
+          value: audio.muted,
+          onChanged: (value) => _controller.setAudioSettings(
+            audio.copyWith(muted: value),
+          ),
+        ),
+        Row(
+          children: [
+            const Expanded(child: Text('Gain (dB)', style: TextStyle(fontSize: 11))),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Keyframe audio gain',
+              onPressed: () => _controller.setAudioGain(gain, keyframe: true),
+              icon: Icon(
+                Icons.diamond,
+                size: 16,
+                color: animated
+                    ? const Color(0xFFB8A4FF)
+                    : const Color(0xFF8290A8),
+              ),
+            ),
+            Text(gain.toStringAsFixed(1), style: const TextStyle(fontSize: 10)),
+          ],
+        ),
+        Slider(
+          min: -60,
+          max: 12,
+          value: gain.clamp(-60, 12).toDouble(),
+          onChanged: (value) => _controller.setAudioGain(
+            value,
+            keyframe: animated,
+          ),
+        ),
+        _settingSlider('Pan', audio.pan, -1, 1,
+            (value) => _controller.setAudioSettings(audio.copyWith(pan: value))),
+        _settingSlider('Fade In (ms)', audio.fadeInMs.toDouble(), 0, 5000,
+            (value) => _controller.setAudioSettings(
+              audio.copyWith(fadeInMs: value.round()),
+            )),
+        _settingSlider('Fade Out (ms)', audio.fadeOutMs.toDouble(), 0, 5000,
+            (value) => _controller.setAudioSettings(
+              audio.copyWith(fadeOutMs: value.round()),
+            )),
+        DropdownButtonFormField<AudioDuckingRole>(
+          initialValue: audio.duckingRole,
+          decoration: const InputDecoration(labelText: 'Ducking role'),
+          items: AudioDuckingRole.values
+              .map((role) => DropdownMenuItem(value: role, child: Text(role.name)))
+              .toList(),
+          onChanged: (value) => _controller.setAudioSettings(
+            audio.copyWith(duckingRole: value ?? AudioDuckingRole.none),
+          ),
+        ),
+        if (audio.duckingRole == AudioDuckingRole.background) ...[
+          _settingSlider('Ducking threshold', audio.duckingThreshold, 0.001, 0.5,
+              (value) => _controller.setAudioSettings(
+                audio.copyWith(duckingThreshold: value),
+              )),
+          _settingSlider('Ducking ratio', audio.duckingRatio, 1, 20,
+              (value) => _controller.setAudioSettings(
+                audio.copyWith(duckingRatio: value),
+              )),
+          _settingSlider('Attack (ms)', audio.duckingAttackMs, 1, 200,
+              (value) => _controller.setAudioSettings(
+                audio.copyWith(duckingAttackMs: value),
+              )),
+          _settingSlider('Release (ms)', audio.duckingReleaseMs, 10, 1000,
+              (value) => _controller.setAudioSettings(
+                audio.copyWith(duckingReleaseMs: value),
+              )),
+        ],
+        const Text(
+          'Tracks marked Trigger control the ducking of tracks marked Background during the final mix.',
+          style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
+        ),
+      ],
+    );
+  }
+
   Widget _buildMasksPanel(CompositionLayer layer) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -899,6 +1007,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                       (value) => _controller.setMaskParameters(mask.id, feather: value)),
                   _settingSlider('Expansion', mask.expansion, -100, 100,
                       (value) => _controller.setMaskParameters(mask.id, expansion: value)),
+                  _settingSlider('Left', mask.left, 0, (1 - mask.width).clamp(0, 1),
+                      (value) => _controller.setMaskParameters(mask.id, left: value)),
+                  _settingSlider('Top', mask.top, 0, (1 - mask.height).clamp(0, 1),
+                      (value) => _controller.setMaskParameters(mask.id, top: value)),
+                  _settingSlider('Width', mask.width, 0.01, (1 - mask.left).clamp(0.01, 1),
+                      (value) => _controller.setMaskParameters(mask.id, width: value)),
+                  _settingSlider('Height', mask.height, 0.01, (1 - mask.top).clamp(0.01, 1),
+                      (value) => _controller.setMaskParameters(mask.id, height: value)),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Invert mask', style: TextStyle(fontSize: 10)),
@@ -909,7 +1025,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
               ),
             ),
           ),
-        const Text('Mask modes: Add • Subtract • Intersect • Difference', style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0))),
+        const Text(
+          'Rectangle, ellipse and polygon alpha masks with position, size, feather, expansion and boolean operations are rendered in the compositor.',
+          style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
+        ),
       ],
     );
   }

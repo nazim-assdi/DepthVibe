@@ -12,30 +12,29 @@ DepthVibe is an AI-first video, motion-design and 3D creative studio from N Tech
 - Title/caption preview and burn-in, MP4 export and share.
 - Android Movies/DepthVibe save, iOS Photos save and desktop Documents export.
 
-## Composition / Motion Design
+## Composition and timeline
 
-The new Composition workspace introduces an AE-style layer and animation model:
+DepthVibe is being developed as a combined nonlinear editor (NLE) and layer compositor—not as an After Effects-only imitation.
 
-- Video, image, Photoshop raster, text, shape, audio, Null, Adjustment, Camera, Light, 3D Model, Particle and Precomposition layer types.
-- Layer visibility/lock, parent links and cycle checking.
-- Position, anchor, scale, rotation, opacity, blend-mode metadata, masks, effects and transitions.
-- Keyframe interpolation: Hold, Linear, Ease In, Ease Out and Ease In/Out.
-- Shape primitives and style controls; camera projection/DOF controls; light type/intensity/cone/shadow settings.
-- Effect registry with categories and editable parameters. Effect parameter keyframes use the same keyframe system.
-- PSD/PSB import extracts visible raster layers into individual cached PNGs and retains names, bounds, opacity, blend metadata, source index and text metadata where available.
-- ParentTransformResolver evaluates simplified Null/parent chains for the preview.
+- Video, image, Photoshop raster, text, shape, audio, Null, Adjustment, Camera, Light, 3D Model, Particle and Precomposition layer models.
+- Layer ordering, visibility, solo, lock, parent links and cycle checking.
+- Position, scale, rotation and opacity transform curves compile into FFmpeg per-frame expressions with Hold, Linear and Ease interpolation.
+- Rectangle, ellipse and polygon alpha masks support inversion, opacity, feather, expansion and Add/Subtract/Intersect/Difference operations in the render graph.
+- Non-normal layer compositing uses FFmpeg blend modes with the layer alpha preserved.
+- Dissolve/fade, wipe, slide, zoom and luma transition models are evaluated in the final 2D compositor.
+- Dedicated audio layers and embedded video audio streams are probed and mixed. Gain keyframes, pan, fade-in/out, trigger/background roles and sidechain ducking are available.
+- The effect registry exposes parameters and effect keyframes; the current renderer still samples effect parameters at the playhead rather than animating all effect operators per frame.
+- PSD/PSB import extracts visible raster layers to independent cached PNGs and keeps source metadata where available.
 
-The initial Compositor MP4 renderer uses the bundled FFmpeg engine for video/image/PSD raster layers, basic transform values and the subset of effects with an FFmpeg filter mapping. It is a first render pass, not a full nonlinear compositor: audio mixing, animated transform curves in export, masks, non-normal blend modes, adjustment-layer rendering, transitions, 3D scene rendering and GPU-only effects are not yet included in the final render.
+## Renderer boundaries
 
-## Effects registry
+The current final-render path is a CPU/native FFmpeg 2D compositor, not a complete GPU scene renderer. It renders animated 2D transforms, basic layer mattes, blend compositing, supported transitions and audio tracks. Polygon Bézier handles are not yet a true vector path renderer. Audio effects racks, waveform editing, source clip trimming UI in the composition timeline, and animated effect parameter expressions remain to be built.
 
-The initial catalog covers Brightness, Contrast, Saturation, Gamma, Gaussian/Box Blur, Sharpen, Vignette, Film Grain, Pixelate, Invert, Grayscale, Chromatic Aberration, Edge Detect, Mirror/Flip, Curves, Motion Blur, Lens Distortion, Chroma/Luma Key, Stabilize, Posterize and Color Balance.
+Camera and Light are currently parameter models/controls; real mesh-based 3D rendering, camera projection, depth of field, environment lighting and shadow maps are not wired to the final compositor. Tracking/rotoscoping, full PSD groups/clipping/smart objects and Photoshop-style adjustment rendering remain open work. Glow, Drop Shadow and advanced VFX require a dedicated multi-pass GPU render graph. An effect-library entry does not mean that effect is complete in final export.
 
-Glow, Drop Shadow, optical-flow effects, rotoscoping, particle simulation and other advanced operators need multi-pass GPU/render-graph work. An entry in the effect library does not mean it is fully rendered in every platform.
+## FFmpeg bundle
 
-## FFmpeg is bundled
-
-The app configures ffmpeg_kit_extended_flutter with the full LGPL native bundle: type=full, gpl=false, small=false. FFmpeg native libraries are included in the application package; no hosted backend is needed for this local composition render path. The full bundle can substantially increase installer/APK size. GPL-only codecs are intentionally disabled; review all codec and third-party licence obligations before distribution.
+The app configures ffmpeg_kit_extended_flutter with the full LGPL native bundle: type=full, gpl=false, small=false. Native FFmpeg libraries are included in the application package; no hosted rendering backend is needed for the local render path. The full bundle can substantially increase installer/APK size. GPL-only codecs are intentionally disabled; review all codec and third-party licence obligations before distribution.
 
 ## Platforms
 
@@ -66,8 +65,8 @@ Build commands:
 
 ## Source layout
 
-- lib/features/editor: video studio and first export workflow.
-- lib/features/composition: layer model, keyframes, effects, Photoshop importer, parent resolver, FFmpeg compositor and workspace.
+- lib/features/editor: Video Studio and first export workflow.
+- lib/features/composition: layer/timeline model, keyframes, effects, Photoshop importer, transform compiler, FFmpeg compositor and workspace.
 - lib/features/media: platform file import, capture and gallery permissions.
 - legacy/android-native: preserved Kotlin/Compose Android implementation and prior AI/AR/3D/VFX experiments.
 - docs/ARCHITECTURE.md: renderer architecture and known export gaps.
@@ -75,7 +74,7 @@ Build commands:
 
 ## Product goal
 
-DepthVibe aims to become a professional non-linear editor and compositor combining multi-track video/audio, colour finishing, Photoshop-aware animation, 2D/3D compositing, camera tracking, procedural VFX and a node graph. Matching or exceeding established creative suites is an ambition—not a present performance claim. A capability is complete only when it works in preview, is baked into final export and has been verified on supported devices and operating systems.
+DepthVibe aims to become a professional NLE and compositor combining multi-track video/audio, colour finishing, Photoshop-aware animation, 2D/3D compositing, camera tracking, procedural VFX and a node graph. Matching or exceeding established creative suites is an ambition—not a present performance claim. A capability is complete only when it works in preview, is baked into final export and is verified on supported devices and operating systems.
 
 Product: DepthVibe
 Developer: N Tech
