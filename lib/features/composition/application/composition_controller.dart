@@ -437,17 +437,58 @@ class CompositionController extends ChangeNotifier {
   }
 
   void addTransition(TransitionKind kind) {
-    if (_document.layers.length < 2) return;
+    const visualKinds = {
+      LayerKind.video,
+      LayerKind.image,
+      LayerKind.photoshopLayer,
+    };
+    final candidates = _document.layers
+        .where((layer) => layer.enabled && visualKinds.contains(layer.kind))
+        .toList();
+    if (candidates.length < 2) return;
+    final selectedIndex = candidates.indexWhere(
+      (layer) => layer.id == _document.selectedLayerId,
+    );
+    final toIndex = selectedIndex < 0 ? 0 : selectedIndex;
+    final fromIndex = toIndex == 0 ? 1 : toIndex;
+    final destinationIndex = toIndex == 0 ? 0 : toIndex - 1;
     final transition = CompositionTransition(
       id: _id('transition'),
-      fromLayerId: _document.layers[1].id,
-      toLayerId: _document.layers[0].id,
+      fromLayerId: candidates[fromIndex].id,
+      toLayerId: candidates[destinationIndex].id,
       kind: kind,
       startMs: _document.playheadMs,
     );
     _set(_document.copyWith(
       transitions: [..._document.transitions, transition],
     ));
+  }
+
+  void updateTransition(
+    String id, {
+    TransitionKind? kind,
+    int? durationMs,
+    int? startMs,
+  }) {
+    final index = _document.transitions.indexWhere((item) => item.id == id);
+    if (index < 0) return;
+    final current = _document.transitions[index];
+    final updated = current.copyWith(
+      kind: kind,
+      durationMs: durationMs?.clamp(50, 10000).toInt(),
+      startMs: startMs?.clamp(0, _document.durationMs - 1).toInt(),
+    );
+    final transitions = [..._document.transitions];
+    transitions[index] = updated;
+    _set(_document.copyWith(transitions: transitions));
+  }
+
+  void removeTransition(String id) {
+    final transitions = _document.transitions
+        .where((item) => item.id != id)
+        .toList();
+    if (transitions.length == _document.transitions.length) return;
+    _set(_document.copyWith(transitions: transitions));
   }
 
   void setCanvasSize(int width, int height) {

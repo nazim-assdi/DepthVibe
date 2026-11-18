@@ -707,6 +707,19 @@ class CompositionTransition {
   final TransitionKind kind;
   final int durationMs;
   final int startMs;
+
+  CompositionTransition copyWith({
+    TransitionKind? kind,
+    int? durationMs,
+    int? startMs,
+  }) => CompositionTransition(
+    id: id,
+    fromLayerId: fromLayerId,
+    toLayerId: toLayerId,
+    kind: kind ?? this.kind,
+    durationMs: durationMs ?? this.durationMs,
+    startMs: startMs ?? this.startMs,
+  );
 }
 
 class PhotoshopLayerAsset {

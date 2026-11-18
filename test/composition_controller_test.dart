@@ -47,6 +47,33 @@ void main() {
       expect(eased.sample(500), closeTo(50, 0.001));
     });
 
+    test('transitions connect selected adjacent clips and can be edited', () {
+      final controller = CompositionController();
+      final first = controller.addLayer(LayerKind.video);
+      final second = controller.addLayer(LayerKind.image);
+
+      controller.addTransition(TransitionKind.wipeLeft);
+      expect(controller.document.transitions, hasLength(1));
+      var transition = controller.document.transitions.single;
+      expect(transition.fromLayerId, first);
+      expect(transition.toLayerId, second);
+
+      controller.updateTransition(
+        transition.id,
+        kind: TransitionKind.slideRight,
+        durationMs: 1200,
+        startMs: 600,
+      );
+      transition = controller.document.transitions.single;
+      expect(transition.kind, TransitionKind.slideRight);
+      expect(transition.durationMs, 1200);
+      expect(transition.startMs, 600);
+
+      controller.removeTransition(transition.id);
+      expect(controller.document.transitions, isEmpty);
+      controller.dispose();
+    });
+
     test('timeline source-in and clip timing are clamped to composition bounds', () {
       final controller = CompositionController();
       final id = controller.addLayer(LayerKind.video);

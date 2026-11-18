@@ -642,7 +642,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                for (final panel in const ['Layers', 'Timing', 'Transform', 'Shape', 'Effects', 'Masks', 'Audio', 'Tracking', 'Parent', '3D'])
+                for (final panel in const ['Layers', 'Timing', 'Transform', 'Shape', 'Effects', 'Masks', 'Audio', 'Tracking', 'Transitions', 'Parent', '3D'])
                   TextButton(
                     onPressed: () => setState(() => _panel = panel),
                     child: Text(panel, style: TextStyle(fontSize: 10, fontWeight: _panel == panel ? FontWeight.w900 : FontWeight.normal)),
@@ -680,6 +680,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         return _buildAudioPanel(layer);
       case 'Tracking':
         return _buildTrackingPanel(layer);
+      case 'Transitions':
+        return _buildTransitionsPanel(layer);
       case 'Parent':
         return _buildParentPanel(layer);
       case '3D':
@@ -979,6 +981,101 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                 ),
               ),
             ),
+      ],
+    );
+  }
+
+  Widget _buildTransitionsPanel(CompositionLayer layer) {
+    final transitions = _controller.document.transitions.where(
+      (item) => item.fromLayerId == layer.id || item.toLayerId == layer.id,
+    ).toList();
+    final layers = _controller.document.layers;
+    String nameOf(String id) {
+      final matches = layers.where((item) => item.id == id);
+      return matches.isEmpty ? 'Missing layer' : matches.first.name;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _panelHeader('CLIP TRANSITIONS', Icons.auto_awesome_motion),
+        FilledButton.tonalIcon(
+          onPressed: () => showMenu<TransitionKind>(
+            context: context,
+            position: const RelativeRect.fromLTRB(120, 180, 0, 0),
+            items: TransitionKind.values
+                .map((kind) => PopupMenuItem(value: kind, child: Text(kind.name)))
+                .toList(),
+          ).then((kind) {
+            if (kind != null) _controller.addTransition(kind);
+          }),
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('Add transition to adjacent clip'),
+        ),
+        if (transitions.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 10),
+            child: Text(
+              'Select a video/image layer and add a transition. The transition is applied between the selected clip and its adjacent visual layer at the playhead.',
+              style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
+            ),
+          ),
+        for (final transition in transitions) ...[
+          const Divider(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<TransitionKind>(
+                  initialValue: transition.kind,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Transition',
+                    isDense: true,
+                  ),
+                  items: TransitionKind.values
+                      .map((kind) => DropdownMenuItem(
+                            value: kind,
+                            child: Text(kind.name, overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList(),
+                  onChanged: (kind) => _controller.updateTransition(
+                    transition.id,
+                    kind: kind,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Remove transition',
+                onPressed: () => _controller.removeTransition(transition.id),
+                icon: const Icon(Icons.delete_outline, size: 17),
+              ),
+            ],
+          ),
+          Text(
+            nameOf(transition.fromLayerId) + ' → ' + nameOf(transition.toLayerId),
+            style: const TextStyle(fontSize: 10, color: Color(0xFF9BAAC1)),
+          ),
+          _settingSlider(
+            'Duration (ms)',
+            transition.durationMs.toDouble(),
+            50,
+            4000,
+            (value) => _controller.updateTransition(
+              transition.id,
+              durationMs: value.round(),
+            ),
+          ),
+          _settingSlider(
+            'Start (ms)',
+            transition.startMs.toDouble(),
+            0,
+            _controller.document.durationMs.toDouble(),
+            (value) => _controller.updateTransition(
+              transition.id,
+              startMs: value.round(),
+            ),
+          ),
+        ],
       ],
     );
   }
