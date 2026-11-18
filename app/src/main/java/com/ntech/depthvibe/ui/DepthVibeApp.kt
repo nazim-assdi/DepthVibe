@@ -66,7 +66,7 @@ private val MutedText = Color(0xFF9BAAC0)
 private val AccentBlue = Color(0xFF79A7FF)
 private val AccentMint = Color(0xFF8DE3D0)
 
-private enum class AppScreen { EDITOR, CAMERA_3D }
+private enum class AppScreen { EDITOR, CAMERA_3D, ADVANCED }
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -184,10 +184,17 @@ fun DepthVibeApp() {
                     onClick = { screen = AppScreen.CAMERA_3D.name },
                     label = { Text("3D Camera") }
                 )
+                FilterChip(
+                    selected = screen == AppScreen.ADVANCED.name,
+                    onClick = { screen = AppScreen.ADVANCED.name },
+                    label = { Text("3D / VFX Lab") }
+                )
             }
 
             if (screen == AppScreen.CAMERA_3D.name) {
                 Camera3DWorkspace()
+            } else if (screen == AppScreen.ADVANCED.name) {
+                AdvancedStudioWorkspace()
             } else {
                 EditorWorkspace(
                     videoUri = selectedVideo?.let(Uri::parse),
