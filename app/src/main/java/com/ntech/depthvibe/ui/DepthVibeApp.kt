@@ -74,6 +74,7 @@ fun DepthVibeApp() {
     val context = LocalContext.current
     var screen by rememberSaveable { mutableStateOf(AppScreen.EDITOR.name) }
     var selectedVideo by rememberSaveable { mutableStateOf<String?>(null) }
+    val additionalVideoUris = remember { mutableStateListOf<String>() }
     var audioUri by rememberSaveable { mutableStateOf<String?>(null) }
     var imageUri by rememberSaveable { mutableStateOf<String?>(null) }
     var videoDuration by rememberSaveable { mutableStateOf(30_000L) }
@@ -85,6 +86,8 @@ fun DepthVibeApp() {
     var titleText by rememberSaveable { mutableStateOf("") }
     var aspectPreset by rememberSaveable { mutableStateOf("16:9") }
     var cropToAspectRatio by rememberSaveable { mutableStateOf(false) }
+    var brightness by rememberSaveable { mutableStateOf(0f) }
+    var grayscale by rememberSaveable { mutableStateOf(false) }
     var exporting by rememberSaveable { mutableStateOf(false) }
     var exportProgress by rememberSaveable { mutableStateOf(0f) }
     var exportMessage by rememberSaveable { mutableStateOf("Ready to edit") }
@@ -120,6 +123,20 @@ fun DepthVibeApp() {
     val videoPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let(::acceptVideo) }
+
+    val additionalVideoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: SecurityException) { }
+            additionalVideoUris.add(uri.toString())
+            exportMessage = "${additionalVideoUris.size + 1} video clip(s) queued"
+        }
+    }
 
     val audioPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -200,6 +217,7 @@ fun DepthVibeApp() {
                     videoUri = selectedVideo?.let(Uri::parse),
                     audioUri = audioUri,
                     imageUri = imageUri,
+                    additionalVideoCount = additionalVideoUris.size,
                     videoDuration = videoDuration,
                     trimStart = trimStart,
                     trimEnd = trimEnd,
@@ -209,12 +227,15 @@ fun DepthVibeApp() {
                     titleText = titleText,
                     aspectPreset = aspectPreset,
                     cropToAspectRatio = cropToAspectRatio,
+                    brightness = brightness,
+                    grayscale = grayscale,
                     splitPoints = splitPoints,
                     exporting = exporting,
                     exportProgress = exportProgress,
                     exportMessage = exportMessage,
                     exportedUri = exportedUri?.let(Uri::parse),
                     onImportVideo = { videoPicker.launch(arrayOf("video/*")) },
+                    onAddVideoClip = { additionalVideoPicker.launch(arrayOf("video/*")) },
                     onImportAudio = { audioPicker.launch(arrayOf("audio/*")) },
                     onImportImage = { imagePicker.launch(arrayOf("image/*")) },
                     onCapture = {
@@ -241,6 +262,8 @@ fun DepthVibeApp() {
                     onTitleChange = { titleText = it },
                     onAspectChange = { aspectPreset = it },
                     onCropModeChange = { cropToAspectRatio = it },
+                    onBrightnessChange = { brightness = it },
+                    onGrayscaleChange = { grayscale = it },
                     onExport = {
                         val source = selectedVideo?.let(Uri::parse)
                         if (source == null) {
@@ -274,7 +297,11 @@ fun DepthVibeApp() {
                                         playbackSpeed = speed,
                                         aspectRatio = aspectRatioFor(aspectPreset),
                                         cropToAspectRatio = cropToAspectRatio,
-                                        title = titleText
+                                        title = titleText,
+                                        backgroundAudioUri = audioUri?.let(Uri::parse),
+                                        additionalVideoUris = additionalVideoUris.map(Uri::parse),
+                                        brightness = brightness,
+                                        grayscale = grayscale
                                     )
                                 } catch (exception: Exception) {
                                     exporting = false
@@ -342,6 +369,7 @@ private fun EditorWorkspace(
     videoUri: Uri?,
     audioUri: String?,
     imageUri: String?,
+    additionalVideoCount: Int,
     videoDuration: Long,
     trimStart: Float,
     trimEnd: Float,
@@ -351,12 +379,15 @@ private fun EditorWorkspace(
     titleText: String,
     aspectPreset: String,
     cropToAspectRatio: Boolean,
+    brightness: Float,
+    grayscale: Boolean,
     splitPoints: List<Long>,
     exporting: Boolean,
     exportProgress: Float,
     exportMessage: String,
     exportedUri: Uri?,
     onImportVideo: () -> Unit,
+    onAddVideoClip: () -> Unit,
     onImportAudio: () -> Unit,
     onImportImage: () -> Unit,
     onCapture: () -> Unit,
@@ -369,6 +400,8 @@ private fun EditorWorkspace(
     onTitleChange: (String) -> Unit,
     onAspectChange: (String) -> Unit,
     onCropModeChange: (Boolean) -> Unit,
+    onBrightnessChange: (Float) -> Unit,
+    onGrayscaleChange: (Boolean) -> Unit,
     onExport: () -> Unit,
     onCancelExport: () -> Unit,
     onShareExport: () -> Unit
@@ -390,6 +423,7 @@ private fun EditorWorkspace(
             ActionButton("Record", onCapture, Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ActionButton("Add next clip", onAddVideoClip, Modifier.weight(1f))
             ActionButton("Add music", onImportAudio, Modifier.weight(1f))
             ActionButton("Add image", onImportImage, Modifier.weight(1f))
         }
@@ -461,10 +495,17 @@ private fun EditorWorkspace(
                 }
             }
             Text(
-                "Playback speed is preview-only for now. Export applies the trim, rotation and mute settings.",
+                "Preview speed, brightness and grayscale are mirrored by the single/multi-clip export pipeline.",
                 color = MutedText,
                 fontSize = 10.sp
             )
+        }
+
+        SectionHeading("COLOR GRADING", "Brightness and monochrome filter")
+        Panel {
+            Text("Brightness • ${"%.2f".format(brightness)}", color = Color.White, fontSize = 12.sp)
+            Slider(value = brightness, onValueChange = onBrightnessChange, valueRange = -1f..1f)
+            FilterChip(selected = grayscale, onClick = { onGrayscaleChange(!grayscale) }, label = { Text("Black & White / Grayscale") })
         }
 
         SectionHeading("TEXT & OVERLAYS", "Add a title layer to the preview")
@@ -478,7 +519,7 @@ private fun EditorWorkspace(
                 singleLine = true
             )
             Text(
-                "This title is also burned into the exported MP4. Animated captions and keyframed title effects are planned.",
+                "This title is burned into the exported MP4. Animated captions and keyframed titles are still planned.",
                 color = MutedText,
                 fontSize = 10.sp
             )
@@ -486,11 +527,12 @@ private fun EditorWorkspace(
 
         SectionHeading("MULTI-TRACK TIMELINE", "Imported media layers")
         Panel {
-            TimelineRow("VIDEO", if (videoUri == null) "No video" else "Main video", AccentBlue)
-            TimelineRow("AUDIO", if (audioUri == null) "No music layer" else "Music imported", AccentMint)
-            TimelineRow("IMAGE", if (imageUri == null) "No image layer" else "Image imported", Color(0xFFC69BFF))
+            TimelineRow("VIDEO", if (videoUri == null) "No video" else "${additionalVideoCount + 1} sequential clip(s)", AccentBlue)
+            TimelineRow("AUDIO", if (audioUri == null) "Source audio" else "Looping music sequence", AccentMint)
+            TimelineRow("IMAGE", if (imageUri == null) "No image layer" else "Image reference (not composited)", Color(0xFFC69BFF))
             TimelineRow("TEXT", if (titleText.isBlank()) "No title" else titleText, Color(0xFFFFC27A))
-            TimelineRow("SPLITS", "${splitPoints.size} split marker(s)", Color(0xFF7CD6E6))
+            TimelineRow("SPLITS", "${splitPoints.size} visual marker(s)", Color(0xFF7CD6E6))
+            TimelineRow("GRADE", if (grayscale) "Grayscale" else "Brightness ${"%.2f".format(brightness)}", Color(0xFF7CD6E6))
         }
 
         SectionHeading("EXPORT", "Render an MP4 to your Movies folder")
@@ -529,6 +571,8 @@ private fun PreviewPanel(
     speed: Float,
     muted: Boolean,
     rotation: Float,
+    brightness: Float,
+    grayscale: Boolean,
     onImport: () -> Unit
 ) {
     val ratio = aspectRatioFor(aspectPreset)
@@ -545,7 +589,7 @@ private fun PreviewPanel(
             contentAlignment = Alignment.Center
         ) {
             if (uri != null) {
-                VideoPreview(uri, speed, muted, rotation)
+                VideoPreview(uri, speed, muted, rotation, brightness, grayscale)
             } else {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("DEPTHVIBE", color = AccentBlue, fontSize = 30.sp, fontWeight = FontWeight.Black)
@@ -581,7 +625,7 @@ private fun PreviewPanel(
 
 @OptIn(UnstableApi::class)
 @Composable
-private fun VideoPreview(uri: Uri, speed: Float, muted: Boolean, rotation: Float) {
+private fun VideoPreview(uri: Uri, speed: Float, muted: Boolean, rotation: Float, brightness: Float, grayscale: Boolean) {
     val context = LocalContext.current
     val player = remember(uri) {
         ExoPlayer.Builder(context).build().apply {
@@ -591,13 +635,18 @@ private fun VideoPreview(uri: Uri, speed: Float, muted: Boolean, rotation: Float
         }
     }
 
-    LaunchedEffect(player, speed, muted, rotation) {
+    LaunchedEffect(player, speed, muted, rotation, brightness, grayscale) {
         player.playbackParameters = PlaybackParameters(speed)
         player.volume = if (muted) 0f else 1f
-        val effects = if (rotation % 360f == 0f) {
-            emptyList()
-        } else {
-            listOf(ScaleAndRotateTransformation.Builder().setRotationDegrees(rotation).build())
+        val effects = mutableListOf<androidx.media3.common.Effect>()
+        if (rotation % 360f != 0f) {
+            effects += ScaleAndRotateTransformation.Builder().setRotationDegrees(rotation).build()
+        }
+        if (brightness != 0f) {
+            effects += androidx.media3.effect.Brightness(brightness)
+        }
+        if (grayscale) {
+            effects += androidx.media3.effect.RgbFilter.createGrayscaleFilter()
         }
         player.setVideoEffects(effects)
     }

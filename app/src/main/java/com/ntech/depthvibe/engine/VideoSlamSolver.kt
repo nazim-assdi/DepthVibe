@@ -120,16 +120,15 @@ class VideoSlamSolver(private val context: Context) {
                             cameraMatrix.put(1, 1, focal)
                             cameraMatrix.put(0, 2, frameWidth / 2.0)
                             cameraMatrix.put(1, 2, frameHeight / 2.0)
-                            val mask = Mat()
                             try {
                                 val essential = Calib3d.findEssentialMat(
-                                    p1, p2, cameraMatrix, Calib3d.RANSAC, 0.999, 1.0, mask
+                                    p1, p2, cameraMatrix, Calib3d.RANSAC, 0.999, 1.0, 1_000
                                 )
                                 val rotation = Mat()
                                 val translation = Mat()
                                 try {
                                     val inliers = Calib3d.recoverPose(
-                                        essential, p1, p2, cameraMatrix, rotation, translation, mask
+                                        essential, p1, p2, cameraMatrix, rotation, translation
                                     )
                                     if (inliers > 0) {
                                         val rotationValues = DoubleArray(9)
@@ -153,7 +152,6 @@ class VideoSlamSolver(private val context: Context) {
                                     translation.release()
                                 }
                             } finally {
-                                mask.release()
                                 cameraMatrix.release()
                                 p1.release()
                                 p2.release()
@@ -176,7 +174,6 @@ class VideoSlamSolver(private val context: Context) {
             previousKeypoints?.release()
             previousDescriptors?.release()
             retriever.release()
-            orb.clear()
         }
 
         VideoSlamResult(

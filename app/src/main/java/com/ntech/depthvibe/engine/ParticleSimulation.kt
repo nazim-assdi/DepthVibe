@@ -28,6 +28,10 @@ class ParticleSimulation(
     var preset = ParticlePreset.FIRE
         private set
 
+    fun reset() {
+        particles.clear()
+    }
+
     fun emit(effect: ParticlePreset, amount: Int = 400) {
         preset = effect
         repeat(amount.coerceIn(1, maxParticles)) {

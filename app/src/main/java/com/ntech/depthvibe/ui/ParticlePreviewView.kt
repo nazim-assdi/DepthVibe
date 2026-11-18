@@ -55,8 +55,8 @@ private class ParticleRenderer : GLSurfaceView.Renderer {
     }
 
     fun clear() {
-        simulation.emit(preset, 1)
-        simulation.step(10f)
+        simulation.reset()
+        emitRemainder = 0f
         lastFrameNanos = 0L
     }
 
