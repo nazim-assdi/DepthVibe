@@ -415,6 +415,8 @@ private fun EditorWorkspace(
             speed = speed,
             muted = muted,
             rotation = rotation,
+            brightness = brightness,
+            grayscale = grayscale,
             onImport = onImportVideo
         )
 
