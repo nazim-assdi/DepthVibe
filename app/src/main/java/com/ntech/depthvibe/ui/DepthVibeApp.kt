@@ -385,9 +385,9 @@ private fun ProWorkspace() {
                     letterSpacing = 1.sp
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AxisValue("X", "0.00")
-                    AxisValue("Y", "0.00")
-                    AxisValue("Z", "0.00")
+                    AxisValue("X", "0.00", Modifier.weight(1f))
+                    AxisValue("Y", "0.00", Modifier.weight(1f))
+                    AxisValue("Z", "0.00", Modifier.weight(1f))
                 }
             }
         }
@@ -412,10 +412,9 @@ private fun NodeCard(
 }
 
 @Composable
-private fun AxisValue(axis: String, value: String) {
+private fun AxisValue(axis: String, value: String, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier
-            .weight(1f)
+        modifier = modifier
             .clip(RoundedCornerShape(9.dp))
             .background(Color(0xFF1B2638))
             .padding(9.dp)
@@ -489,7 +488,7 @@ private fun TimelineTrack(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.72f)
-                        .fillMaxSize()
+                        .height(24.dp)
                         .clip(RoundedCornerShape(6.dp))
                         .background(color.copy(alpha = 0.78f))
                 )
