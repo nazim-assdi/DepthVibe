@@ -34,7 +34,7 @@ jobs:
       - name: Format, analyze and test
         run: |
           dart format lib test
-          flutter analyze --no-fatal-infos
+          flutter analyze
           flutter test
       - name: Build Android APKs
         run: flutter build apk --release --split-per-abi
@@ -62,7 +62,7 @@ jobs:
       - name: Generate Flutter platform runners
         shell: bash
         run: bash tool/bootstrap_platforms.sh
-      - run: flutter analyze --no-fatal-infos
+      - run: flutter analyze
       - run: flutter build windows --release
       - uses: actions/upload-artifact@v4
         with:
@@ -82,7 +82,7 @@ jobs:
           cache: true
       - name: Generate Flutter platform runners
         run: bash tool/bootstrap_platforms.sh
-      - run: flutter analyze --no-fatal-infos
+      - run: flutter analyze
       - name: Build macOS
         run: flutter build macos --release
       - name: Build iOS (unsigned)
