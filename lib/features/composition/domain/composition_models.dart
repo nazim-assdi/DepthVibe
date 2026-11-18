@@ -576,6 +576,7 @@ class CompositionLayer {
     required this.kind,
     this.startMs = 0,
     this.durationMs = 10000,
+    this.sourceInMs = 0,
     this.enabled = true,
     this.solo = false,
     this.locked = false,
@@ -602,6 +603,7 @@ class CompositionLayer {
   final LayerKind kind;
   final int startMs;
   final int durationMs;
+  final int sourceInMs;
   final bool enabled;
   final bool solo;
   final bool locked;
@@ -638,6 +640,7 @@ class CompositionLayer {
     String? name,
     int? startMs,
     int? durationMs,
+    int? sourceInMs,
     bool? enabled,
     bool? solo,
     bool? locked,
@@ -665,6 +668,7 @@ class CompositionLayer {
         kind: kind,
         startMs: startMs ?? this.startMs,
         durationMs: durationMs ?? this.durationMs,
+        sourceInMs: sourceInMs ?? this.sourceInMs,
         enabled: enabled ?? this.enabled,
         solo: solo ?? this.solo,
         locked: locked ?? this.locked,

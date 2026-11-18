@@ -461,6 +461,31 @@ class CompositionController extends ChangeNotifier {
     ));
   }
 
+  void setLayerTiming(
+    String id, {
+    int? startMs,
+    int? durationMs,
+    int? sourceInMs,
+  }) {
+    final layer = _find(id);
+    if (layer == null || layer.locked) return;
+    final nextStart = (startMs ?? layer.startMs)
+        .clamp(0, _document.durationMs - 1)
+        .toInt();
+    final maxDuration = _document.durationMs - nextStart;
+    final nextDuration = (durationMs ?? layer.durationMs)
+        .clamp(1, maxDuration)
+        .toInt();
+    final nextSourceIn = (sourceInMs ?? layer.sourceInMs)
+        .clamp(0, 1 << 30)
+        .toInt();
+    _replace(layer.copyWith(
+      startMs: nextStart,
+      durationMs: nextDuration,
+      sourceInMs: nextSourceIn,
+    ));
+  }
+
   void setLayerEnabled(String id, bool enabled) {
     final layer = _find(id);
     if (layer == null) return;

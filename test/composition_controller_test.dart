@@ -47,6 +47,29 @@ void main() {
       expect(eased.sample(500), closeTo(50, 0.001));
     });
 
+    test('timeline source-in and clip timing are clamped to composition bounds', () {
+      final controller = CompositionController();
+      final id = controller.addLayer(LayerKind.video);
+
+      controller.setLayerTiming(
+        id,
+        startMs: 5000,
+        durationMs: 9000,
+        sourceInMs: 3000,
+      );
+      var layer = controller.document.layers.single;
+      expect(layer.startMs, 5000);
+      expect(layer.durationMs, 9000);
+      expect(layer.sourceInMs, 3000);
+
+      controller.setLayerTiming(id, startMs: 40000, durationMs: 9000);
+      layer = controller.document.layers.single;
+      expect(layer.startMs, 29999);
+      expect(layer.durationMs, 1);
+      expect(layer.sourceInMs, 3000);
+      controller.dispose();
+    });
+
     test('tracking samples become inverse stabilizing position keyframes', () {
       final controller = CompositionController();
       final layerId = controller.addLayer(LayerKind.video);

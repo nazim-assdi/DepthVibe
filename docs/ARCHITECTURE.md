@@ -21,7 +21,9 @@ ffmpeg_kit_extended_flutter is configured with a full LGPL native bundle (type=f
 
 CompositionDocument owns composition name, dimensions, frame rate, duration, layer list, transitions, playhead and selection. CompositionLayer stores video/image/PSD/text/shape/audio/Null/Adjustment/Camera/Light/3D/particle/precomposition kinds, source URIs and dimensions, transform properties, blend mode, masks, effects, keyframe tracks, shape style, camera/light settings and audio settings.
 
-CompositionController owns layer lifecycle, visibility/solo/lock, parent cycle checks, masks, blend metadata, effect parameters/keyframes, transform keyframes, audio gain keyframes and audio controls.
+CompositionController owns layer lifecycle, visibility/solo/lock, parent cycle checks, source-in/start/duration clip timing, masks, blend metadata, effect parameters/keyframes, transform keyframes, audio gain keyframes and audio controls.
+
+The NLE timeline shows clip regions at their composition start/duration, supports dragging clips to reposition and resizing the right edge, and exposes source-in time separately from timeline position. Ripple/roll/slip editing, source-out handles, snapping, nested sequences and waveform editing are still open work.
 
 ## Transform, mask and transition compilation
 

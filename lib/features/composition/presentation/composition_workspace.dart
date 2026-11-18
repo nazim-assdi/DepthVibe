@@ -642,7 +642,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                for (final panel in const ['Layers', 'Transform', 'Shape', 'Effects', 'Masks', 'Audio', 'Tracking', 'Parent', '3D'])
+                for (final panel in const ['Layers', 'Timing', 'Transform', 'Shape', 'Effects', 'Masks', 'Audio', 'Tracking', 'Parent', '3D'])
                   TextButton(
                     onPressed: () => setState(() => _panel = panel),
                     child: Text(panel, style: TextStyle(fontSize: 10, fontWeight: _panel == panel ? FontWeight.w900 : FontWeight.normal)),
@@ -666,6 +666,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
 
   Widget _panelContent(CompositionLayer layer) {
     switch (_panel) {
+      case 'Timing':
+        return _buildTimingPanel(layer);
       case 'Transform':
         return _buildTransformPanel(layer);
       case 'Shape':
@@ -716,6 +718,57 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
           onPressed: () => _addKeyframe('position.x'),
           icon: const Icon(Icons.key, size: 16),
           label: const Text('Add Position Keyframe'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimingPanel(CompositionLayer layer) {
+    Widget field(String label, int value, ValueChanged<int> onSubmit) {
+      return SizedBox(
+        width: 135,
+        child: TextFormField(
+          key: ValueKey<String>(layer.id + label + value.toString()),
+          initialValue: value.toString(),
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: label,
+            isDense: true,
+            border: const OutlineInputBorder(),
+          ),
+          onFieldSubmitted: (text) {
+            final parsed = int.tryParse(text);
+            if (parsed != null) onSubmit(parsed);
+          },
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _panelHeader('CLIP TIMING', Icons.content_cut),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            field('Timeline start (ms)', layer.startMs,
+                (value) => _controller.setLayerTiming(layer.id, startMs: value)),
+            field('Duration (ms)', layer.durationMs,
+                (value) => _controller.setLayerTiming(layer.id, durationMs: value)),
+            if (layer.kind == LayerKind.video || layer.kind == LayerKind.audio)
+              field('Source In (ms)', layer.sourceInMs,
+                  (value) => _controller.setLayerTiming(layer.id, sourceInMs: value)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Timeline out: ' + layer.endMs.toString() + ' ms',
+          style: const TextStyle(fontSize: 11, color: Color(0xFF9BAAC1)),
+        ),
+        const Text(
+          'Drag the clip body in the timeline to move it. Drag its right edge to change duration. Source In trims the media before timeline placement.',
+          style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
         ),
       ],
     );
@@ -1332,7 +1385,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             children: [
               const Icon(Icons.timeline, size: 16),
               const SizedBox(width: 8),
-              const Text('ANIMATION TIMELINE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
+              const Text('NLE / ANIMATION TIMELINE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
               const Spacer(),
               Text(_time(playhead), style: const TextStyle(fontSize: 10, color: Color(0xFFB7C4DC))),
               IconButton(
@@ -1388,31 +1441,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                     child: Row(
                       children: [
                         SizedBox(width: 130, child: Text(layer.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10))),
-                        Expanded(
-                          child: Container(
-                            height: 22,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1D2A41),
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            child: Stack(
-                              children: [
-                                for (final track in layer.keyframeTracks)
-                                  for (final keyframe in track.keyframes)
-                                    Positioned(
-                                      left: (keyframe.timeMs / duration) * 500,
-                                      top: 3,
-                                      child: const Icon(Icons.diamond, size: 14, color: Color(0xFFB8A4FF)),
-                                    ),
-                                Positioned(
-                                  right: 6,
-                                  top: 4,
-                                  child: Text('$count kf', style: const TextStyle(fontSize: 9, color: Color(0xFFB7C5DE))),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                        Expanded(child: _buildTimelineClip(layer, duration)),
                       ],
                     ),
                   ),
@@ -1422,6 +1451,164 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTimelineClip(CompositionLayer layer, int duration) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final safeDuration = math.max(1, duration);
+        final left = (layer.startMs / safeDuration * width)
+            .clamp(0.0, width).toDouble();
+        final right = (layer.endMs / safeDuration * width)
+            .clamp(left, width).toDouble();
+        final clipWidth = math.max(8.0, right - left);
+        final color = switch (layer.kind) {
+          LayerKind.audio => const Color(0xFF247B76),
+          LayerKind.video => const Color(0xFF425B9B),
+          LayerKind.image || LayerKind.photoshopLayer => const Color(0xFF66539D),
+          LayerKind.shape || LayerKind.text => const Color(0xFF93613D),
+          _ => const Color(0xFF475568),
+        };
+        final markers = <int>[
+          for (final track in layer.keyframeTracks)
+            for (final keyframe in track.keyframes) keyframe.timeMs,
+          for (final effect in layer.effects)
+            for (final track in effect.keyframeTracks)
+              for (final keyframe in track.keyframes) keyframe.timeMs,
+        ];
+        return GestureDetector(
+          onTapDown: (details) {
+            final position = (details.localPosition.dx / width * safeDuration)
+                .round().clamp(0, safeDuration);
+            _controller.setPlayhead(position);
+          },
+          child: Container(
+            height: 28,
+            decoration: BoxDecoration(
+              color: const Color(0xFF101827),
+              border: Border.all(color: const Color(0xFF2B3850)),
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Stack(
+              clipBehavior: Clip.hardEdge,
+              children: [
+                for (final transition in _controller.document.transitions)
+                  if (transition.fromLayerId == layer.id ||
+                      transition.toLayerId == layer.id)
+                    Positioned(
+                      left: (transition.startMs / safeDuration * width)
+                          .clamp(0.0, width).toDouble(),
+                      width: (transition.durationMs / safeDuration * width)
+                          .clamp(2.0, width).toDouble(),
+                      top: 0,
+                      bottom: 0,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0x66B48CFF),
+                          border: Border.all(color: const Color(0xFFB48CFF)),
+                        ),
+                      ),
+                    ),
+                Positioned(
+                  left: left,
+                  width: clipWidth,
+                  top: 3,
+                  bottom: 3,
+                  child: GestureDetector(
+                    onHorizontalDragUpdate: layer.locked
+                        ? null
+                        : (details) {
+                            final delta = (details.delta.dx / width *
+                                    safeDuration)
+                                .round();
+                            _controller.setLayerTiming(
+                              layer.id,
+                              startMs: layer.startMs + delta,
+                            );
+                          },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: layer.locked
+                              ? const Color(0xFF687386)
+                              : const Color(0xFF91A8FF),
+                        ),
+                      ),
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            left: 5,
+                            right: 12,
+                            top: 4,
+                            child: Text(
+                              layer.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFFF2F5FF),
+                              ),
+                            ),
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: GestureDetector(
+                              onHorizontalDragUpdate: layer.locked
+                                  ? null
+                                  : (details) {
+                                      final delta = (details.delta.dx /
+                                              width * safeDuration)
+                                          .round();
+                                      _controller.setLayerTiming(
+                                        layer.id,
+                                        durationMs: layer.durationMs + delta,
+                                      );
+                                    },
+                              child: Container(
+                                width: 9,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFB8C8FF),
+                                  borderRadius: BorderRadius.horizontal(
+                                    right: Radius.circular(4),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                for (final time in markers)
+                  Positioned(
+                    left: (time / safeDuration * width)
+                        .clamp(0.0, math.max(0.0, width - 10)).toDouble(),
+                    top: 0,
+                    bottom: 0,
+                    child: const Icon(
+                      Icons.diamond,
+                      size: 10,
+                      color: Color(0xFFD6C8FF),
+                    ),
+                  ),
+                Positioned(
+                  left: (_controller.document.playheadMs / safeDuration * width)
+                      .clamp(0.0, math.max(0.0, width - 1)).toDouble(),
+                  top: 0,
+                  bottom: 0,
+                  child: Container(width: 1, color: const Color(0xFFFFC36A)),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

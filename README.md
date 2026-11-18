@@ -18,6 +18,7 @@ DepthVibe is being developed as a combined nonlinear editor (NLE) and layer comp
 
 - Video, image, Photoshop raster, text, shape, audio, Null, Adjustment, Camera, Light, 3D Model, Particle and Precomposition layer models.
 - Layer ordering, visibility, solo, lock, parent links and cycle checking.
+- NLE timeline clip placement, drag-to-move, edge resize, clip duration and source-in trimming for video/audio layers.
 - Position, scale, rotation and opacity transform curves compile into FFmpeg per-frame expressions with Hold, Linear and Ease interpolation.
 - Rectangle, ellipse and polygon alpha masks support inversion, opacity, feather, expansion and Add/Subtract/Intersect/Difference operations in the render graph.
 - Non-normal layer compositing uses FFmpeg blend modes with the layer alpha preserved.

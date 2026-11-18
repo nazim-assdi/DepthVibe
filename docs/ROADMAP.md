@@ -18,7 +18,8 @@ Status describes working source paths, not release-ready feature parity. A model
 - [x] Dedicated Audio layer and embedded source-video audio probing/mixing.
 - [x] Audio gain keyframes, pan, fade-in/out and sidechain ducking controls.
 - [x] PSD/PSB visible raster extraction into independent PNG assets.
-- [ ] Multi-track clip edit tools: source in/out, ripple/roll/slip, snapping, waveforms, audio envelopes, nested sequences.
+- [x] Timeline clip placement, drag-to-move, right-edge duration resize and source-in trim fields for video/audio layers.
+- [ ] Ripple/roll/slip editing, source-out handles, snapping, waveforms, audio envelopes and nested sequences.
 - [ ] Project save/open, autosave, undo/redo, crash recovery and relinking.
 - [ ] Full matrix parenting, anchor-space transforms, skew and expression editor.
 

@@ -186,11 +186,15 @@ class CompositionExportService {
       if (layer.kind == LayerKind.image || layer.kind == LayerKind.photoshopLayer) {
         buffer.write('-loop 1 -t ' + duration + ' -i ' + source + ' ');
       } else {
-        buffer.write('-t ' + duration + ' -i ' + source + ' ');
+        final sourceIn = (layer.sourceInMs / 1000).toStringAsFixed(3);
+        buffer.write('-ss ' + sourceIn + ' -t ' + duration + ' -i ' + source + ' ');
       }
     }
     for (final layer in audioLayers) {
-      buffer.write('-i ' + _quote(layer.sourceUri!) + ' ');
+      final sourceIn = (layer.sourceInMs / 1000).toStringAsFixed(3);
+      final duration = (layer.durationMs / 1000).toStringAsFixed(3);
+      buffer.write('-ss ' + sourceIn + ' -t ' + duration +
+          ' -i ' + _quote(layer.sourceUri!) + ' ');
     }
 
     filters.add('[0:v]format=rgba[base0]');
