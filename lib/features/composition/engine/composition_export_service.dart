@@ -11,6 +11,7 @@ import 'audio_equalizer_compiler.dart';
 import 'ffmpeg_animation_compiler.dart';
 import 'ffmpeg_filter_compiler.dart';
 import 'parent_transform_expression_resolver.dart';
+import 'camera_projection_resolver.dart';
 
 typedef CompositionExportProgress = void Function(double value);
 
@@ -35,6 +36,7 @@ class CompositionExportService {
     this.audioEqualizerCompiler = const AudioEqualizerCompiler(),
     this.audioBusCompiler = const AudioBusCompiler(),
     this.parentTransformResolver = const ParentTransformExpressionResolver(),
+    this.cameraProjectionResolver = const CameraProjectionResolver(),
   });
 
   final FfmpegFilterCompiler filterCompiler;
@@ -42,6 +44,7 @@ class CompositionExportService {
   final AudioEqualizerCompiler audioEqualizerCompiler;
   final AudioBusCompiler audioBusCompiler;
   final ParentTransformExpressionResolver parentTransformResolver;
+  final CameraProjectionResolver cameraProjectionResolver;
 
   Future<CompositionExportResult> export(
     CompositionDocument document, {
@@ -86,7 +89,9 @@ class CompositionExportService {
           audioLayers.add(layer);
         }
       } else if (layer.kind != LayerKind.nullObject &&
-          layer.kind != LayerKind.precomposition) {
+          layer.kind != LayerKind.precomposition &&
+          layer.kind != LayerKind.camera &&
+          layer.kind != LayerKind.light) {
         skipped.add(layer.name);
       }
     }
@@ -181,6 +186,16 @@ class CompositionExportService {
       for (var index = 0; index < mediaLayers.length; index++)
         mediaLayers[index].id: index + 1,
     };
+    final cameraLayer = document.layers
+        .where((item) => item.kind == LayerKind.camera && item.enabled)
+        .firstOrNull;
+    final resolvedCamera = cameraLayer == null
+        ? null
+        : parentTransformResolver.resolve(
+            layer: cameraLayer,
+            layers: document.layers,
+          );
+
 
     for (final layer in mediaLayers) {
       if (layer.kind != LayerKind.video ||
@@ -257,13 +272,26 @@ class CompositionExportService {
       final inputIndex = mediaInputIndices[layer.id]!;
       final start = (layer.startMs / 1000).toStringAsFixed(3);
       final duration = (layer.durationMs / 1000).toStringAsFixed(3);
-      final resolvedTransform = parentTransformResolver.resolve(
+      final localTransform = parentTransformResolver.resolve(
         layer: layer,
         layers: document.layers,
       );
-      if (!resolvedTransform.enabled) continue;
-      final sxBase = resolvedTransform.scaleX;
-      final syBase = resolvedTransform.scaleY;
+      if (!localTransform.enabled) continue;
+      final cameraSettings = cameraLayer?.camera;
+      final projectedTransform = cameraLayer != null &&
+              resolvedCamera != null &&
+              cameraSettings != null &&
+              layer.kind != LayerKind.camera &&
+              layer.kind != LayerKind.light
+          ? cameraProjectionResolver.compile(
+              layer: localTransform,
+              camera: resolvedCamera,
+              settings: cameraSettings,
+            )
+          : null;
+      final resolvedTransform = projectedTransform;
+      final sxBase = resolvedTransform?.scaleX ?? localTransform.scaleX;
+      final syBase = resolvedTransform?.scaleY ?? localTransform.scaleY;
       final sx = animationCompiler.transitionScaleExpression(
         layer: layer, transitions: document.transitions,
         baseExpression: sxBase,
@@ -272,10 +300,12 @@ class CompositionExportService {
         layer: layer, transitions: document.transitions,
         baseExpression: syBase,
       );
-      final rotation = resolvedTransform.rotationZ;
-      final opacity = resolvedTransform.opacity;
-      final posXBase = resolvedTransform.positionX;
-      final posYBase = resolvedTransform.positionY;
+      final rotation = resolvedTransform?.rotationZ ?? localTransform.rotationZ;
+      final opacity = resolvedTransform?.opacity ?? localTransform.opacity;
+      final posXBase =
+          resolvedTransform?.positionX ?? localTransform.positionX;
+      final posYBase =
+          resolvedTransform?.positionY ?? localTransform.positionY;
       final posX = animationCompiler.transitionPositionExpression(
         layer: layer, transitions: document.transitions,
         baseExpression: posXBase, axis: 'x',
