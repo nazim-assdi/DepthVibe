@@ -133,10 +133,18 @@ class FfmpegFilterCompiler {
       'chroma_key' => 'chromakey=0x00FF00:${number(p['similarity'] ?? 0.3)}:${number(p['blend'] ?? 0.1)}',
       'luma_key' => 'lumakey=${number(p['threshold'] ?? 0.5)}:${number(p['tolerance'] ?? 0.1)}',
       'stabilize' => 'deshake',
-      'posterize' => 'posterize=levels=${(p['levels'] ?? 6).round()}',
+      'posterize' => _compilePosterize(p['levels'] ?? 6),
       'color_balance' => 'colorbalance=rs=${number(p['red'] ?? 0)}:gs=${number(p['green'] ?? 0)}:bs=${number(p['blue'] ?? 0)}',
       _ => null,
     };
+  }
+
+  String _compilePosterize(double levels) {
+    final count = levels.clamp(2.0, 32.0).round();
+    final steps = (count - 1).toString();
+    final expression = "round(val*$steps/255)*255/$steps";
+    return "format=rgba,lutrgb=r='$expression':g='$expression':"
+        "b='$expression':a=val";
   }
 
   String _compileThreshold(double value) {
