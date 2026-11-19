@@ -78,15 +78,23 @@ class FfmpegAnimationCompiler {
     return '(st(9,root(' + xCurve + ',1));' + yCurve + ')';
   }
 
-  String maskAlphaExpression(List<MaskModel> masks) {
+  String maskAlphaExpression(
+    List<MaskModel> masks, {
+    String timeVariable = 't',
+  }) {
     final active = masks.where((item) => item.enabled).toList();
     if (active.isEmpty) return '1';
     var result = '0';
     var first = true;
     for (final mask in active) {
-      var shape = _maskShape(mask);
+      var shape = _maskShape(mask, timeVariable: timeVariable);
       if (mask.inverted) shape = '(1-(' + shape + '))';
-      shape = '((' + shape + ')*' + _n((mask.opacity / 100).clamp(0, 1)) + ')';
+      final opacity = _maskValue(
+        mask,
+        'opacity',
+        timeVariable: timeVariable,
+      );
+      shape = '((' + shape + ')*min(1,max(0,(' + opacity + ')/100)))';
       if (first) {
         result = mask.operation == MaskOperation.subtract
             ? '(1-(' + shape + '))'
@@ -104,12 +112,32 @@ class FfmpegAnimationCompiler {
     return 'min(1,max(0,' + result + '))';
   }
 
-  String _maskShape(MaskModel mask) {
-    final l = _n(mask.left);
-    final t = _n(mask.top);
-    final r = _n(mask.left + mask.width);
-    final b = _n(mask.top + mask.height);
-    final e = _n(mask.expansion);
+  String _maskValue(
+    MaskModel mask,
+    String property, {
+    required String timeVariable,
+  }) {
+    final matching = mask.keyframeTracks.where(
+      (track) => track.property == property,
+    );
+    return keyframeExpression(
+      matching.isEmpty ? null : matching.first,
+      fallback: mask.baseValue(property),
+      timeVariable: timeVariable,
+    );
+  }
+
+  String _maskShape(
+    MaskModel mask, {
+    required String timeVariable,
+  }) {
+    final l = _maskValue(mask, 'left', timeVariable: timeVariable);
+    final t = _maskValue(mask, 'top', timeVariable: timeVariable);
+    final w = _maskValue(mask, 'width', timeVariable: timeVariable);
+    final h = _maskValue(mask, 'height', timeVariable: timeVariable);
+    final r = '(' + l + '+' + w + ')';
+    final b = '(' + t + '+' + h + ')';
+    final e = _maskValue(mask, 'expansion', timeVariable: timeVariable);
     late final String distance;
     if (mask.shape == MaskShape.ellipse) {
       final cx = '(W*((' + l + '+' + r + ')/2))';
@@ -159,8 +187,15 @@ class FfmpegAnimationCompiler {
       final y2 = '(H*' + b + '+' + e + ')';
       distance = 'min(min(X-' + x1 + ',' + x2 + '-X),min(Y-' + y1 + ',' + y2 + '-Y))';
     }
-    if (mask.feather <= 0) return 'if(gte(' + distance + ',0),1,0)';
-    return 'min(1,max(0,0.5+(' + distance + ')/' + _n(mask.feather) + '))';
+    final feather = _maskValue(
+      mask,
+      'feather',
+      timeVariable: timeVariable,
+    );
+    final hardEdge = 'if(gte(' + distance + ',0),1,0)';
+    final softEdge = 'min(1,max(0,0.5+(' + distance +
+        ')/max(0.001,' + feather + ')))';
+    return 'if(lte(' + feather + ',0),' + hardEdge + ',' + softEdge + ')';
   }
 
   List<Vector2> _maskOutline(MaskModel mask) {
