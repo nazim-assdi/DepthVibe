@@ -16,6 +16,7 @@ class FfmpegCompositingEffectCompiler {
     double fallback, {
     double min = -100000,
     double max = 100000,
+    String timeVariable = 'T',
   }) {
     final base = (effect.parameters[property] ?? fallback)
         .clamp(min, max)
@@ -26,7 +27,7 @@ class FfmpegCompositingEffectCompiler {
     final expression = animationCompiler.keyframeExpression(
       tracks.isEmpty ? null : tracks.first,
       fallback: base,
-      timeVariable: 'T',
+      timeVariable: timeVariable,
     );
     return 'max(' + min.toStringAsFixed(4) + ',min(' +
         max.toStringAsFixed(4) + ',(' + expression + ')))';
@@ -219,7 +220,12 @@ class FfmpegCompositingEffectCompiler {
           effect, 'opacity', 0.6, min: 0, max: 1,
         );
         final offset = _effectParameterExpression(
-          effect, 'offset', 8, min: -100, max: 100,
+          effect,
+          'offset',
+          8,
+          min: -100,
+          max: 100,
+          timeVariable: 't',
         );
         final blurMaximum = _effectParameterMaximum(
           effect, 'blur', 8, min: 0, max: 40,
