@@ -86,4 +86,89 @@ void main() {
 
     expect(triangles, isEmpty);
   });
+
+  test('clips a triangle that crosses the near plane into visible geometry', () {
+    const crossingMesh = ObjMesh(
+      vertices: [
+        Vector3(-1, -1, 0),
+        Vector3(1, -1, 0),
+        Vector3(0, 1, 1000),
+      ],
+      triangles: [ObjTriangle(0, 1, 2)],
+      materials: {},
+      boundsMin: Vector3(-1, -1, 0),
+      boundsMax: Vector3(1, 1, 1000),
+    );
+    const distantModel = ResolvedLayerTransform(
+      position: Vector3(200, 200, 1000),
+      scale: Vector3(100, 100, 100),
+      rotation: Vector3(0, 0, 0),
+      opacity: 100,
+      enabled: true,
+    );
+
+    final triangles = renderer.projectTriangles(
+      mesh: crossingMesh,
+      viewport: const Size(400, 400),
+      baseWidth: 400,
+      compositionWidth: 400,
+      compositionHeight: 400,
+      modelTransform: distantModel,
+      cameraTransform: cameraTransform,
+      cameraSettings: const CameraSettings(
+        focusDistance: 1000,
+        nearClip: 50,
+        farClip: 2000,
+      ),
+    );
+
+    expect(triangles, hasLength(2));
+    for (final triangle in triangles) {
+      expect(triangle.distanceA, greaterThanOrEqualTo(50));
+      expect(triangle.distanceB, greaterThanOrEqualTo(50));
+      expect(triangle.distanceC, greaterThanOrEqualTo(50));
+    }
+  });
+
+  test('clips a triangle that crosses the far plane instead of dropping it', () {
+    const crossingMesh = ObjMesh(
+      vertices: [
+        Vector3(-1, -1, 0),
+        Vector3(1, -1, 0),
+        Vector3(0, 1, 1000),
+      ],
+      triangles: [ObjTriangle(0, 1, 2)],
+      materials: {},
+      boundsMin: Vector3(-1, -1, 0),
+      boundsMax: Vector3(1, 1, 1000),
+    );
+    const distantModel = ResolvedLayerTransform(
+      position: Vector3(200, 200, -150),
+      scale: Vector3(100, 100, 100),
+      rotation: Vector3(0, 0, 0),
+      opacity: 100,
+      enabled: true,
+    );
+
+    final triangles = renderer.projectTriangles(
+      mesh: crossingMesh,
+      viewport: const Size(400, 400),
+      baseWidth: 400,
+      compositionWidth: 400,
+      compositionHeight: 400,
+      modelTransform: distantModel,
+      cameraTransform: cameraTransform,
+      cameraSettings: const CameraSettings(
+        focusDistance: 1000,
+        nearClip: 50,
+        farClip: 1100,
+      ),
+    );
+
+    expect(triangles, hasLength(1));
+    expect(triangles.single.distanceA, lessThanOrEqualTo(1100));
+    expect(triangles.single.distanceB, lessThanOrEqualTo(1100));
+    expect(triangles.single.distanceC, lessThanOrEqualTo(1100));
+  });
+
 }

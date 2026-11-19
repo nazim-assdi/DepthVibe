@@ -83,17 +83,22 @@ class Software3dRenderer {
       cameraOffset,
       cameraTransform.rotation,
     );
-    final centerDistance = cameraSettings.focusDistance - centerCamera.z;
-    if (!cameraResolver.isDistanceVisible(centerDistance, cameraSettings)) {
-      return const [];
-    }
+    final near = cameraSettings.nearClip.clamp(0.01, 100000.0).toDouble();
+    final far = cameraSettings.farClip
+        .clamp(near + 0.01, 1000000.0)
+        .toDouble();
+    final focus = cameraSettings.focusDistance.clamp(1.0, 5000.0).toDouble();
+    final centerCameraZ = centerCamera.z.clamp(
+      focus - far,
+      focus - near,
+    );
     final centerFactor = cameraResolver.projectionFactor(
-      centerCamera.z,
+      centerCameraZ,
       cameraSettings,
     );
 
-    final projected = <_ProjectedVertex>[];
     final worldVertices = <Vector3>[];
+    final cameraVertices = <Vector3>[];
     for (final vertex in mesh.vertices) {
       final local = Vector3(
         (vertex.x - center.x) * unitScale * modelTransform.scale.x / 100,
@@ -113,36 +118,9 @@ class Software3dRenderer {
         world.y - cameraTransform.position.y,
         world.z - cameraTransform.position.z,
       );
-      final cameraPoint = cameraResolver.worldToCameraOffset(
+      cameraVertices.add(cameraResolver.worldToCameraOffset(
         relativeToCamera,
         cameraTransform.rotation,
-      );
-      final distance = cameraSettings.focusDistance - cameraPoint.z;
-      if (!cameraResolver.isDistanceVisible(distance, cameraSettings)) {
-        projected.add(const _ProjectedVertex.hidden());
-        continue;
-      }
-
-      final factor = cameraResolver.projectionFactor(
-        cameraPoint.z,
-        cameraSettings,
-      );
-      final offsetX = centerOnModel
-          ? cameraPoint.x * factor - centerCamera.x * centerFactor
-          : cameraTransform.position.x +
-              cameraPoint.x * factor -
-              compositionWidth / 2;
-      final offsetY = centerOnModel
-          ? cameraPoint.y * factor - centerCamera.y * centerFactor
-          : cameraTransform.position.y +
-              cameraPoint.y * factor -
-              compositionHeight / 2;
-      final dx = offsetX * pixelScale;
-      final dy = -offsetY * pixelScale;
-      projected.add(_ProjectedVertex(
-        point: Offset(viewport.width / 2 + dx, viewport.height / 2 + dy),
-        distance: distance,
-        visible: true,
       ));
     }
 
@@ -167,11 +145,6 @@ class Software3dRenderer {
 
     final faces = <ProjectedMeshTriangle>[];
     for (final triangle in mesh.triangles) {
-      final a = projected[triangle.a];
-      final b = projected[triangle.b];
-      final c = projected[triangle.c];
-      if (!a.visible || !b.visible || !c.visible) continue;
-
       final worldA = worldVertices[triangle.a];
       final worldB = worldVertices[triangle.b];
       final worldC = worldVertices[triangle.c];
@@ -192,6 +165,16 @@ class Software3dRenderer {
       final twoSidedNormal = _dot(normal, viewDirection) < 0
           ? _multiply(normal, -1)
           : normal;
+
+      var polygon = <_SceneVertex>[
+        _SceneVertex(worldA, cameraVertices[triangle.a], focus),
+        _SceneVertex(worldB, cameraVertices[triangle.b], focus),
+        _SceneVertex(worldC, cameraVertices[triangle.c], focus),
+      ];
+      polygon = _clipPolygon(polygon, near, keepGreater: true);
+      polygon = _clipPolygon(polygon, far, keepGreater: false);
+      if (polygon.length < 3) continue;
+
       final material = mesh.materialFor(triangle);
       final color = _shade(
         material,
@@ -200,17 +183,48 @@ class Software3dRenderer {
         lights,
         shadowMaps,
       );
-      faces.add(ProjectedMeshTriangle(
-        a: a.point,
-        b: b.point,
-        c: c.point,
-        color: color,
-        distance: (a.distance + b.distance + c.distance) / 3,
-        distanceA: a.distance,
-        distanceB: b.distance,
-        distanceC: c.distance,
-        perspective: cameraSettings.projection != 'orthographic',
-      ));
+
+      _ProjectedVertex project(_SceneVertex vertex) {
+        final factor = cameraResolver.projectionFactor(
+          vertex.camera.z,
+          cameraSettings,
+        );
+        final offsetX = centerOnModel
+            ? vertex.camera.x * factor - centerCamera.x * centerFactor
+            : cameraTransform.position.x +
+                vertex.camera.x * factor -
+                compositionWidth / 2;
+        final offsetY = centerOnModel
+            ? vertex.camera.y * factor - centerCamera.y * centerFactor
+            : cameraTransform.position.y +
+                vertex.camera.y * factor -
+                compositionHeight / 2;
+        return _ProjectedVertex(
+          point: Offset(
+            viewport.width / 2 + offsetX * pixelScale,
+            viewport.height / 2 - offsetY * pixelScale,
+          ),
+          distance: vertex.distance,
+          visible: true,
+        );
+      }
+
+      final clipped = polygon.map(project).toList();
+      for (var index = 1; index < clipped.length - 1; index++) {
+        final a = clipped[0];
+        final b = clipped[index];
+        final c = clipped[index + 1];
+        faces.add(ProjectedMeshTriangle(
+          a: a.point,
+          b: b.point,
+          c: c.point,
+          color: color,
+          distance: (a.distance + b.distance + c.distance) / 3,
+          distanceA: a.distance,
+          distanceB: b.distance,
+          distanceC: c.distance,
+        ));
+      }
     }
 
     // Painter's order: far faces first, near faces last.
@@ -254,6 +268,44 @@ class Software3dRenderer {
       aperture: cameraSettings.aperture,
     );
   }
+
+  List<_SceneVertex> _clipPolygon(
+    List<_SceneVertex> input,
+    double plane, {
+    required bool keepGreater,
+  }) {
+    if (input.isEmpty) return const [];
+    final output = <_SceneVertex>[];
+    bool inside(_SceneVertex vertex) =>
+        keepGreater ? vertex.distance >= plane : vertex.distance <= plane;
+
+    for (var index = 0; index < input.length; index++) {
+      final current = input[index];
+      final previous = input[(index + input.length - 1) % input.length];
+      final currentInside = inside(current);
+      final previousInside = inside(previous);
+
+      if (currentInside != previousInside) {
+        final delta = current.distance - previous.distance;
+        final amount = delta.abs() < 1e-9
+            ? 0.0
+            : ((plane - previous.distance) / delta).clamp(0.0, 1.0).toDouble();
+        output.add(_SceneVertex(
+          _lerpVector(previous.world, current.world, amount),
+          _lerpVector(previous.camera, current.camera, amount),
+          plane,
+        ));
+      }
+      if (currentInside) output.add(current);
+    }
+    return output;
+  }
+
+  Vector3 _lerpVector(Vector3 a, Vector3 b, double amount) => Vector3(
+    a.x + (b.x - a.x) * amount,
+    a.y + (b.y - a.y) * amount,
+    a.z + (b.z - a.z) * amount,
+  );
 
   Color _shade(
     ObjMaterial material,
@@ -715,7 +767,13 @@ class Software3dRasterizer {
             aperture.clamp(0.7, 22.0) *
             1.15;
         final radius = blur.round().clamp(0, maxRadius).toInt();
-        if (radius == 0) continue;
+        if (radius == 0 ||
+            x - radius < 0 ||
+            x + radius >= width ||
+            y - radius < 0 ||
+            y + radius >= height) {
+          continue;
+        }
         var red = 0;
         var green = 0;
         var blue = 0;
@@ -747,6 +805,14 @@ class Software3dRasterizer {
   double _edge(Offset a, Offset b, Offset p) =>
       (p.dx - a.dx) * (b.dy - a.dy) -
       (p.dy - a.dy) * (b.dx - a.dx);
+}
+
+class _SceneVertex {
+  const _SceneVertex(this.world, this.camera, this.distance);
+
+  final Vector3 world;
+  final Vector3 camera;
+  final double distance;
 }
 
 class _ProjectedVertex {

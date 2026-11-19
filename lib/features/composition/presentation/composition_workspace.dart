@@ -17,7 +17,7 @@ import '../engine/composition_export_service.dart';
 import '../engine/obj_mesh_loader.dart';
 import '../engine/scene_mesh_loader.dart';
 import '../engine/software_3d_renderer.dart';
-import '../engine/software_3d_mesh_view.dart';
+import '../engine/gpu_3d_mesh_view.dart';
 import '../engine/audio_waveform_service.dart';
 import '../engine/motion_tracking_service.dart';
 import '../engine/transition_frame_validator.dart';
@@ -792,8 +792,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                   ),
                 );
               }
-              return Software3dMeshView(
+              return Gpu3dMeshView(
                 mesh: mesh,
+                baseWidth: baseWidth,
+                baseHeight: baseHeight,
                 modelTransform: resolved,
                 cameraTransform: meshCamera,
                 cameraSettings: meshCameraSettings,

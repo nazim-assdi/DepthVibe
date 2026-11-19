@@ -224,3 +224,13 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 - Shadow mapping is directional-only and uses a compact CPU depth map; point/spot/cubemap shadows, cascades, physically soft penumbrae and shadow catcher are still outstanding.
 - The DOF pass is a bounded screen-space blur approximation, not a physically based circle-of-confusion/lens model. Area lighting is four-point sampling.
 - The transparent per-frame intermediate export is wired but still needs real-device performance/long-duration stress tests and full CI validation. No release APK or desktop package is implied by the source commit.
+
+
+### WebGPU 3D rasterization milestone — 19 November 2026
+
+- **Native GPU backend:** DepthVibe now uses `nitro_webgpu` for real WebGPU adapters and WGSL render passes. Runtime adapter discovery reports the actual backend and falls back to the CPU preview when no adapter or presentation surface is available.
+- **GPU depth and rasterization:** triangle streams are uploaded to a hardware vertex buffer; WebGPU performs triangle rasterization, depth testing and 4× MSAA where supported (single-sample GPU fallback otherwise). The 3D view pauses its render loop between document updates to avoid idle GPU work.
+- **Near/far polygon clipping:** the shared mesh projector clips triangles against camera near and far planes with polygon splitting and fan triangulation. CPU preview and the GPU vertex stream receive the same clipped triangles.
+- **Current hybrid boundary:** model parenting, camera projection and flat scene-light shading are still evaluated on the CPU before vertices are uploaded. The current WGSL shader passes projected vertex colour; GPU-side model transforms, per-pixel PBR/normal mapping, textures and GPU shadow passes are not yet wired.
+- **Platform presentation caveats:** the WebGPU package can use Vulkan, Metal, D3D12 and GL adapters where available. Some targets use CPU readback/upload for Flutter texture presentation, and Web builds do not currently have a browser WebGPU presenter. Hardware availability and driver features are checked at runtime.
+- **Remaining 3D scope:** extend glTF attributes (UVs/normals/tangents), images/samplers and node transforms; skinned/morph animation; GPU PBR; directional plus point/spot shadows; physically based depth of field; more robust multisampling and mobile performance stress tests. The existing CPU directional shadow/DOF approximations remain fallbacks, not full GPU effects.
