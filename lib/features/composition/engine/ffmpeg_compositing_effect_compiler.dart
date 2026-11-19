@@ -150,7 +150,6 @@ class FfmpegCompositingEffectCompiler {
     required String inputLabel,
     required CompositionLayer layer,
     required int index,
-    required int timeMs,
   }) {
     var current = inputLabel;
     var passIndex = 0;
