@@ -156,6 +156,78 @@ void main() {
       controller.dispose();
     });
 
+    test('Photoshop groups preserve nesting, clipping bases and smart objects', () {
+      final controller = CompositionController();
+      controller.addPhotoshopLayers(
+        sourceDocumentUri: '/design/nested-layout.psd',
+        documentWidth: 1600,
+        documentHeight: 900,
+        assets: const [
+          PhotoshopLayerAsset(
+            sourceIndex: 0,
+            name: 'Hero Group',
+            assetPath: '',
+            left: 0,
+            top: 0,
+            width: 1600,
+            height: 900,
+            opacity: 255,
+            blendMode: 'pass',
+            visible: true,
+            isGroup: true,
+          ),
+          PhotoshopLayerAsset(
+            sourceIndex: 1,
+            name: 'Base Photo',
+            assetPath: '/cache/base.png',
+            left: 100,
+            top: 100,
+            width: 700,
+            height: 500,
+            opacity: 255,
+            blendMode: 'norm',
+            visible: true,
+            isGroup: false,
+            parentGroupSourceIndex: 0,
+          ),
+          PhotoshopLayerAsset(
+            sourceIndex: 2,
+            name: 'Tint Smart Object',
+            assetPath: '/cache/tint-preview.png',
+            left: 100,
+            top: 100,
+            width: 700,
+            height: 500,
+            opacity: 180,
+            blendMode: 'over',
+            visible: true,
+            isGroup: false,
+            parentGroupSourceIndex: 0,
+            clipping: 1,
+            clippingBaseSourceIndex: 1,
+            smartObjectSourceUri: '/cache/tint-source.psb',
+            smartObjectResourceId: 'linked-object-123',
+          ),
+        ],
+      );
+
+      final group = controller.document.layers
+          .firstWhere((layer) => layer.sourceLayerIndex == 0);
+      final base = controller.document.layers
+          .firstWhere((layer) => layer.sourceLayerIndex == 1);
+      final clipped = controller.document.layers
+          .firstWhere((layer) => layer.sourceLayerIndex == 2);
+
+      expect(group.kind, LayerKind.precomposition);
+      expect(base.parentId, group.id);
+      expect(clipped.parentId, group.id);
+      expect(clipped.photoshopClipped, isTrue);
+      expect(clipped.clippingBaseLayerId, base.id);
+      expect(clipped.smartObjectSourceUri, '/cache/tint-source.psb');
+      expect(clipped.smartObjectResourceId, 'linked-object-123');
+      controller.dispose();
+    });
+
     test('photoshop assets become separate layers with document geometry', () {
       final controller = CompositionController();
       controller.addPhotoshopLayers(
