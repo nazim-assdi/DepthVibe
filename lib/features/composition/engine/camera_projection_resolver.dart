@@ -44,11 +44,10 @@ class CameraProjectedExpressions {
   final String opacity;
 }
 
-/// Shared 2.5D camera projection for compositor preview and FFmpeg export.
+/// Shared camera-space projection helpers for the compositor and CPU mesh renderer.
 ///
-/// The camera's inverse Euler rotation is applied to layer positions before
-/// projection. Image/video layers remain camera-facing 2.5D cards; this is not
-/// a mesh renderer and does not calculate per-vertex perspective or lighting.
+/// Image/video layers still use camera-facing 2.5D cards. OBJ mesh vertices use
+/// the same camera-space rotation, lens scale and near/far visibility rules.
 class CameraProjectionResolver {
   const CameraProjectionResolver();
 
@@ -66,18 +65,9 @@ class CameraProjectionResolver {
       camera.rotation,
     );
 
-    final perspective = settings.projection != 'orthographic';
-    final focus = settings.focusDistance.clamp(1.0, 5000.0).toDouble();
-    final nearPlane = focus * 0.05;
-    final distance = focus - local.z;
-    final visible = !perspective || distance >= nearPlane;
-    final factor = perspective
-        ? math.min(
-            20.0,
-            focus / math.max(nearPlane, distance) *
-                _fieldOfViewFactor(settings),
-          ).toDouble()
-        : 1.0;
+    final distance = settings.focusDistance - local.z;
+    final visible = isDistanceVisible(distance, settings);
+    final factor = projectionFactor(local.z, settings);
 
     return CameraProjectedTransform(
       position: Vector3(
@@ -129,20 +119,19 @@ class CameraProjectionResolver {
     final cameraZ = '(-(' + yAfterRoll + ')*sin(' + rotationX +
         ')+(' + zAfterYaw + ')*cos(' + rotationX + '))';
 
-    String factor;
-    String visibility;
-    if (settings.projection == 'orthographic') {
-      factor = '1';
-      visibility = '1';
-    } else {
-      final focus = _n(settings.focusDistance.clamp(1.0, 5000.0));
-      final nearPlane = '((' + focus + ')*0.05)';
-      final distance = '(' + focus + '-(' + cameraZ + '))';
-      final fov = _n(_fieldOfViewFactor(settings));
-      factor = 'min(20,' + focus + '/max(' + nearPlane + ',' +
-          distance + ')*' + fov + ')';
-      visibility = 'if(gte(' + distance + ',' + nearPlane + '),1,0)';
-    }
+    final focus = _n(settings.focusDistance.clamp(1.0, 5000.0));
+    final nearPlane = _n(settings.nearClip.clamp(0.01, 100000.0));
+    final farPlane = _n(settings.farClip.clamp(
+      settings.nearClip.clamp(0.01, 100000.0) + 0.01,
+      1000000.0,
+    ));
+    final distance = '(' + focus + '-(' + cameraZ + '))';
+    final visibility =
+        'if(gte(' + distance + ',' + nearPlane + ')*lte(' + distance + ',' + farPlane + '),1,0)';
+    final factor = settings.projection == 'orthographic'
+        ? '1'
+        : 'min(20,' + focus + '/max(' + nearPlane + ',' +
+            distance + ')*' + _n(_fieldOfViewFactor(settings)) + ')';
 
     String screenPosition(String cameraPosition, String cameraOffset) =>
         '(' + cameraPosition + '+(' + cameraOffset + ')*' + factor + ')';
@@ -160,6 +149,31 @@ class CameraProjectionResolver {
       rotationZ: '(' + layer.rotationZ + '-(' + camera.rotationZ + '))',
       opacity: '((' + layer.opacity + ')*(' + visibility + '))',
     );
+  }
+
+  /// Converts a world-space offset into camera space using the same
+  /// inverse Euler rotation used by the 2.5D compositor and mesh renderer.
+  Vector3 worldToCameraOffset(Vector3 offset, Vector3 rotationDegrees) =>
+      _worldToCamera(offset, rotationDegrees);
+
+  bool isDistanceVisible(double distance, CameraSettings settings) {
+    final near = settings.nearClip.clamp(0.01, 100000.0).toDouble();
+    final far = settings.farClip.clamp(near + 0.01, 1000000.0).toDouble();
+    return distance >= near && distance <= far;
+  }
+
+  /// Returns the perspective magnification at a camera-space Z coordinate.
+  /// Orthographic cameras still honour near/far clipping.
+  double projectionFactor(double cameraSpaceZ, CameraSettings settings) {
+    final focus = settings.focusDistance.clamp(1.0, 5000.0).toDouble();
+    final distance = focus - cameraSpaceZ;
+    if (!isDistanceVisible(distance, settings)) return 0;
+    if (settings.projection == 'orthographic') return 1;
+    final near = settings.nearClip.clamp(0.01, 100000.0).toDouble();
+    return math.min(
+      20.0,
+      focus / math.max(near, distance) * _fieldOfViewFactor(settings),
+    ).toDouble();
   }
 
   Vector3 _worldToCamera(Vector3 offset, Vector3 rotationDegrees) {

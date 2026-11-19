@@ -67,6 +67,13 @@ DepthVibe is intended to combine a professional nonlinear video editor, motion-d
 - Add point tracking, planar tracking, scale/rotation solving, occlusion-aware tracks and track-to-null.
 - Add 3D camera solve and camera-matched compositing only after tracking quality has measurable validation clips.
 
+## Implemented camera and OBJ mesh preview increment (2026-11-19)
+
+- Imported Wavefront OBJ geometry with polygon triangulation, negative vertex indices and basic MTL diffuse colour/opacity parsing.
+- Added a CPU triangle preview renderer with model transforms, active-camera perspective/orthographic projection, near/far clipping, depth sorting and ambient/directional/point/spot-light shading.
+- Added camera near/far clip controls and shared depth visibility rules for card preview and FFmpeg camera expressions.
+- Current scope is OBJ geometry and diffuse MTL values only. Texture maps, GLB/GLTF, physically correct shadow maps, depth-of-field blur and 3D mesh export are not implemented in this increment. The export validator continues to report 3D model layers as unsupported rather than silently rendering a placeholder.
+
 ## Delivery sequence
 
 ### Milestone 1 — Reliability and project foundation

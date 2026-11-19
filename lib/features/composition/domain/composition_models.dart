@@ -764,6 +764,8 @@ class CameraSettings {
     this.fieldOfView = 50,
     this.focalLength = 50,
     this.focusDistance = 1000,
+    this.nearClip = 50,
+    this.farClip = 5000,
     this.aperture = 2.8,
     this.depthOfField = false,
   });
@@ -772,6 +774,8 @@ class CameraSettings {
   final double fieldOfView;
   final double focalLength;
   final double focusDistance;
+  final double nearClip;
+  final double farClip;
   final double aperture;
   final bool depthOfField;
 
@@ -780,6 +784,8 @@ class CameraSettings {
     double? fieldOfView,
     double? focalLength,
     double? focusDistance,
+    double? nearClip,
+    double? farClip,
     double? aperture,
     bool? depthOfField,
   }) => CameraSettings(
@@ -787,6 +793,8 @@ class CameraSettings {
     fieldOfView: fieldOfView ?? this.fieldOfView,
     focalLength: focalLength ?? this.focalLength,
     focusDistance: focusDistance ?? this.focusDistance,
+    nearClip: nearClip ?? this.nearClip,
+    farClip: farClip ?? this.farClip,
     aperture: aperture ?? this.aperture,
     depthOfField: depthOfField ?? this.depthOfField,
   );

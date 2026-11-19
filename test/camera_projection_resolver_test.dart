@@ -126,7 +126,7 @@ void main() {
     );
 
     expect(projected.positionX, contains('1200.00000'));
-    expect(projected.positionX, contains('0.05'));
+    expect(projected.positionX, contains('50.000000'));
     expect(projected.scaleX, contains('1000.000000'));
     expect(projected.scaleX, contains('500.00000'));
   });
@@ -209,7 +209,44 @@ void main() {
     expect(projected.scale.x, lessThanOrEqualTo(2000));
   });
 
-  test('FFmpeg camera projection includes orientation and near-plane culling', () {
+  test('clips camera layers outside the configured far plane', () {
+    const camera = ResolvedLayerTransform(
+      position: Vector3(960, 540, 0),
+      scale: Vector3(100, 100, 100),
+      rotation: Vector3(0, 0, 0),
+      opacity: 100,
+      enabled: true,
+    );
+    const layer = ResolvedLayerTransform(
+      position: Vector3(1100, 540, -250),
+      scale: Vector3(100, 100, 100),
+      rotation: Vector3(0, 0, 0),
+      opacity: 75,
+      enabled: true,
+    );
+
+    final projected = resolver.project(
+      layer: layer,
+      camera: camera,
+      settings: const CameraSettings(
+        focusDistance: 1000,
+        nearClip: 50,
+        farClip: 1000,
+      ),
+    );
+
+    expect(projected.opacity, 0);
+    expect(
+      resolver.isDistanceVisible(1000, const CameraSettings(farClip: 1000)),
+      isTrue,
+    );
+    expect(
+      resolver.isDistanceVisible(1000.1, const CameraSettings(farClip: 1000)),
+      isFalse,
+    );
+  });
+
+  test('FFmpeg camera projection includes orientation and near/far culling', () {
     const parentResolver = ParentTransformExpressionResolver();
     const cameraLayer = CompositionLayer(
       id: 'camera',
@@ -246,6 +283,7 @@ void main() {
     expect(projected.positionY, contains('cos('));
     expect(projected.rotationZ, contains('35.00000'));
     expect(projected.opacity, contains('if(gte('));
+    expect(projected.opacity, contains('lte('));
     expect(projected.scaleX, contains('min(20,'));
   });
 }

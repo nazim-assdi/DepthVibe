@@ -14,6 +14,9 @@ import '../domain/composition_models.dart';
 import '../engine/parent_transform_resolver.dart';
 import '../engine/camera_projection_resolver.dart';
 import '../engine/composition_export_service.dart';
+import '../engine/obj_mesh_loader.dart';
+import '../engine/software_3d_renderer.dart';
+import '../engine/software_3d_mesh_painter.dart';
 import '../engine/audio_waveform_service.dart';
 import '../engine/motion_tracking_service.dart';
 import '../engine/transition_frame_validator.dart';
@@ -32,9 +35,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
   final MotionTrackingService _tracker = const MotionTrackingService();
   final AudioWaveformService _waveformService = const AudioWaveformService();
   final Map<String, Future<File?>> _waveformJobs = {};
+  final Map<String, Future<ObjMesh>> _meshJobs = {};
 
   Future<File?> _waveformFor(String path) =>
       _waveformJobs.putIfAbsent(path, () => _waveformService.generate(path));
+
+  Future<ObjMesh> _meshFor(String path) =>
+      _meshJobs.putIfAbsent(path, () => const ObjMeshLoader().load(path));
   bool _tracking = false;
   double _trackingLeft = 100;
   double _trackingTop = 100;
@@ -163,18 +170,24 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
   Future<void> _addLayer(LayerKind kind) async {
     if (kind == LayerKind.video ||
         kind == LayerKind.image ||
-        kind == LayerKind.audio) {
-      final file = await FilePicker.pickFile(
-        type: switch (kind) {
-          LayerKind.video => FileType.video,
-          LayerKind.audio => FileType.audio,
-          _ => FileType.image,
-        },
-      );
+        kind == LayerKind.audio ||
+        kind == LayerKind.threeDModel) {
+      final file = kind == LayerKind.threeDModel
+          ? await FilePicker.pickFile(
+              type: FileType.custom,
+              allowedExtensions: const ['obj'],
+            )
+          : await FilePicker.pickFile(
+              type: switch (kind) {
+                LayerKind.video => FileType.video,
+                LayerKind.audio => FileType.audio,
+                _ => FileType.image,
+              },
+            );
       if (file == null) return;
       final sourcePath = file.path;
       if (sourcePath == null) {
-        setState(() => _notice = 'This provider did not expose a local media file path.');
+        setState(() => _notice = 'This provider did not expose a local file path.');
         return;
       }
       var width = _controller.document.width;
@@ -727,7 +740,73 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         );
         break;
       case LayerKind.threeDModel:
-        visual = const Icon(Icons.view_in_ar, color: Color(0xFF9DE1D3), size: 36);
+        baseWidth = 760;
+        baseHeight = 760;
+        if (layer.sourceUri == null) {
+          visual = const Center(
+            child: Icon(Icons.view_in_ar, color: Color(0xFF9DE1D3), size: 54),
+          );
+        } else {
+          final meshCamera = cameraTransform != null && cameraTransform.enabled
+              ? cameraTransform
+              : const ResolvedLayerTransform(
+                  position: Vector3(0, 0, 0),
+                  scale: Vector3(100, 100, 100),
+                  rotation: Vector3(0, 0, 0),
+                  opacity: 100,
+                  enabled: true,
+                );
+          final meshCameraSettings = cameraTransform != null && cameraTransform.enabled
+              ? cameraLayer?.camera ?? const CameraSettings()
+              : const CameraSettings();
+          final meshLights = <SceneLight>[
+            for (final item in doc.layers.where(
+              (candidate) => candidate.kind == LayerKind.light && candidate.enabled,
+            ))
+              SceneLight(
+                transform: const ParentTransformResolver().resolve(
+                  layer: item,
+                  timeMs: timeMs,
+                  layers: doc.layers,
+                ),
+                settings: item.light ?? const LightSettings(),
+              ),
+          ];
+          visual = FutureBuilder<ObjMesh>(
+            future: _meshFor(layer.sourceUri!),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Center(
+                  child: Icon(Icons.broken_image_outlined,
+                      color: Color(0xFFFF8E8E), size: 38),
+                );
+              }
+              final mesh = snapshot.data;
+              if (mesh == null) {
+                return const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                );
+              }
+              return CustomPaint(
+                painter: Software3dMeshPainter(
+                  mesh: mesh,
+                  modelTransform: resolved,
+                  cameraTransform: meshCamera,
+                  cameraSettings: meshCameraSettings,
+                  lights: meshLights,
+                  compositionWidth: doc.width.toDouble(),
+                  compositionHeight: doc.height.toDouble(),
+                  baseWidth: baseWidth,
+                ),
+                child: const SizedBox.expand(),
+              );
+            },
+          );
+        }
         break;
       case LayerKind.audio:
         visual = const Icon(Icons.graphic_eq, color: Color(0xFF9DE1D3), size: 26);
@@ -740,8 +819,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         break;
     }
 
-    final width = baseWidth * scaleX.abs() / doc.width * canvasSize.width;
-    final height = baseHeight * scaleY.abs() / doc.height * canvasSize.height;
+    final isMeshLayer = layer.kind == LayerKind.threeDModel;
+    final meshCameraScaleX = projected != null && resolved.scale.x.abs() > 0.0001
+        ? projected.scale.x.abs() / resolved.scale.x.abs()
+        : 1.0;
+    final meshCameraScaleY = projected != null && resolved.scale.y.abs() > 0.0001
+        ? projected.scale.y.abs() / resolved.scale.y.abs()
+        : 1.0;
+    final width = baseWidth *
+        (isMeshLayer ? meshCameraScaleX : scaleX.abs()) /
+        doc.width * canvasSize.width;
+    final height = baseHeight *
+        (isMeshLayer ? meshCameraScaleY : scaleY.abs()) /
+        doc.height * canvasSize.height;
     final left = x / doc.width * canvasSize.width - width / 2;
     final top = y / doc.height * canvasSize.height - height / 2;
 
@@ -764,10 +854,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       child: Opacity(
         opacity: opacity,
         child: Transform.rotate(
-          angle: rotation,
+          angle: isMeshLayer ? 0 : rotation,
           child: Transform.scale(
-            scaleX: scaleX.isNegative ? -1 : 1,
-            scaleY: scaleY.isNegative ? -1 : 1,
+            scaleX: isMeshLayer ? 1 : (scaleX.isNegative ? -1 : 1),
+            scaleY: isMeshLayer ? 1 : (scaleY.isNegative ? -1 : 1),
             child: maskedVisual,
           ),
         ),
@@ -2456,7 +2546,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         children: [
           _panelHeader('CAMERA CONTROLS', Icons.videocam),
           const Text(
-            'Camera X/Y/Z rotation now orbits and rolls the 2.5D view in preview/export; perspective also clips layers behind the near plane. Layers remain camera-facing 2.5D cards—mesh rendering, depth-of-field blur and shadow maps are still pending.',
+            'Camera orientation and perspective now drive image cards and imported OBJ geometry. Near/far clipping is shared by preview and FFmpeg camera projection; depth-of-field blur and shadow maps remain pending.',
             style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
           ),
           const SizedBox(height: 8),
@@ -2477,6 +2567,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
               (value) => _controller.setCameraSettings(camera.copyWith(focalLength: value))),
           _settingSlider('Focus Distance', camera.focusDistance, 1, 5000,
               (value) => _controller.setCameraSettings(camera.copyWith(focusDistance: value))),
+          _settingSlider('Near Clip', camera.nearClip, 1, 2000,
+              (value) => _controller.setCameraSettings(camera.copyWith(
+                    nearClip: value,
+                    farClip: camera.farClip <= value ? value + 1 : camera.farClip,
+                  ))),
+          _settingSlider('Far Clip', camera.farClip, camera.nearClip + 1, 50000,
+              (value) => _controller.setCameraSettings(camera.copyWith(farClip: value))),
           _settingSlider('Aperture', camera.aperture, 0.7, 22,
               (value) => _controller.setCameraSettings(camera.copyWith(aperture: value))),
           const SizedBox(height: 8),
@@ -2506,7 +2603,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         children: [
           _panelHeader('LIGHT CONTROLS', Icons.lightbulb_outline),
           const Text(
-            'Light rig settings are stored in the project model. Surface shading, cast shadows and light interaction will render when the mesh lighting pipeline is integrated.',
+            'Ambient, directional, point and spot lights now shade OBJ mesh previews. Area-light sampling and cast shadow maps are still pending.',
             style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
           ),
           const SizedBox(height: 8),
@@ -2539,10 +2636,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     }
     return Column(
       children: [
-        _panelHeader('3D LAYER', Icons.view_in_ar),
-        const Text(
-          'Camera and Null-parent transforms are evaluated in 2.5D. GLB/OBJ mesh import, material shading and full 3D scene rendering are not integrated yet.',
-          style: TextStyle(fontSize: 11),
+        _panelHeader('3D MESH LAYER', Icons.view_in_ar),
+        Text(
+          layer.sourceUri == null
+              ? 'Import a Wavefront OBJ model from the Add Layer menu. OBJ geometry is projected with the active camera and shaded from the scene light rig.'
+              : 'Loaded source: ${layer.name}\nOBJ triangle mesh preview with perspective depth, MTL diffuse colours and scene-light shading. Export rendering, GLB, texture maps and shadow maps are still pending.',
+          style: const TextStyle(fontSize: 11, color: Color(0xFF98A7C0)),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: () => _addLayer(LayerKind.threeDModel),
+          icon: const Icon(Icons.file_open),
+          label: const Text('IMPORT OBJ MODEL'),
         ),
       ],
     );
