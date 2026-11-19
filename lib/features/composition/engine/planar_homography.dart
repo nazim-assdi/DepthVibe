@@ -151,6 +151,18 @@ class Homography2D {
   }
 }
 
+class RobustHomographyFit {
+  const RobustHomographyFit({
+    required this.fit,
+    required this.inlierIndices,
+    required this.outlierIndices,
+  });
+
+  final HomographyFit fit;
+  final List<int> inlierIndices;
+  final List<int> outlierIndices;
+}
+
 /// Reports geometric tracking quality from matched planar feature points.
 class HomographyFit {
   const HomographyFit({
@@ -166,6 +178,100 @@ class HomographyFit {
 
 class PlanarHomographyEstimator {
   const PlanarHomographyEstimator();
+
+  RobustHomographyFit estimateRansac({
+    required List<Vector2> source,
+    required List<Vector2> destination,
+    double reprojectionThreshold = 3,
+    int maxIterations = 250,
+    int randomSeed = 7,
+  }) {
+    if (source.length != destination.length || source.length < 4) {
+      throw ArgumentError(
+        'RANSAC needs at least four matched source/destination points.',
+      );
+    }
+    if (!reprojectionThreshold.isFinite || reprojectionThreshold <= 0) {
+      throw ArgumentError('Reprojection threshold must be a positive number.');
+    }
+    if (maxIterations < 1) {
+      throw ArgumentError('RANSAC iterations must be at least one.');
+    }
+
+    final random = math.Random(randomSeed);
+    var bestInliers = <int>[];
+    var bestError = double.infinity;
+
+    for (var iteration = 0; iteration < maxIterations; iteration++) {
+      final selected = <int>{};
+      while (selected.length < 4) {
+        selected.add(random.nextInt(source.length));
+      }
+      final sampleIndices = selected.toList(growable: false);
+      Homography2D candidate;
+      try {
+        candidate = Homography2D.fromCorrespondences(
+          source: sampleIndices.map((index) => source[index]).toList(),
+          destination:
+              sampleIndices.map((index) => destination[index]).toList(),
+        );
+      } on StateError {
+        continue;
+      } on ArgumentError {
+        continue;
+      }
+
+      final inliers = <int>[];
+      var totalError = 0.0;
+      for (var index = 0; index < source.length; index++) {
+        try {
+          final predicted = candidate.transform(source[index]);
+          final error = math.sqrt(
+            math.pow(predicted.x - destination[index].x, 2) +
+                math.pow(predicted.y - destination[index].y, 2),
+          );
+          if (error <= reprojectionThreshold) {
+            inliers.add(index);
+            totalError += error;
+          }
+        } on StateError {
+          // Points on a candidate's projective horizon are outliers.
+        }
+      }
+
+      if (inliers.length > bestInliers.length ||
+          (inliers.length == bestInliers.length &&
+              totalError < bestError)) {
+        bestInliers = inliers;
+        bestError = totalError;
+      }
+    }
+
+    if (bestInliers.length < 4) {
+      throw StateError(
+        'RANSAC could not find four consistent planar feature matches.',
+      );
+    }
+
+    final inlierSource =
+        bestInliers.map((index) => source[index]).toList();
+    final inlierDestination =
+        bestInliers.map((index) => destination[index]).toList();
+    final fit = estimate(
+      source: inlierSource,
+      destination: inlierDestination,
+    );
+    final inlierSet = bestInliers.toSet();
+    final outliers = [
+      for (var index = 0; index < source.length; index++)
+        if (!inlierSet.contains(index)) index,
+    ];
+    return RobustHomographyFit(
+      fit: fit,
+      inlierIndices: List.unmodifiable(bestInliers),
+      outlierIndices: List.unmodifiable(outliers),
+    );
+  }
 
   HomographyFit estimate({
     required List<Vector2> source,
