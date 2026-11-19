@@ -602,6 +602,27 @@ class MaskModel {
     return matching.first.sample(timeMs, fallback: baseValue(property));
   }
 
+  double vertexValueAt(int vertexIndex, String component, int timeMs) {
+    if (vertexIndex < 0 || vertexIndex >= vertices.length) return 0;
+    final vertex = vertices[vertexIndex];
+    final property = 'vertex.$vertexIndex.$component';
+    final fallback = switch (component) {
+      'anchor.x' => vertex.anchor.x,
+      'anchor.y' => vertex.anchor.y,
+      'inHandle.x' => vertex.inHandle.x,
+      'inHandle.y' => vertex.inHandle.y,
+      'outHandle.x' => vertex.outHandle.x,
+      'outHandle.y' => vertex.outHandle.y,
+      _ => 0.0,
+    };
+    final matching = keyframeTracks.where(
+      (track) => track.property == property,
+    );
+    return matching.isEmpty
+        ? fallback
+        : matching.first.sample(timeMs, fallback: fallback);
+  }
+
   MaskModel copyWith({
     MaskShape? shape,
     MaskOperation? operation,
