@@ -92,6 +92,48 @@ void main() {
     expect(expression, contains('min(1,max(0,'));
   });
 
+  test('compiles animated polygon bounds at frame evaluation time', () {
+    final expression = compiler.maskAlphaExpression([
+      MaskModel(
+        id: 'animated-poly',
+        name: 'Animated Polygon',
+        shape: MaskShape.bezier,
+        left: 0.2,
+        top: 0.2,
+        width: 0.6,
+        height: 0.6,
+        vertices: const [
+          MaskVertex(anchor: Vector2(0.2, 0.2)),
+          MaskVertex(
+            anchor: Vector2(0.8, 0.2),
+            inHandle: Vector2(-0.1, 0.1),
+          ),
+          MaskVertex(anchor: Vector2(0.5, 0.8)),
+        ],
+        keyframeTracks: const [
+          KeyframeTrack(
+            property: 'left',
+            keyframes: [
+              ScalarKeyframe(timeMs: 0, value: 0.2),
+              ScalarKeyframe(timeMs: 1000, value: 0.4),
+            ],
+          ),
+          KeyframeTrack(
+            property: 'width',
+            keyframes: [
+              ScalarKeyframe(timeMs: 0, value: 0.6),
+              ScalarKeyframe(timeMs: 1000, value: 0.3),
+            ],
+          ),
+        ],
+      ),
+    ], timeVariable: 'T');
+
+    expect(expression, contains('if(lt(T,1.00000)'));
+    expect(expression, contains('0.40000'));
+    expect(expression, contains('0.30000'));
+  });
+
   test('flattens Bezier mask handles into curved export outlines', () {
     const compiler = FfmpegAnimationCompiler();
     final vertices = [
