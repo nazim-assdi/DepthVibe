@@ -21,6 +21,14 @@ class PhotoshopImportResult {
 
   int get visibleLayerCount =>
       layers.where((layer) => layer.visible && !layer.isGroup).length;
+
+  int get groupCount => layers.where((layer) => layer.isGroup).length;
+
+  int get clippedLayerCount =>
+      layers.where((layer) => layer.clipping != 0).length;
+
+  int get smartObjectCount =>
+      layers.where((layer) => layer.smartObjectResourceId != null).length;
 }
 
 class PhotoshopImportService {
