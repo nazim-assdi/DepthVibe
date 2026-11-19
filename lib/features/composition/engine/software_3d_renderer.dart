@@ -6,6 +6,7 @@ import '../domain/composition_models.dart';
 import 'camera_projection_resolver.dart';
 import 'obj_mesh_loader.dart';
 import 'parent_transform_resolver.dart';
+import 'gltf_scene_evaluator.dart';
 
 class SceneLight {
   const SceneLight({
@@ -61,6 +62,8 @@ class Software3dRenderer {
     required CameraSettings cameraSettings,
     List<SceneLight> lights = const [],
     bool centerOnModel = true,
+    int timeMs = 0,
+    int animationIndex = 0,
   }) {
     if (mesh.triangles.isEmpty ||
         mesh.maxDimension <= 0 ||
@@ -97,13 +100,31 @@ class Software3dRenderer {
       cameraSettings,
     );
 
+    final sceneEvaluator = const GltfSceneEvaluator();
+    final nodeMatrices = sceneEvaluator.worldMatrices(
+      mesh,
+      timeMs: timeMs,
+      animationIndex: animationIndex,
+    );
     final worldVertices = <Vector3>[];
+    final worldNormals = <Vector3>[];
     final cameraVertices = <Vector3>[];
-    for (final vertex in mesh.vertices) {
+    for (var vertexIndex = 0; vertexIndex < mesh.vertices.length; vertexIndex++) {
+      final vertex = mesh.vertices[vertexIndex];
+      Float64List? nodeMatrix;
+      if (mesh.vertexNodeIndices.length == mesh.vertices.length) {
+        final nodeIndex = mesh.vertexNodeIndices[vertexIndex];
+        if (nodeIndex >= 0 && nodeIndex < nodeMatrices.length) {
+          nodeMatrix = nodeMatrices[nodeIndex];
+        }
+      }
+      final scenePosition = nodeMatrix == null
+          ? vertex
+          : sceneEvaluator.transformPoint(nodeMatrix, vertex);
       final local = Vector3(
-        (vertex.x - center.x) * unitScale * modelTransform.scale.x / 100,
-        (vertex.y - center.y) * unitScale * modelTransform.scale.y / 100,
-        (vertex.z - center.z) * unitScale * modelTransform.scale.z / 100,
+        (scenePosition.x - center.x) * unitScale * modelTransform.scale.x / 100,
+        (scenePosition.y - center.y) * unitScale * modelTransform.scale.y / 100,
+        (scenePosition.z - center.z) * unitScale * modelTransform.scale.z / 100,
       );
       final rotated = _rotate(local, modelTransform.rotation);
       final world = Vector3(
@@ -112,6 +133,31 @@ class Software3dRenderer {
         modelTransform.position.z + rotated.z,
       );
       worldVertices.add(world);
+      if (mesh.vertexNormals.length == mesh.vertices.length) {
+        final sourceNormal = mesh.vertexNormals[vertexIndex];
+        final nodeNormal = nodeMatrix == null
+            ? sourceNormal
+            : sceneEvaluator.transformNormal(nodeMatrix, sourceNormal);
+        final safeScaleX = modelTransform.scale.x.abs() < 1e-9
+            ? 1.0
+            : modelTransform.scale.x / 100;
+        final safeScaleY = modelTransform.scale.y.abs() < 1e-9
+            ? 1.0
+            : modelTransform.scale.y / 100;
+        final safeScaleZ = modelTransform.scale.z.abs() < 1e-9
+            ? 1.0
+            : modelTransform.scale.z / 100;
+        worldNormals.add(_normalize(_rotate(
+          Vector3(
+            nodeNormal.x / safeScaleX,
+            nodeNormal.y / safeScaleY,
+            nodeNormal.z / safeScaleZ,
+          ),
+          modelTransform.rotation,
+        )));
+      } else {
+        worldNormals.add(const Vector3(0, 0, 0));
+      }
 
       final relativeToCamera = Vector3(
         world.x - cameraTransform.position.x,
@@ -148,10 +194,17 @@ class Software3dRenderer {
       final worldA = worldVertices[triangle.a];
       final worldB = worldVertices[triangle.b];
       final worldC = worldVertices[triangle.c];
-      final normal = _normalize(_cross(
+      final faceNormal = _normalize(_cross(
         _subtract(worldB, worldA),
         _subtract(worldC, worldA),
       ));
+      final normal = mesh.vertexNormals.length == mesh.vertices.length
+          ? _normalize(_add(
+              _add(worldNormals[triangle.a], worldNormals[triangle.b]),
+              worldNormals[triangle.c],
+            ))
+          : faceNormal;
+      final shadingNormal = _length(normal) < 1e-9 ? faceNormal : normal;
       final faceCenter = Vector3(
         (worldA.x + worldB.x + worldC.x) / 3,
         (worldA.y + worldB.y + worldC.y) / 3,
@@ -162,9 +215,9 @@ class Software3dRenderer {
         cameraTransform.position.y - faceCenter.y,
         cameraTransform.position.z - faceCenter.z,
       ));
-      final twoSidedNormal = _dot(normal, viewDirection) < 0
-          ? _multiply(normal, -1)
-          : normal;
+      final twoSidedNormal = _dot(shadingNormal, viewDirection) < 0
+          ? _multiply(shadingNormal, -1)
+          : shadingNormal;
 
       var polygon = <_SceneVertex>[
         _SceneVertex(worldA, cameraVertices[triangle.a], focus),
@@ -246,6 +299,8 @@ class Software3dRenderer {
     required CameraSettings cameraSettings,
     List<SceneLight> lights = const [],
     bool centerOnModel = false,
+    int timeMs = 0,
+    int animationIndex = 0,
   }) {
     final triangles = projectTriangles(
       mesh: mesh,
@@ -258,6 +313,8 @@ class Software3dRenderer {
       cameraSettings: cameraSettings,
       lights: lights,
       centerOnModel: centerOnModel,
+      timeMs: timeMs,
+      animationIndex: animationIndex,
     );
     return Software3dRasterizer().rasterize(
       triangles,

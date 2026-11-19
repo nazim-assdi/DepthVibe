@@ -1,15 +1,15 @@
-import 'gltf_mesh_loader.dart';
+import 'gltf_scene_mesh_loader.dart';
 import 'obj_mesh_loader.dart';
 
 /// Dispatches local OBJ, glTF JSON and GLB binary model imports.
 class SceneMeshLoader {
   const SceneMeshLoader({
     this.objLoader = const ObjMeshLoader(),
-    this.gltfLoader = const GltfMeshLoader(),
+    this.gltfLoader = const GltfSceneMeshLoader(),
   });
 
   final ObjMeshLoader objLoader;
-  final GltfMeshLoader gltfLoader;
+  final GltfSceneMeshLoader gltfLoader;
 
   Future<ObjMesh> load(String path) {
     final extension = path.toLowerCase().split('.').last;

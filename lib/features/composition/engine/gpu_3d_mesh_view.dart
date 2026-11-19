@@ -1,6 +1,6 @@
 import 'dart:ui';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:nitro_webgpu/nitro_webgpu.dart';
 
 import '../domain/composition_models.dart';
@@ -26,6 +26,7 @@ class Gpu3dMeshView extends StatefulWidget {
     required this.lights,
     required this.compositionWidth,
     required this.compositionHeight,
+    this.timeMs = 0,
     this.baseWidth = 760,
     this.baseHeight = 760,
   });
@@ -37,6 +38,7 @@ class Gpu3dMeshView extends StatefulWidget {
   final List<SceneLight> lights;
   final double compositionWidth;
   final double compositionHeight;
+  final int timeMs;
   final double baseWidth;
   final double baseHeight;
 
@@ -102,6 +104,7 @@ class _Gpu3dMeshViewState extends State<Gpu3dMeshView> {
       cameraSettings: widget.cameraSettings,
       lights: widget.lights,
       centerOnModel: true,
+      timeMs: widget.timeMs,
     );
     _vertexData = const GpuMeshVertexPacker().pack(
       triangles: triangles,
@@ -121,6 +124,7 @@ class _Gpu3dMeshViewState extends State<Gpu3dMeshView> {
               lights: widget.lights,
               compositionWidth: widget.compositionWidth,
               compositionHeight: widget.compositionHeight,
+              timeMs: widget.timeMs,
             ),
           ),
           Positioned(

@@ -234,3 +234,17 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 - **Current hybrid boundary:** model parenting, camera projection and flat scene-light shading are still evaluated on the CPU before vertices are uploaded. The current WGSL shader passes projected vertex colour; GPU-side model transforms, per-pixel PBR/normal mapping, textures and GPU shadow passes are not yet wired.
 - **Platform presentation caveats:** the WebGPU package can use Vulkan, Metal, D3D12 and GL adapters where available. Some targets use CPU readback/upload for Flutter texture presentation, and Web builds do not currently have a browser WebGPU presenter. Hardware availability and driver features are checked at runtime.
 - **Remaining 3D scope:** extend glTF attributes (UVs/normals/tangents), images/samplers and node transforms; skinned/morph animation; GPU PBR; directional plus point/spot shadows; physically based depth of field; more robust multisampling and mobile performance stress tests. The existing CPU directional shadow/DOF approximations remain fallbacks, not full GPU effects.
+
+
+### glTF scene data and animation evaluation increment — 19 November 2026
+
+- Replaced the active GLB/GLTF import route with the `gltfx` glTF 2.0 parser. GLB and JSON glTF now resolve embedded and external buffers/images through the parser.
+- Imports the default scene graph, parent/child node links, node matrix or TRS transforms, triangle/strip/fan primitives, POSITION, NORMAL, TEXCOORD_0, indices, PBR base-colour factor, metallic/roughness factors, alpha mode and base-colour image bytes.
+- The renderer evaluates node translation/rotation/scale animation channels at the layer-local playhead time, including STEP, LINEAR (quaternion slerp) and CUBICSPLINE interpolation. The same evaluated pose feeds CPU preview, GPU vertex upload and 3D frame export.
+- Smooth vertex normals are retained and used for the preview lighting normal; node and model transforms apply inverse-transpose normal handling.
+
+### Current GLTF / GPU rendering limits
+
+- Base-colour texture bytes and UV0 are imported and retained, but texture images are not yet uploaded as GPU textures or sampled in the WGSL fragment shader. The current GPU shader still receives pre-shaded vertex colour; full UV texture sampling and material batching remain pending.
+- Metallic/roughness values and alpha modes are retained as material data; a full per-pixel metallic-roughness BRDF, normal/occlusion/emissive map sampling, alpha mask/blend parity, and GPU light evaluation remain pending.
+- Node TRS animation is evaluated for preview/export, but skeletal skinning, inverse-bind matrices, joint weights, morph targets and weights animation are not deformed/rendered yet.

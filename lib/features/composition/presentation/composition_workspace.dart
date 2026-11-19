@@ -794,6 +794,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
               }
               return Gpu3dMeshView(
                 mesh: mesh,
+                timeMs: math.max(0, timeMs - layer.startMs).toInt(),
                 baseWidth: baseWidth,
                 baseHeight: baseHeight,
                 modelTransform: resolved,

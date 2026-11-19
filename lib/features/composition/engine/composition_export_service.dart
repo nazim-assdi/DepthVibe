@@ -284,6 +284,7 @@ class CompositionExportService {
             cameraSettings: cameraLayer?.camera ?? const CameraSettings(),
             lights: lights,
             centerOnModel: false,
+            timeMs: localTimeMs,
           );
         } else {
           rgbaFrame = renderer.rasterizeFrame(

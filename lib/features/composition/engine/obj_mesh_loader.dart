@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui';
 
 import '../domain/composition_models.dart';
 
@@ -9,12 +11,28 @@ class ObjMaterial {
     this.green = 0.78,
     this.blue = 0.88,
     this.alpha = 1,
+    this.metallicFactor = 0,
+    this.roughnessFactor = 1,
+    this.baseColorTextureBytes,
+    this.alphaMode = 'OPAQUE',
+    this.doubleSided = false,
+    this.emissiveRed = 0,
+    this.emissiveGreen = 0,
+    this.emissiveBlue = 0,
   });
 
   final double red;
   final double green;
   final double blue;
   final double alpha;
+  final double metallicFactor;
+  final double roughnessFactor;
+  final Uint8List? baseColorTextureBytes;
+  final String alphaMode;
+  final bool doubleSided;
+  final double emissiveRed;
+  final double emissiveGreen;
+  final double emissiveBlue;
 }
 
 class ObjTriangle {
@@ -33,6 +51,11 @@ class ObjMesh {
     required this.materials,
     required this.boundsMin,
     required this.boundsMax,
+    this.textureCoordinates = const [],
+    this.vertexNormals = const [],
+    this.sceneNodes = const [],
+    this.animations = const [],
+    this.vertexNodeIndices = const [],
   });
 
   final List<Vector3> vertices;
@@ -40,6 +63,11 @@ class ObjMesh {
   final Map<String, ObjMaterial> materials;
   final Vector3 boundsMin;
   final Vector3 boundsMax;
+  final List<Offset> textureCoordinates;
+  final List<Vector3> vertexNormals;
+  final List<GltfMeshNodeMetadata> sceneNodes;
+  final List<GltfMeshAnimationMetadata> animations;
+  final List<int> vertexNodeIndices;
 
   Vector3 get center => Vector3(
         (boundsMin.x + boundsMax.x) / 2,
@@ -218,4 +246,62 @@ class ObjMeshLoader {
     }
     return Map.unmodifiable(result);
   }
+}
+
+
+/// A glTF node retained with its parent link and column-major local transform.
+class GltfMeshNodeMetadata {
+  const GltfMeshNodeMetadata({
+    required this.index,
+    required this.parentIndex,
+    required this.localMatrix,
+    required this.name,
+    this.meshIndex,
+    this.isMatrixTransform = false,
+    this.translation = const Vector3(0, 0, 0),
+    this.rotation = const [0, 0, 0, 1],
+    this.scale = const Vector3(1, 1, 1),
+  });
+
+  final int index;
+  final int? parentIndex;
+  final List<double> localMatrix;
+  final String? name;
+  final int? meshIndex;
+  final bool isMatrixTransform;
+  final Vector3 translation;
+  final List<double> rotation;
+  final Vector3 scale;
+}
+
+/// Animation channel decoded from glTF accessors.
+class GltfMeshAnimationChannel {
+  const GltfMeshAnimationChannel({
+    required this.nodeIndex,
+    required this.path,
+    required this.interpolation,
+    required this.times,
+    required this.values,
+    required this.componentCount,
+  });
+
+  final int nodeIndex;
+  final String path;
+  final String interpolation;
+  final List<double> times;
+  final List<double> values;
+  final int componentCount;
+}
+
+/// Imported glTF animation clip metadata, including decoded keyframe values.
+class GltfMeshAnimationMetadata {
+  const GltfMeshAnimationMetadata({
+    required this.name,
+    required this.durationSeconds,
+    required this.channels,
+  });
+
+  final String name;
+  final double durationSeconds;
+  final List<GltfMeshAnimationChannel> channels;
 }

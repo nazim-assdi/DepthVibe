@@ -21,6 +21,7 @@ class Software3dMeshView extends StatefulWidget {
     required this.lights,
     required this.compositionWidth,
     required this.compositionHeight,
+    this.timeMs = 0,
     this.maximumPreviewDimension = 640,
   });
 
@@ -31,6 +32,7 @@ class Software3dMeshView extends StatefulWidget {
   final List<SceneLight> lights;
   final double compositionWidth;
   final double compositionHeight;
+  final int timeMs;
   final int maximumPreviewDimension;
 
   @override
@@ -58,7 +60,8 @@ class _Software3dMeshViewState extends State<Software3dMeshView> {
         oldWidget.cameraSettings != widget.cameraSettings ||
         oldWidget.lights != widget.lights ||
         oldWidget.compositionWidth != widget.compositionWidth ||
-        oldWidget.compositionHeight != widget.compositionHeight) {
+        oldWidget.compositionHeight != widget.compositionHeight ||
+        oldWidget.timeMs != widget.timeMs) {
       _render();
     }
   }
@@ -94,6 +97,7 @@ class _Software3dMeshViewState extends State<Software3dMeshView> {
         cameraSettings: widget.cameraSettings,
         lights: widget.lights,
         centerOnModel: true,
+        timeMs: widget.timeMs,
       );
       final completer = Completer<ui.Image>();
       ui.decodeImageFromPixels(
