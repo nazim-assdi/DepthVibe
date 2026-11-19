@@ -225,6 +225,10 @@ class CompositionController extends ChangeNotifier {
       name: '${shape.name} mask',
       shape: shape,
       operation: operation,
+      left: shape == MaskShape.bezier || shape == MaskShape.polygon ? 0.2 : 0.05,
+      top: shape == MaskShape.bezier || shape == MaskShape.polygon ? 0.2 : 0.05,
+      width: shape == MaskShape.bezier || shape == MaskShape.polygon ? 0.6 : 0.9,
+      height: shape == MaskShape.bezier || shape == MaskShape.polygon ? 0.6 : 0.9,
       vertices: shape == MaskShape.bezier || shape == MaskShape.polygon
           ? const [
               MaskVertex(anchor: Vector2(0.2, 0.2)),
