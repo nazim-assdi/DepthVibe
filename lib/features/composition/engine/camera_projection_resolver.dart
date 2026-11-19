@@ -75,7 +75,7 @@ class CameraProjectionResolver {
             20.0,
             focus / math.max(nearPlane, distance) *
                 _fieldOfViewFactor(settings),
-          )
+          ).toDouble()
         : 1.0;
 
     return CameraProjectedTransform(
