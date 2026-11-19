@@ -157,7 +157,7 @@ void main() {
     expect(filters, hasLength(1));
     expect(filters.single, startsWith('format=rgba,geq='));
     expect(filters.single, contains('T'));
-    expect(filters.single, contains('r(X+'));
+    expect(filters.single, contains('r((X+'));
     expect(filters.single, contains('alpha(X,Y)'));
   });
 

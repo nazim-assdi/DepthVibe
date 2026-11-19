@@ -65,7 +65,7 @@ void main() {
     expect(triangles, hasLength(1));
     expect(triangles.single.a, isNot(Offset.zero));
     expect(triangles.single.distance, closeTo(1000, 0.001));
-    expect(triangles.single.color.alpha, 1);
+    expect(triangles.single.color.a, 1);
   });
 
   test('does not draw a mesh outside the active camera far plane', () {
