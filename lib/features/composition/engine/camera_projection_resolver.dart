@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../domain/composition_models.dart';
 import 'parent_transform_expression_resolver.dart';
+import 'parent_transform_resolver.dart';
 
 class CameraProjectedTransform {
   const CameraProjectedTransform({
