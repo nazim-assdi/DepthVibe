@@ -791,6 +791,66 @@ class CompositionController extends ChangeNotifier {
     _replace(layer.copyWith(audioSettings: settings));
   }
 
+  AudioBus addAudioBus({String? name}) {
+    final bus = AudioBus(
+      id: _id('bus'),
+      name: name ?? 'Bus ${_document.audioBuses.length}',
+    );
+    _set(_document.copyWith(
+      audioBuses: [..._document.audioBuses, bus],
+    ));
+    return bus;
+  }
+
+  void updateAudioBus(AudioBus updated) {
+    if (!_document.audioBuses.any((bus) => bus.id == updated.id)) return;
+    final buses = _document.audioBuses
+        .map((bus) => bus.id == updated.id ? updated : bus)
+        .toList();
+    _set(_document.copyWith(audioBuses: buses));
+  }
+
+  void removeAudioBus(String busId) {
+    final bus = _document.audioBuses.where((item) => item.id == busId);
+    if (bus.isEmpty || bus.first.isMaster) return;
+    final masterId = _document.audioBuses
+        .where((item) => item.isMaster)
+        .firstOrNull
+        ?.id;
+    final layers = _document.layers.map((layer) {
+      if (layer.audioSettings.busId != busId) return layer;
+      return layer.copyWith(
+        audioSettings: masterId == null
+            ? layer.audioSettings.copyWith(clearBus: true)
+            : layer.audioSettings.copyWith(busId: masterId),
+      );
+    }).toList();
+    _set(_document.copyWith(
+      audioBuses: _document.audioBuses
+          .where((item) => item.id != busId)
+          .toList(),
+      layers: layers,
+    ));
+  }
+
+  void assignSelectedAudioBus(String? busId) {
+    final layer = selectedLayer;
+    if (layer == null ||
+        (layer.kind != LayerKind.audio && layer.kind != LayerKind.video)) {
+      return;
+    }
+    if (busId != null &&
+        !_document.audioBuses.any((bus) => bus.id == busId)) {
+      return;
+    }
+    _replace(layer.copyWith(
+      audioSettings: layer.audioSettings.copyWith(
+        busId: busId,
+        clearBus: busId == null,
+      ),
+    ));
+  }
+
   void applyMotionTrack({
     required String layerId,
     required List<MotionTrackSample> samples,
