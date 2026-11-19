@@ -34,6 +34,53 @@ class PhotoshopImportResult {
 class PhotoshopImportService {
   const PhotoshopImportService();
 
+  List<EffectInstance> _adjustmentEffects(
+    PsdAdjustment? adjustment,
+    int sourceIndex,
+  ) {
+    if (adjustment == null) return const [];
+    final effects = <EffectInstance>[];
+    final prefix = 'psd_${sourceIndex}_';
+
+    void add(String effectId, String name, Map<String, double> parameters) {
+      effects.add(EffectInstance(
+        id: prefix + effectId,
+        effectId: effectId,
+        name: name,
+        parameters: parameters,
+      ));
+    }
+
+    if (adjustment case PsdBrightnessContrastAdjustment value) {
+      final brightness = (value.brightness / 100)
+          .clamp(-1.0, 1.0)
+          .toDouble();
+      final contrast = (1 + value.contrast / 100)
+          .clamp(0.0, 3.0)
+          .toDouble();
+      if (brightness.abs() >= 0.001) {
+        add('brightness', 'Photoshop Brightness', {'value': brightness});
+      }
+      if ((contrast - 1).abs() >= 0.001) {
+        add('contrast', 'Photoshop Contrast', {'value': contrast});
+      }
+    } else if (adjustment case PsdSingleValueAdjustment value) {
+      if (value.type == PsdAdjustmentType.posterize) {
+        add('posterize', 'Photoshop Posterize', {
+          'levels': value.value.clamp(2, 32).toDouble(),
+        });
+      } else if (value.type == PsdAdjustmentType.threshold) {
+        add('threshold', 'Photoshop Threshold', {
+          'value': value.value.clamp(0, 255).toDouble(),
+        });
+      }
+    } else if (adjustment is PsdInvertAdjustment) {
+      add('invert', 'Photoshop Invert', const {});
+    }
+
+    return List.unmodifiable(effects);
+  }
+
   Future<PhotoshopImportResult> importDocument(String path) async {
     final file = File(path);
     if (!await file.exists()) {
@@ -149,6 +196,7 @@ class PhotoshopImportService {
         smartObjectSourceUri: smartObjectSourceUri,
         smartObjectResourceId: smartObjectResourceId,
         adjustmentKey: adjustment?.blockKey,
+        adjustmentEffects: _adjustmentEffects(adjustment, index),
       ));
 
       if (isGroup) groupStack.add(index);
@@ -187,6 +235,7 @@ class PhotoshopImportService {
         smartObjectSourceUri: asset.smartObjectSourceUri,
         smartObjectResourceId: asset.smartObjectResourceId,
         adjustmentKey: asset.adjustmentKey,
+        adjustmentEffects: asset.adjustmentEffects,
       ));
     }
     assets
