@@ -137,6 +137,7 @@ class CompositionController extends ChangeNotifier {
         smartObjectSourceUri: asset.smartObjectSourceUri,
         smartObjectResourceId: asset.smartObjectResourceId,
         photoshopAdjustmentKey: asset.adjustmentKey,
+        effects: asset.adjustmentEffects,
         transform: initialTransform,
       );
       layers.add(imported);
