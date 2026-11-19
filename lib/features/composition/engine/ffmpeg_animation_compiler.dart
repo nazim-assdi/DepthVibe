@@ -177,7 +177,7 @@ class FfmpegAnimationCompiler {
       for (final candidate in edgeDistances.skip(1)) {
         edgeDistance = 'min(' + edgeDistance + ',' + candidate + ')';
       }
-      final expandedDistance = '(' + edgeDistance + '+' + _n(mask.expansion) + ')';
+      final expandedDistance = '(' + edgeDistance + '+' + e + ')';
       distance = 'if(gt(' + parity + ',0.5),' + expandedDistance +
           ',-(' + expandedDistance + '))';
     } else {
