@@ -2841,10 +2841,14 @@ class _AnimatedMaskClipper extends CustomClipper<Path> {
   final int timeMs;
 
   Path _shape(MaskModel mask, Size size) {
-    final left = mask.valueAt('left', timeMs).clamp(0.0, 1.0);
-    final top = mask.valueAt('top', timeMs).clamp(0.0, 1.0);
-    final width = mask.valueAt('width', timeMs).clamp(0.01, 1.0);
-    final height = mask.valueAt('height', timeMs).clamp(0.01, 1.0);
+    final left =
+        mask.valueAt('left', timeMs).clamp(0.0, 1.0).toDouble();
+    final top =
+        mask.valueAt('top', timeMs).clamp(0.0, 1.0).toDouble();
+    final width =
+        mask.valueAt('width', timeMs).clamp(0.01, 1.0).toDouble();
+    final height =
+        mask.valueAt('height', timeMs).clamp(0.01, 1.0).toDouble();
     final bounds = Rect.fromLTWH(
       left * size.width,
       top * size.height,
@@ -2859,13 +2863,21 @@ class _AnimatedMaskClipper extends CustomClipper<Path> {
         return Path()..addOval(bounds);
       case MaskShape.polygon:
       case MaskShape.bezier:
-        if (mask.vertices.length < 3) return Path();
+        if (mask.vertices.length < 3) return Path()..addRect(bounds);
         final base = _baseOutline(mask);
         if (base.isEmpty) return Path();
-        final minX = base.map((point) => point.dx).reduce(math.min);
-        final maxX = base.map((point) => point.dx).reduce(math.max);
-        final minY = base.map((point) => point.dy).reduce(math.min);
-        final maxY = base.map((point) => point.dy).reduce(math.max);
+        final minX = base
+            .map((point) => point.dx)
+            .reduce((a, b) => a < b ? a : b);
+        final maxX = base
+            .map((point) => point.dx)
+            .reduce((a, b) => a > b ? a : b);
+        final minY = base
+            .map((point) => point.dy)
+            .reduce((a, b) => a < b ? a : b);
+        final maxY = base
+            .map((point) => point.dy)
+            .reduce((a, b) => a > b ? a : b);
         final spanX = (maxX - minX).abs() < 0.0001 ? 1.0 : maxX - minX;
         final spanY = (maxY - minY).abs() < 0.0001 ? 1.0 : maxY - minY;
         Offset mapPoint(double x, double y) => Offset(
