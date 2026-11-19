@@ -30,7 +30,7 @@ class AudioBusCompiler {
       final release = bus.compressorReleaseMs.clamp(10.0, 2000.0)
           .toStringAsFixed(1);
       final makeup = _linear(
-        bus.makeupGainDb.clamp(-12.0, 24.0).toDouble(),
+        bus.makeupGainDb.clamp(0.0, 24.0).toDouble(),
       );
       filters.add(
         'acompressor=threshold=$threshold:ratio=$ratio:'
