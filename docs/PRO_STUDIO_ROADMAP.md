@@ -176,3 +176,7 @@ Local FFmpeg 7.1.5 smoke tests succeeded for animated bus Gain/Pan, Bezier frame
 ### Camera preview/export increment — 19 November 2026
 
 A shared **2.5D perspective projection** now runs in both the compositor preview and FFmpeg export when an enabled Camera layer is present. The focus plane remains neutral by default; relative layer depth, Field of View and focal length influence projected position and scale. Orthographic projection bypasses depth scaling, and a near-plane guard limits extreme values. This is not a full 3D renderer: it does not render mesh geometry, camera orientation, materials, light interaction, shadow maps or depth-of-field blur. The Depth of Field UI control is visibly marked as pending rather than pretending to affect the render.
+
+### Tracking geometry foundation — 19 November 2026
+
+A pure-Dart **planar homography solver** now estimates a 3×3 projective transform from four or more matched point pairs, supports transforming points/polygons, and reports mean/maximum reprojection error. The motion-tracking service exposes the estimator for a future feature-matching provider. The existing FFmpeg tracker still supplies translation-only template matches; automatic planar feature detection, per-frame homography capture/application, perspective preview/export warp and 3D camera solve remain outstanding.
