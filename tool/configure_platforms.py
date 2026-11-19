@@ -72,8 +72,40 @@ def add_camera_compile_dependency(path: Path) -> None:
     if not path.exists():
         return
     text = path.read_text(encoding="utf-8")
-    if "androidx.concurrent:concurrent-futures:1.2.0" in text:
+    dependency = "androidx.concurrent:concurrent-futures:1.2.0"
+    if dependency in text and "plugins.withId" in text:
         return
+    if dependency in text and "afterEvaluate" in text:
+        if path.name.endswith(".kts"):
+            legacy_block = """
+subprojects {
+    afterEvaluate {
+        if (name == "camera_android_camerax") {
+            dependencies.add("implementation", "androidx.concurrent:concurrent-futures:1.2.0")
+        }
+    }
+}
+"""
+        else:
+            legacy_block = """
+subprojects {
+    afterEvaluate {
+        if (name == 'camera_android_camerax') {
+            dependencies {
+                implementation 'androidx.concurrent:concurrent-futures:1.2.0'
+            }
+        }
+    }
+}
+"""
+        text = text.replace(legacy_block, "", 1)
+        if dependency in text:
+            raise RuntimeError(
+                f"Found an older camera dependency hook in {path}; remove it before continuing."
+            )
+    elif dependency in text:
+        return
+
     if path.name.endswith(".kts"):
         block = """
 subprojects {
