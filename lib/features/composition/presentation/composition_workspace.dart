@@ -244,8 +244,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
 
   Future<void> _editBezierCurve(
     String property,
-    BezierCurve initialCurve,
-  ) async {
+    BezierCurve initialCurve, {
+    String? effectId,
+    int? timeMs,
+  }) async {
     var draft = initialCurve;
     final result = await showDialog<BezierCurve>(
       context: context,
@@ -289,7 +291,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       ),
     );
     if (result == null || !mounted) return;
-    _controller.setBezierCurve(property, result);
+    _controller.setBezierCurve(
+      property,
+      result,
+      effectId: effectId,
+      timeMs: timeMs,
+    );
     setState(() => _notice = 'Bezier curve updated for $property');
   }
 
@@ -699,7 +706,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                for (final panel in const ['Layers', 'Timing', 'Transform', 'Shape', 'Effects', 'Masks', 'Audio', 'Tracking', 'Transitions', 'Parent', '3D'])
+                for (final panel in const ['Layers', 'Timing', 'Transform', 'Animation', 'Shape', 'Effects', 'Masks', 'Audio', 'Tracking', 'Transitions', 'Parent', '3D'])
                   TextButton(
                     onPressed: () => setState(() => _panel = panel),
                     child: Text(panel, style: TextStyle(fontSize: 10, fontWeight: _panel == panel ? FontWeight.w900 : FontWeight.normal)),
@@ -727,6 +734,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         return _buildTimingPanel(layer);
       case 'Transform':
         return _buildTransformPanel(layer);
+      case 'Animation':
+        return _buildAnimationPanel(layer);
       case 'Shape':
         return _buildShapePanel(layer);
       case 'Effects':
@@ -984,6 +993,175 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
           },
         ),
       ],
+    );
+  }
+
+  Widget _buildAnimationPanel(CompositionLayer layer) {
+    final trackCount = layer.keyframeTracks.length +
+        layer.effects.fold<int>(
+          0,
+          (count, effect) => count + effect.keyframeTracks.length,
+        );
+    final cards = <Widget>[
+      _panelHeader('UNIFIED GRAPH EDITOR', Icons.timeline),
+      const Text(
+        'Every animated property on this layer is listed here. Choose a keyframe to adjust its interpolation and open the same Bezier graph editor.',
+        style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
+      ),
+      const SizedBox(height: 8),
+      if (trackCount == 0)
+        const Card(
+          child: Padding(
+            padding: EdgeInsets.all(12),
+            child: Text(
+              'No animated properties yet. Add keyframes in Transform, Effects or Audio.',
+              style: TextStyle(fontSize: 11),
+            ),
+          ),
+        ),
+    ];
+
+    for (final track in layer.keyframeTracks) {
+      cards.add(_buildUnifiedTrackCard(
+        title: track.property,
+        track: track,
+      ));
+    }
+    for (final effect in layer.effects) {
+      for (final track in effect.keyframeTracks) {
+        cards.add(_buildUnifiedTrackCard(
+          title: '${effect.name} · ${track.property}',
+          track: track,
+          effectId: effect.id,
+        ));
+      }
+    }
+    for (final mask in layer.masks) {
+      for (final track in mask.keyframeTracks) {
+        cards.add(_buildUnifiedTrackCard(
+          title: 'Mask · ${mask.name} · ${track.property}',
+          track: track,
+          maskId: mask.id,
+        ));
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: cards,
+    );
+  }
+
+  Widget _buildUnifiedTrackCard({
+    required String title,
+    required KeyframeTrack track,
+    String? effectId,
+    String? maskId,
+  }) {
+    final frames = [...track.keyframes]
+      ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
+    final first = frames.first;
+    final active = frames.firstWhere(
+      (frame) => frame.timeMs == _controller.document.playheadMs,
+      orElse: () => first,
+    );
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${frames.length} keys',
+                  style: const TextStyle(
+                    fontSize: 9,
+                    color: Color(0xFF9AA8BD),
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Open keyframe in timeline',
+                  onPressed: () => _controller.setPlayhead(active.timeMs),
+                  icon: const Icon(Icons.my_location, size: 15),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Edit cubic Bezier graph',
+                  onPressed: maskId == null
+                      ? () => _editBezierCurve(
+                            track.property,
+                            active.bezier,
+                            effectId: effectId,
+                            timeMs: active.timeMs,
+                          )
+                      : () => _editMaskBezierCurve(
+                            maskId,
+                            track.property,
+                            active.bezier,
+                            active.timeMs,
+                          ),
+                  icon: const Icon(Icons.timeline, size: 16),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                const Text(
+                  'Interpolation',
+                  style: TextStyle(fontSize: 9, color: Color(0xFF9AA8BD)),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButton<Interpolation>(
+                    isExpanded: true,
+                    value: active.interpolation,
+                    underline: const SizedBox.shrink(),
+                    items: Interpolation.values
+                        .map((value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(
+                                value.name,
+                                style: const TextStyle(fontSize: 10),
+                              ),
+                            ))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      _controller.setInterpolation(
+                        track.property,
+                        value,
+                        effectId: effectId,
+                        timeMs: active.timeMs,
+                      );
+                      if (maskId != null) {
+                        _controller.setMaskInterpolation(
+                          maskId,
+                          track.property,
+                          value,
+                          timeMs: active.timeMs,
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
