@@ -2301,6 +2301,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                         ),
                       ),
                       children: [
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: OutlinedButton.icon(
+                            onPressed: mask.vertices.length < 3
+                                ? null
+                                : () => _controller.keyframeMaskPath(mask.id),
+                            icon: const Icon(Icons.key, size: 15),
+                            label: const Text('KEYFRAME FULL MASK'),
+                          ),
+                        ),
                         for (var index = 0; index < mask.vertices.length; index++)
                           Builder(
                             builder: (context) {
