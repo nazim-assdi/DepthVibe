@@ -142,7 +142,7 @@ class FfmpegFilterCompiler {
   String _compileThreshold(double value) {
     final threshold = value.clamp(0.0, 255.0).toStringAsFixed(2);
     final expression = "if(gte(val,$threshold),255,0)";
-    return "format=rgba,lutrgb=r='$expression':g='$expression':b='$expression'";
+    return "format=rgba,lutrgb=r='$expression':g='$expression':b='$expression':a=val";
   }
 
   String? compileTransition(CompositionTransition transition) {
