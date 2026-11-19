@@ -66,6 +66,15 @@ jobs:
       - name: Generate Flutter platform runners
         shell: bash
         run: bash tool/bootstrap_platforms.sh
+      - name: Pre-vendor WebGPU native library outside the plugin symlink
+        shell: pwsh
+        run: |
+          $packages = Get-Content .dart_tool/package_config.json -Raw | ConvertFrom-Json
+          $plugin = $packages.packages | Where-Object { $_.name -eq "nitro_webgpu" }
+          if ($null -eq $plugin) { throw "nitro_webgpu package was not resolved." }
+          $packageRoot = ([Uri]$plugin.rootUri).LocalPath
+          & bash "$packageRoot/scripts/fetch_wgpu_native.sh" --targets windows-x86_64-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - run: flutter analyze --no-fatal-infos
       - run: flutter build windows --release
       - uses: actions/upload-artifact@v4
