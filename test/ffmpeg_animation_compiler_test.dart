@@ -173,6 +173,83 @@ void main() {
     expect(bezierEdges, greaterThan(polygonEdges));
   });
 
+  test('compiles animated polygon anchors into frame-evaluated mask paths', () {
+    final expression = compiler.maskAlphaExpression(
+      [
+        MaskModel(
+          id: 'animated-polygon',
+          name: 'Animated Polygon',
+          shape: MaskShape.polygon,
+          vertices: const [
+            MaskVertex(anchor: Vector2(0.1, 0.2)),
+            MaskVertex(anchor: Vector2(0.9, 0.2)),
+            MaskVertex(anchor: Vector2(0.5, 0.9)),
+          ],
+          keyframeTracks: const [
+            KeyframeTrack(
+              property: 'vertex.0.anchor.x',
+              keyframes: [
+                ScalarKeyframe(timeMs: 0, value: 0.1),
+                ScalarKeyframe(timeMs: 1000, value: 0.4),
+              ],
+            ),
+          ],
+        ),
+      ],
+      timeVariable: 'T',
+    );
+
+    expect(expression, contains('if(lt(T,1.00000)'));
+    expect(expression, contains('0.40000'));
+    expect(expression, contains('hypot('));
+    expect(expression, contains('mod('));
+  });
+
+  test('compiles animated Bezier anchors and tangent handles into each mask frame', () {
+    final expression = compiler.maskAlphaExpression(
+      [
+        MaskModel(
+          id: 'animated-bezier',
+          name: 'Animated Bezier',
+          shape: MaskShape.bezier,
+          vertices: const [
+            MaskVertex(
+              anchor: Vector2(0.2, 0.2),
+              outHandle: Vector2(0.1, 0),
+            ),
+            MaskVertex(
+              anchor: Vector2(0.8, 0.2),
+              inHandle: Vector2(-0.1, 0.1),
+            ),
+            MaskVertex(anchor: Vector2(0.5, 0.8)),
+          ],
+          keyframeTracks: const [
+            KeyframeTrack(
+              property: 'vertex.0.anchor.x',
+              keyframes: [
+                ScalarKeyframe(timeMs: 0, value: 0.2),
+                ScalarKeyframe(timeMs: 1000, value: 0.35),
+              ],
+            ),
+            KeyframeTrack(
+              property: 'vertex.0.outHandle.y',
+              keyframes: [
+                ScalarKeyframe(timeMs: 0, value: 0),
+                ScalarKeyframe(timeMs: 1000, value: 0.2),
+              ],
+            ),
+          ],
+        ),
+      ],
+      timeVariable: 'T',
+    );
+
+    expect(expression, contains('if(lt(T,1.00000)'));
+    expect(expression, contains('0.35000'));
+    expect(expression, contains('0.20000'));
+    expect(expression, contains('hypot('));
+  });
+
   test('compiles wipe alpha and slide position transitions', () {
     const layer = CompositionLayer(
       id: 'clip-b',
