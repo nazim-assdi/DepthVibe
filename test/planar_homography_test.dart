@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:depthvibe/features/composition/domain/composition_models.dart';
 import 'package:depthvibe/features/composition/engine/planar_homography.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -111,25 +109,27 @@ void main() {
   });
 
   test('reports infinity when a point lies on the projective horizon', () {
+    const source = [
+      Vector2(0, 0),
+      Vector2(50, 0),
+      Vector2(50, 50),
+      Vector2(0, 50),
+    ];
+    final destination = source.map((point) {
+      final denominator = 1 - 0.01 * point.x;
+      return Vector2(
+        point.x / denominator,
+        point.y / denominator,
+      );
+    }).toList();
     final transform = Homography2D.fromCorrespondences(
-      source: const [
-        Vector2(0, 0),
-        Vector2(100, 0),
-        Vector2(100, 100),
-        Vector2(0, 100),
-      ],
-      destination: const [
-        Vector2(0, 0),
-        Vector2(100, 0),
-        Vector2(100, 100),
-        Vector2(0, 100),
-      ],
+      source: source,
+      destination: destination,
     );
 
     expect(
-      () => transform.transform(const Vector2(0, 0)),
-      returnsNormally,
+      () => transform.transform(const Vector2(100, 10)),
+      throwsStateError,
     );
-    expect(math.sqrt(0), 0);
   });
 }
