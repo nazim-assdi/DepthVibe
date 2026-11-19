@@ -84,7 +84,7 @@ void main() {
       focusDistance: 1000,
       aperture: 22,
     );
-    final edgePixel = (4 * 9 + 2) * 4;
+    final edgePixel = (4 * 9 + 3) * 4;
     expect(sharp.rgba[edgePixel + 3], 255);
     expect(blurred.rgba[edgePixel + 3], lessThan(sharp.rgba[edgePixel + 3]));
     expect(blurred.depth[4 * 9 + 4], 1200);
