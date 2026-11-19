@@ -246,6 +246,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     String property,
     BezierCurve initialCurve, {
     String? effectId,
+    String? maskId,
     int? timeMs,
   }) async {
     var draft = initialCurve;
@@ -291,12 +292,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       ),
     );
     if (result == null || !mounted) return;
-    _controller.setBezierCurve(
-      property,
-      result,
-      effectId: effectId,
-      timeMs: timeMs,
-    );
+    if (maskId != null) {
+      _controller.setMaskBezierCurve(
+        maskId,
+        property,
+        result,
+        timeMs: timeMs,
+      );
+    } else {
+      _controller.setBezierCurve(
+        property,
+        result,
+        effectId: effectId,
+        timeMs: timeMs,
+      );
+    }
     setState(() => _notice = 'Bezier curve updated for $property');
   }
 
@@ -1107,11 +1117,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                             effectId: effectId,
                             timeMs: active.timeMs,
                           )
-                      : () => _editMaskBezierCurve(
-                            maskId,
+                      : () => _editBezierCurve(
                             track.property,
                             active.bezier,
-                            active.timeMs,
+                            maskId: maskId,
+                            timeMs: active.timeMs,
                           ),
                   icon: const Icon(Icons.timeline, size: 16),
                 ),
@@ -1140,17 +1150,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                         .toList(),
                     onChanged: (value) {
                       if (value == null) return;
-                      _controller.setInterpolation(
-                        track.property,
-                        value,
-                        effectId: effectId,
-                        timeMs: active.timeMs,
-                      );
                       if (maskId != null) {
                         _controller.setMaskInterpolation(
                           maskId,
                           track.property,
                           value,
+                          timeMs: active.timeMs,
+                        );
+                      } else {
+                        _controller.setInterpolation(
+                          track.property,
+                          value,
+                          effectId: effectId,
                           timeMs: active.timeMs,
                         );
                       }
