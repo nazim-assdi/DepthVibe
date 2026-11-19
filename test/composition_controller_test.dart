@@ -213,6 +213,54 @@ void main() {
       controller.dispose();
     });
 
+    test('audio tracks can be routed to a submix bus and back to master', () {
+      final controller = CompositionController();
+      controller.addLayer(LayerKind.audio);
+
+      final master = controller.document.audioBuses.single;
+      final musicBus = controller.addAudioBus(name: 'Music');
+
+      controller.assignSelectedAudioBus(musicBus.id);
+      expect(controller.selectedLayer!.audioSettings.busId, musicBus.id);
+
+      controller.removeAudioBus(musicBus.id);
+      expect(controller.document.audioBuses, hasLength(1));
+      expect(controller.selectedLayer!.audioSettings.busId, master.id);
+      controller.dispose();
+    });
+
+    test('master audio bus cannot be removed', () {
+      final controller = CompositionController();
+      final master = controller.document.audioBuses.single;
+
+      controller.removeAudioBus(master.id);
+
+      expect(controller.document.audioBuses, hasLength(1));
+      expect(controller.document.audioBuses.single.isMaster, isTrue);
+      controller.dispose();
+    });
+
+    test('audio bus dynamics can be updated without changing its identity', () {
+      final controller = CompositionController();
+      final bus = controller.addAudioBus(name: 'Dialogue');
+
+      controller.updateAudioBus(bus.copyWith(
+        compressorEnabled: true,
+        compressorThresholdDb: -24,
+        compressorRatio: 5,
+        limiterEnabled: true,
+      ));
+
+      final updated = controller.document.audioBuses
+          .firstWhere((item) => item.id == bus.id);
+      expect(updated.name, 'Dialogue');
+      expect(updated.compressorEnabled, isTrue);
+      expect(updated.compressorThresholdDb, -24);
+      expect(updated.compressorRatio, 5);
+      expect(updated.limiterEnabled, isTrue);
+      controller.dispose();
+    });
+
     test('Bezier mask handles can be edited independently', () {
       final controller = CompositionController();
       controller.addLayer(LayerKind.shape);
