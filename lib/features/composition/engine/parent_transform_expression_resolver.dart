@@ -13,6 +13,7 @@ class ResolvedTransformExpressions {
     required this.rotationY,
     required this.rotationZ,
     required this.opacity,
+    required this.enabled,
   });
 
   final String positionX;
@@ -25,6 +26,7 @@ class ResolvedTransformExpressions {
   final String rotationY;
   final String rotationZ;
   final String opacity;
+  final bool enabled;
 }
 
 /// Compiles the same additive parent-chain transform used by the 2D preview
@@ -45,6 +47,7 @@ class ParentTransformExpressionResolver {
     };
     final visited = <String>{layer.id};
     var current = _local(layer);
+    var enabled = layer.enabled;
 
     var parentId = layer.parentId;
     while (parentId != null) {
@@ -56,10 +59,23 @@ class ParentTransformExpressionResolver {
       final parent = byId[parentId];
       if (parent == null) break;
       final parentLocal = _local(parent);
+      enabled = enabled && parent.enabled;
       current = _combine(parentLocal, current);
       parentId = parent.parentId;
     }
-    return current;
+    return ResolvedTransformExpressions(
+      positionX: current.positionX,
+      positionY: current.positionY,
+      positionZ: current.positionZ,
+      scaleX: current.scaleX,
+      scaleY: current.scaleY,
+      scaleZ: current.scaleZ,
+      rotationX: current.rotationX,
+      rotationY: current.rotationY,
+      rotationZ: current.rotationZ,
+      opacity: current.opacity,
+      enabled: enabled,
+    );
   }
 
   ResolvedTransformExpressions _local(CompositionLayer layer) {
@@ -86,6 +102,7 @@ class ParentTransformExpressionResolver {
         layer.transform.opacity,
         time: 'T',
       ),
+      enabled: layer.enabled,
     );
   }
 
@@ -111,6 +128,7 @@ class ParentTransformExpressionResolver {
       rotationY: rotation(parent.rotationY, child.rotationY),
       rotationZ: rotation(parent.rotationZ, child.rotationZ),
       opacity: '((' + parent.opacity + ')*(' + child.opacity + ')/100)',
+      enabled: parent.enabled && child.enabled,
     );
   }
 }
