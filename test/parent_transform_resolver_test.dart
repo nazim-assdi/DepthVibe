@@ -3,6 +3,29 @@ import 'package:depthvibe/features/composition/engine/parent_transform_resolver.
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('disabled group parent hides nested child layers', () {
+    const group = CompositionLayer(
+      id: 'group',
+      name: 'PSD Group',
+      kind: LayerKind.precomposition,
+      enabled: false,
+    );
+    const child = CompositionLayer(
+      id: 'child',
+      name: 'Child Layer',
+      kind: LayerKind.image,
+      parentId: 'group',
+    );
+
+    final resolved = const ParentTransformResolver().resolve(
+      layer: child,
+      timeMs: 0,
+      layers: const [group, child],
+    );
+
+    expect(resolved.enabled, isFalse);
+  });
+
   test('parent transform is inherited through a null controller', () {
     const parent = CompositionLayer(
       id: 'null-1',
