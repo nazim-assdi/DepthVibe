@@ -474,8 +474,9 @@ class CompositionController extends ChangeNotifier {
 
     KeyframeTrack update(KeyframeTrack track) {
       if (track.property != property) return track;
+      final targetTimeMs = timeMs ?? _document.playheadMs;
       final frameIndex = track.keyframes.indexWhere(
-        (item) => item.timeMs == _document.playheadMs,
+        (item) => item.timeMs == targetTimeMs,
       );
       if (frameIndex < 0) return track;
       final frames = [...track.keyframes];
@@ -505,6 +506,7 @@ class CompositionController extends ChangeNotifier {
     String property,
     BezierCurve curve, {
     String? effectId,
+    int? timeMs,
   }) {
     final layer = selectedLayer;
     if (layer == null) return;
@@ -722,6 +724,39 @@ class CompositionController extends ChangeNotifier {
       tracks.add(yTrack);
     } else {
       tracks[yIndex] = yTrack;
+    }
+    _replace(layer.copyWith(keyframeTracks: tracks));
+  }
+
+  void setAudioPan(double value, {bool keyframe = false}) {
+    final layer = selectedLayer;
+    if (layer == null ||
+        (layer.kind != LayerKind.audio && layer.kind != LayerKind.video)) {
+      return;
+    }
+    final bounded = value.clamp(-1.0, 1.0).toDouble();
+    if (!keyframe) {
+      _replace(layer.copyWith(
+        audioSettings: layer.audioSettings.copyWith(pan: bounded),
+      ));
+      return;
+    }
+    final index = layer.keyframeTracks.indexWhere(
+      (track) => track.property == 'audio.pan',
+    );
+    final track = index < 0
+        ? const KeyframeTrack(property: 'audio.pan')
+        : layer.keyframeTracks[index];
+    final updated = track.upsert(ScalarKeyframe(
+      timeMs: _document.playheadMs,
+      value: bounded,
+      interpolation: Interpolation.easeInOut,
+    ));
+    final tracks = [...layer.keyframeTracks];
+    if (index < 0) {
+      tracks.add(updated);
+    } else {
+      tracks[index] = updated;
     }
     _replace(layer.copyWith(keyframeTracks: tracks));
   }
