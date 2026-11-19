@@ -2390,7 +2390,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             ),
           ),
         const Text(
-          'Rectangle, ellipse, polygon and cubic Bezier masks support feather, expansion and boolean operations. Polygon/Bezier anchors and tangent handles can be keyframed for per-frame rotoscoping.',
+          'Polygon/Bezier anchors and tangent handles can be keyframed for per-frame rotoscoping. Export renders animated feather/expansion; the live canvas clip uses hard edges and does not yet preview feather or per-mask alpha.',
           style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
         ),
       ],
@@ -2637,6 +2637,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             for (final keyframe in track.keyframes) keyframe.timeMs,
           for (final effect in layer.effects)
             for (final track in effect.keyframeTracks)
+              for (final keyframe in track.keyframes) keyframe.timeMs,
+          for (final mask in layer.masks)
+            for (final track in mask.keyframeTracks)
               for (final keyframe in track.keyframes) keyframe.timeMs,
         ];
         return GestureDetector(
