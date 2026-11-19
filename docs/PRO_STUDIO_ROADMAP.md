@@ -146,3 +146,29 @@ GitHub Actions runs were created by the commits, but the latest observed runs we
 ### Still outstanding from the requested pro-studio scope
 
 The Bezier graph is currently exposed for transform-property tracks; a unified graph editor for every effect/audio property remains. Animated mask properties and rotoscoping are not complete. The waveform is currently a static cached clip thumbnail, not a zoomable sample-accurate envelope editor; full automation lanes, bus routing and advanced dynamics are not complete. Preview/export parity still needs frame-by-frame validation for every blend mode and transition. The cross-platform 3D camera/light renderer, planar/perspective/3D tracking, complete PSD group/clipping/adjustment/smart-object fidelity, and a true GPU multi-pass VFX pipeline remain separate engineering milestones.
+
+## Implementation Update — 19 November 2026 (continued)
+
+The following additional work is now committed on `main`:
+
+- **Audio bus automation:** each Master/Submix bus has keyframe tracks for Gain and Pan. The Bus Mixer exposes keyframe controls, the unified Animation panel lists bus tracks, and Bezier editing/interpolation can target a bus keyframe. FFmpeg export compiles Gain to frame-evaluated volume and Pan to sample-time stereo expressions.
+- **Bus dynamics and routing:** track-to-bus routing, submix aggregation, bus gain/pan, compressor, makeup gain and limiter are connected to the export graph. Sidechain trigger sources are split so ducking and bus routing can both consume them.
+- **Transition frame checks:** new transitions snap to the composition frame grid; the editor reports off-grid times, missing layers, out-of-range transitions and clip-range warnings.
+- **Parent/group transform parity:** export compiles the same additive position/scale/rotation/opacity parent-chain math as the preview. Disabled PSD folder parents now hide descendants in preview and export.
+- **PSD structure:** folder start/end records become structural group layers, nested parent references and clipping-base references are retained, embedded Smart Object source files are extracted, and embedded PSD/PSB merged previews are decoded when possible.
+- **Partial PSD adjustment rendering:** Brightness/Contrast, Invert, Posterize and Threshold are mapped to native compositor effects where the PSD data is recognized. Adjustment layers run over the previously composited frame at their layer-stack position. Posterize and Threshold use alpha-preserving LUT filters rather than relying on optional FFmpeg filter names.
+- **CPU VFX fallback:** procedural displacement and particle dust compile to FFmpeg per-frame pixel expressions. These are CPU export passes, not GPU render passes.
+
+### Latest verification notes
+
+Local FFmpeg 7.1.5 smoke tests succeeded for animated bus Gain/Pan, Bezier frame-evaluated scaling, displacement, particle dust, Threshold and Posterize LUT passes. GitHub Actions for the latest commit are still queued; Flutter analyze/tests and platform builds therefore remain **pending CI confirmation**. No new APK/desktop release artifact has been produced in this update.
+
+### Remaining gaps / explicit limits
+
+- Bus Gain/Pan automation is wired; bus compressor threshold/ratio/attack/release and EQ controls are still static parameters, not fully automated lanes.
+- Animated masks currently cover geometry bounds, feather, expansion and opacity; animated individual vertex/tangent paths and rotoscoping remain incomplete.
+- PSD clipping-base references are imported and retained but are not yet applied as a true alpha clipping stack in the renderer. Embedded Smart Objects retain their source and a flattened merged preview; live re-render/relink editing is not implemented. Adjustment coverage is partial and does not reproduce every Photoshop adjustment, mask, style or filter.
+- Blend modes still need frame-by-frame preview/export parity testing.
+- Camera/light records and 3D transforms still do not have an integrated GLB/OBJ scene renderer, depth-of-field or shadow-map pipeline.
+- Tracking is still template-based translation tracking; planar homography tracking, perspective feature tracking and 3D camera solve remain outstanding.
+- Displacement and particles currently use a CPU FFmpeg backend; GPU multi-pass render graph, caching and real-time preview integration remain outstanding.
