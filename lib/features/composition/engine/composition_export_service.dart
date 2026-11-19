@@ -713,7 +713,7 @@ class CompositionExportService {
       busOutputIndex++;
     }
 
-    if (busOutputs.isEmpty) {
+    if (masterBus.muted || busOutputs.isEmpty) {
       filters.add(
         'anullsrc=channel_layout=stereo:sample_rate=48000:d=' +
             total + '[aout]',
