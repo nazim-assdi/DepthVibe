@@ -46,6 +46,7 @@ class FfmpegAnimationCompiler {
         Interpolation.easeOut => '(1-pow(1-$p,2))',
         Interpolation.easeInOut =>
           'if(lt($p,0.5),2*pow($p,2),1-pow(-2*$p+2,2)/2)',
+        Interpolation.cubicBezier => _bezierEasingExpression(p, left.bezier),
       };
       final value = left.value == right.value
           ? _n(left.value)
@@ -54,6 +55,27 @@ class FfmpegAnimationCompiler {
     }
     return 'if(lt($timeVariable,' + _n(frames.first.timeMs / 1000) + '),' +
         _n(frames.first.value) + ',' + expression + ')';
+  }
+
+  /// Builds a frame-evaluated cubic Bezier expression.
+  ///
+  /// FFmpeg's root() solves the cubic time component using ld(0); the solved
+  /// parameter is stored in slot 9 and then evaluated against the value curve.
+  /// This keeps preview/export interpolation consistent without baking a
+  /// separate keyframe for every output frame.
+  String _bezierEasingExpression(String progress, BezierCurve curve) {
+    final x1 = _n(curve.x1.clamp(0.0, 1.0));
+    final x2 = _n(curve.x2.clamp(0.0, 1.0));
+    final y1 = _n(curve.y1);
+    final y2 = _n(curve.y2);
+    final xCurve = '3*pow(1-ld(0),2)*ld(0)*' + x1 +
+        '+3*(1-ld(0))*pow(ld(0),2)*' + x2 +
+        '+pow(ld(0),3)-(' + progress + ')';
+    const solved = 'ld(9)';
+    final yCurve = '3*pow(1-' + solved + ',2)*' + solved + '*' + y1 +
+        '+3*(1-' + solved + ')*pow(' + solved + ',2)*' + y2 +
+        '+pow(' + solved + ',3)';
+    return '(st(9,root(' + xCurve + ',1));' + yCurve + ')';
   }
 
   String maskAlphaExpression(List<MaskModel> masks) {
