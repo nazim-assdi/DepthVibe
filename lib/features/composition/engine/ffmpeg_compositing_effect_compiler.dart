@@ -274,9 +274,9 @@ class FfmpegCompositingEffectCompiler {
           ':color=black@0,format=rgba[' + bodyCanvas + ']',
         );
         filters.add(
-          '[' + shadowCanvas + ']overlay=x=' + pad + '+(' + offset +
-          '):y=' + pad + '+(' + offset +
-          '):eval=frame:shortest=1:format=auto[' + placed + ']',
+          '[' + shadowCanvas + "]overlay=x='" + pad + '+(' + offset +
+          ")':y='" + pad + '+(' + offset +
+          ")':eval=frame:shortest=1:format=auto[" + placed + ']',
         );
         filters.add(
           '[' + placed + '][' + bodyCanvas + ']overlay=x=' + pad +
