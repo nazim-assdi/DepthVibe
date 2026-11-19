@@ -220,7 +220,7 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 
 - **GPU renderer remains unimplemented.** There is no Vulkan, Metal, OpenGL or WebGPU backend yet. Preview and 3D frame export use CPU rasterization and are expected to be slower on larger meshes or compositions.
 - glTF import is geometry-only for triangle primitives with FLOAT VEC3 POSITION and supported index types. Node hierarchy/transforms, normals, UVs, skins, morphs, animations, sparse accessors, embedded/external texture images and full metallic-roughness lighting are not yet implemented. PBR `baseColorFactor` is read as a flat material colour only.
-- The Z-buffer currently rasterizes projected triangles with linear screen-space depth interpolation. Polygon clipping against near/far planes, perspective-correct attribute interpolation, back-face culling and multisample anti-aliasing remain future work.
+- The Z-buffer now uses reciprocal camera-depth interpolation for perspective projection and linear camera depth for orthographic projection. Polygon clipping against near/far planes, perspective-correct interpolation of non-depth attributes, back-face culling and multisample anti-aliasing remain future work.
 - Shadow mapping is directional-only and uses a compact CPU depth map; point/spot/cubemap shadows, cascades, physically soft penumbrae and shadow catcher are still outstanding.
 - The DOF pass is a bounded screen-space blur approximation, not a physically based circle-of-confusion/lens model. Area lighting is four-point sampling.
 - The transparent per-frame intermediate export is wired but still needs real-device performance/long-duration stress tests and full CI validation. No release APK or desktop package is implied by the source commit.

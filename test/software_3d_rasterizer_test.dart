@@ -37,6 +37,27 @@ void main() {
     expect(frame.depth[3 * 8 + 4], 10);
   });
 
+  test('perspective Z-buffer interpolates reciprocal camera depth', () {
+    const triangle = ProjectedMeshTriangle(
+      a: Offset(1, 1),
+      b: Offset(7, 1),
+      c: Offset(4, 7),
+      color: Color(0xFFFFFFFF),
+      distance: 500,
+      distanceA: 100,
+      distanceB: 1000,
+      distanceC: 1000,
+      perspective: true,
+    );
+    final frame = Software3dRasterizer().rasterize(
+      const [triangle],
+      width: 8,
+      height: 8,
+    );
+    final pixelDepth = frame.depth[3 * 8 + 4];
+    expect(pixelDepth, closeTo(347.83, 0.5));
+  });
+
   test('depth-of-field pass softens pixels away from the focus plane', () {
     const triangle = ProjectedMeshTriangle(
       a: Offset(1, 1),

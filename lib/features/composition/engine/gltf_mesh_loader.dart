@@ -65,7 +65,7 @@ class GltfMeshLoader {
     return parseDocument(document, buffers);
   }
 
-  _ParsedGlb parseGlb(Uint8List bytes) {
+  ParsedGlb parseGlb(Uint8List bytes) {
     if (bytes.length < 20) throw const FormatException('GLB header is incomplete.');
     final data = ByteData.sublistView(bytes);
     if (data.getUint32(0, Endian.little) != 0x46546C67) {
@@ -105,7 +105,7 @@ class GltfMeshLoader {
     if (decoded is! Map<String, Object?>) {
       throw const FormatException('GLB JSON root must be an object.');
     }
-    return _ParsedGlb(decoded, binaryChunk);
+    return ParsedGlb(decoded, binaryChunk);
   }
 
   ObjMesh parseDocument(
@@ -287,8 +287,8 @@ class GltfMeshLoader {
   }
 }
 
-class _ParsedGlb {
-  const _ParsedGlb(this.document, this.binaryChunk);
+class ParsedGlb {
+  const ParsedGlb(this.document, this.binaryChunk);
 
   final Map<String, Object?> document;
   final Uint8List? binaryChunk;

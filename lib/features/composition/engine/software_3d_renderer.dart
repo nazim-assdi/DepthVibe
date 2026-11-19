@@ -27,6 +27,7 @@ class ProjectedMeshTriangle {
     required this.distanceA,
     required this.distanceB,
     required this.distanceC,
+    this.perspective = true,
   });
 
   final Offset a;
@@ -37,6 +38,7 @@ class ProjectedMeshTriangle {
   final double distanceA;
   final double distanceB;
   final double distanceC;
+  final bool perspective;
 }
 
 /// Deterministic CPU mesh projector and flat-shading renderer shared by the
@@ -207,6 +209,7 @@ class Software3dRenderer {
         distanceA: a.distance,
         distanceB: b.distance,
         distanceC: c.distance,
+        perspective: cameraSettings.projection != 'orthographic',
       ));
     }
 
@@ -633,33 +636,42 @@ class Software3dRasterizer {
           final w2 = 1 - w0 - w1;
           if (w0 < -0.00001 || w1 < -0.00001 || w2 < -0.00001) continue;
 
-          final z = w0 * triangle.distanceA +
-              w1 * triangle.distanceB +
-              w2 * triangle.distanceC;
+          final z = triangle.perspective
+              ? 1 /
+                  (w0 / triangle.distanceA +
+                      w1 / triangle.distanceB +
+                      w2 / triangle.distanceC)
+              : w0 * triangle.distanceA +
+                  w1 * triangle.distanceB +
+                  w2 * triangle.distanceC;
           final pixel = y * width + x;
           if (z >= depth[pixel]) continue;
-          final alpha = triangle.color.alpha;
+          final alpha =
+              (triangle.color.a * 255).round().clamp(0, 255).toInt();
           if (alpha <= 0) continue;
           depth[pixel] = z;
           final offset = pixel * 4;
           final inverse = 255 - alpha;
-          rgba[offset] = (triangle.color.red +
+          rgba[offset] = (triangle.color.r * 255 +
                   rgba[offset] * inverse / 255)
               .round()
               .clamp(0, 255)
               .toInt();
-          rgba[offset + 1] = (triangle.color.green +
+          rgba[offset + 1] = (triangle.color.g * 255 +
                   rgba[offset + 1] * inverse / 255)
               .round()
-              .clamp(0, 255);
-          rgba[offset + 2] = (triangle.color.blue +
+              .clamp(0, 255)
+              .toInt();
+          rgba[offset + 2] = (triangle.color.b * 255 +
                   rgba[offset + 2] * inverse / 255)
               .round()
-              .clamp(0, 255);
+              .clamp(0, 255)
+              .toInt();
           rgba[offset + 3] = (alpha +
                   rgba[offset + 3] * inverse / 255)
               .round()
-              .clamp(0, 255);
+              .clamp(0, 255)
+              .toInt();
         }
       }
     }

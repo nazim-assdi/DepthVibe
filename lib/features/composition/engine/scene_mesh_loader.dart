@@ -1,4 +1,3 @@
-import '../domain/composition_models.dart';
 import 'gltf_mesh_loader.dart';
 import 'obj_mesh_loader.dart';
 
