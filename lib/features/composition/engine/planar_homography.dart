@@ -34,9 +34,8 @@ class Homography2D {
 
   /// Estimates the projective transform from four or more matched points.
   ///
-  /// With more than four correspondences, a least-squares solution is computed
-  /// using the normal equations. Coordinates should be in a consistent space;
-  /// callers should normalise very large pixel coordinates before estimating.
+  /// Coordinates are internally normalised before the least-squares solve;
+  /// the result is then denormalised back into the input coordinate space.
   factory Homography2D.fromCorrespondences({
     required List<Vector2> source,
     required List<Vector2> destination,
