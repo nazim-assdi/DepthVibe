@@ -879,6 +879,122 @@ class CompositionController extends ChangeNotifier {
     _set(_document.copyWith(audioBuses: buses));
   }
 
+  void setAudioBusValue(
+    String busId,
+    String property,
+    double value, {
+    bool keyframe = false,
+  }) {
+    final bus = _document.audioBuses.where((item) => item.id == busId);
+    if (bus.isEmpty) return;
+    final current = bus.first;
+    if (property != 'gainDb' && property != 'pan') return;
+
+    if (!keyframe) {
+      final updated = property == 'gainDb'
+          ? current.copyWith(
+              gainDb: value.clamp(-60.0, 24.0).toDouble(),
+            )
+          : current.copyWith(
+              pan: value.clamp(-1.0, 1.0).toDouble(),
+            );
+      updateAudioBus(updated);
+      return;
+    }
+
+    final bounded = property == 'gainDb'
+        ? value.clamp(-60.0, 24.0).toDouble()
+        : value.clamp(-1.0, 1.0).toDouble();
+    final index = current.keyframeTracks.indexWhere(
+      (track) => track.property == property,
+    );
+    final track = index < 0
+        ? KeyframeTrack(property: property)
+        : current.keyframeTracks[index];
+    final updatedTrack = track.upsert(ScalarKeyframe(
+      timeMs: _document.playheadMs,
+      value: bounded,
+      interpolation: Interpolation.easeInOut,
+    ));
+    final tracks = [...current.keyframeTracks];
+    if (index < 0) {
+      tracks.add(updatedTrack);
+    } else {
+      tracks[index] = updatedTrack;
+    }
+    updateAudioBus(current.copyWith(keyframeTracks: tracks));
+  }
+
+  void setAudioBusInterpolation(
+    String busId,
+    String property,
+    Interpolation interpolation, {
+    int? timeMs,
+  }) {
+    final bus = _document.audioBuses.where((item) => item.id == busId);
+    if (bus.isEmpty) return;
+    final current = bus.first;
+    final targetTime = timeMs ?? _document.playheadMs;
+    final tracks = current.keyframeTracks.map((track) {
+      if (track.property != property) return track;
+      final index = track.keyframes.indexWhere(
+        (frame) => frame.timeMs == targetTime,
+      );
+      if (index < 0) return track;
+      final frames = [...track.keyframes];
+      final old = frames[index];
+      frames[index] = ScalarKeyframe(
+        timeMs: old.timeMs,
+        value: old.value,
+        interpolation: interpolation,
+        inTangent: old.inTangent,
+        outTangent: old.outTangent,
+        bezier: old.bezier,
+      );
+      return KeyframeTrack(
+        property: track.property,
+        keyframes: frames,
+        enabled: track.enabled,
+      );
+    }).toList();
+    updateAudioBus(current.copyWith(keyframeTracks: tracks));
+  }
+
+  void setAudioBusBezierCurve(
+    String busId,
+    String property,
+    BezierCurve curve, {
+    int? timeMs,
+  }) {
+    final bus = _document.audioBuses.where((item) => item.id == busId);
+    if (bus.isEmpty) return;
+    final current = bus.first;
+    final targetTime = timeMs ?? _document.playheadMs;
+    final tracks = current.keyframeTracks.map((track) {
+      if (track.property != property) return track;
+      final index = track.keyframes.indexWhere(
+        (frame) => frame.timeMs == targetTime,
+      );
+      if (index < 0) return track;
+      final frames = [...track.keyframes];
+      final old = frames[index];
+      frames[index] = ScalarKeyframe(
+        timeMs: old.timeMs,
+        value: old.value,
+        interpolation: Interpolation.cubicBezier,
+        inTangent: old.inTangent,
+        outTangent: old.outTangent,
+        bezier: curve,
+      );
+      return KeyframeTrack(
+        property: track.property,
+        keyframes: frames,
+        enabled: track.enabled,
+      );
+    }).toList();
+    updateAudioBus(current.copyWith(keyframeTracks: tracks));
+  }
+
   void removeAudioBus(String busId) {
     final bus = _document.audioBuses.where((item) => item.id == busId);
     if (bus.isEmpty || bus.first.isMaster) return;
