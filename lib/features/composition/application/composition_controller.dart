@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../data/effect_catalog.dart';
 import '../domain/composition_models.dart';
+import '../engine/transition_frame_validator.dart';
 
 class CompositionController extends ChangeNotifier {
   CompositionController({
@@ -19,6 +20,23 @@ class CompositionController extends ChangeNotifier {
   CompositionLayer? get selectedLayer => _document.selectedLayer;
 
   String _id(String prefix) => '${prefix}_${_nextId++}';
+  int _frameAlignedTransitionStart(int milliseconds) {
+    final fps = _document.frameRate;
+    if (fps <= 0) return milliseconds.clamp(0, _document.durationMs - 1);
+    final lastFrame =
+        (((_document.durationMs - 1) * fps) / 1000).floor();
+    final frame = (milliseconds * fps / 1000)
+        .round()
+        .clamp(0, lastFrame);
+    return (frame * 1000 / fps).round();
+  }
+
+  int _frameAlignedTransitionDuration(int milliseconds) =>
+      const TransitionFrameValidator().snapDurationToFrame(
+        milliseconds.clamp(50, 10000),
+        _document.frameRate,
+      );
+
 
   void _set(CompositionDocument next) {
     _document = next;
@@ -690,7 +708,8 @@ class CompositionController extends ChangeNotifier {
       fromLayerId: candidates[fromIndex].id,
       toLayerId: candidates[destinationIndex].id,
       kind: kind,
-      startMs: _document.playheadMs,
+      startMs: _frameAlignedTransitionStart(_document.playheadMs),
+      durationMs: _frameAlignedTransitionDuration(500),
     );
     _set(_document.copyWith(
       transitions: [..._document.transitions, transition],
@@ -708,8 +727,12 @@ class CompositionController extends ChangeNotifier {
     final current = _document.transitions[index];
     final updated = current.copyWith(
       kind: kind,
-      durationMs: durationMs?.clamp(50, 10000).toInt(),
-      startMs: startMs?.clamp(0, _document.durationMs - 1).toInt(),
+      durationMs: durationMs == null
+          ? null
+          : _frameAlignedTransitionDuration(durationMs),
+      startMs: startMs == null
+          ? null
+          : _frameAlignedTransitionStart(startMs),
     );
     final transitions = [..._document.transitions];
     transitions[index] = updated;
