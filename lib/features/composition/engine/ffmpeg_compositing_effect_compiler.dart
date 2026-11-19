@@ -66,7 +66,6 @@ class FfmpegCompositingEffectCompiler {
     required int index,
     required int passIndex,
     required String prefix,
-    required int timeMs,
     double min = 0.5,
     double max = 50,
   }) {
@@ -201,7 +200,6 @@ class FfmpegCompositingEffectCompiler {
           index: index,
           passIndex: passIndex,
           prefix: 'glow',
-          timeMs: timeMs,
           min: 0.5,
           max: 50,
         );
@@ -262,7 +260,6 @@ class FfmpegCompositingEffectCompiler {
           index: index,
           passIndex: passIndex,
           prefix: 'shadow',
-          timeMs: timeMs,
           min: 0,
           max: 40,
         );
