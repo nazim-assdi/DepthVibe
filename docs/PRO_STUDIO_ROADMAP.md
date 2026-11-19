@@ -127,3 +127,21 @@ A feature is complete only when all of the following are true:
 The current codebase has a Flutter multi-platform shell, MediaKit preview, FFmpeg export, composition/layer models, 2D transform/keyframe compilation, basic masks/blends/transitions, multi-track audio mixing, PSD raster extraction, a basic template tracker and CPU glow/shadow passes. These are useful foundations, not feature parity with Premiere Pro, After Effects or DaVinci Resolve.
 
 The current composition exporter explicitly skips layer kinds it cannot render. In particular, true 3D scene rendering, complete text/shape/adjustment rendering, full PSD semantics, GPU VFX, advanced tracking and a professional NLE editing toolset remain engineering work. Do not mark these complete until the definition-of-done gates above pass.
+
+## Implementation Update — 19 November 2026
+
+The following foundations have now been added on the single `main` branch:
+
+- **Cubic Bezier keyframes:** keyframes persist normalized X/Y control handles; the Dart sampler evaluates the curve using a stable bounded solve; FFmpeg export compiles the same curve into a frame-evaluated expression.
+- **Bezier graph UI:** transform-property keyframes can switch to cubic Bezier and open an interactive two-handle graph editor. Existing keyframe data without Bezier controls loads with default controls.
+- **Bezier masks:** export now flattens cubic segments from vertex in/out handles into a deterministic mask outline. The Masks panel exposes anchor and tangent editing, and smooth tangents keep opposing handles collinear.
+- **Audio EQ:** the Audio panel has low (120 Hz), mid (1 kHz) and high (8 kHz) parametric bands. A dedicated compiler turns non-neutral settings into native FFmpeg EQ filters and bounds gain to a safe editing range.
+- **Regression tests:** curve sampling, keyframe serialization, FFmpeg curve expression generation, Bezier mask outline complexity, smooth tangent alignment and EQ filter generation have targeted tests.
+
+### Verification status
+
+GitHub Actions runs were created by the commits, but the latest observed runs were still queued. Therefore these changes are committed, but they are **not yet marked as CI-passed or build-verified**. No APK/desktop release artifact has been produced in this update.
+
+### Still outstanding from the requested pro-studio scope
+
+The Bezier graph is currently exposed for transform-property tracks; a unified graph editor for every effect/audio property remains. Animated mask properties and rotoscoping are not complete. Audio waveform display, full automation lanes, bus routing and advanced dynamics are not complete. Preview/export parity still needs frame-by-frame validation for every blend mode and transition. The cross-platform 3D camera/light renderer, planar/perspective/3D tracking, complete PSD group/clipping/adjustment/smart-object fidelity, and a true GPU multi-pass VFX pipeline remain separate engineering milestones.
