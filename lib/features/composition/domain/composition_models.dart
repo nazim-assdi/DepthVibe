@@ -71,6 +71,9 @@ class AudioSettings {
     this.duckingRatio = 8,
     this.duckingAttackMs = 20,
     this.duckingReleaseMs = 250,
+    this.lowEqDb = 0,
+    this.midEqDb = 0,
+    this.highEqDb = 0,
   });
 
   final double gainDb;
@@ -83,6 +86,9 @@ class AudioSettings {
   final double duckingRatio;
   final double duckingAttackMs;
   final double duckingReleaseMs;
+  final double lowEqDb;
+  final double midEqDb;
+  final double highEqDb;
 
   AudioSettings copyWith({
     double? gainDb,
@@ -95,6 +101,9 @@ class AudioSettings {
     double? duckingRatio,
     double? duckingAttackMs,
     double? duckingReleaseMs,
+    double? lowEqDb,
+    double? midEqDb,
+    double? highEqDb,
   }) => AudioSettings(
     gainDb: gainDb ?? this.gainDb,
     pan: pan ?? this.pan,
@@ -106,6 +115,9 @@ class AudioSettings {
     duckingRatio: duckingRatio ?? this.duckingRatio,
     duckingAttackMs: duckingAttackMs ?? this.duckingAttackMs,
     duckingReleaseMs: duckingReleaseMs ?? this.duckingReleaseMs,
+    lowEqDb: lowEqDb ?? this.lowEqDb,
+    midEqDb: midEqDb ?? this.midEqDb,
+    highEqDb: highEqDb ?? this.highEqDb,
   );
 }
 
