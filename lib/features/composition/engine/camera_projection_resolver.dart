@@ -107,7 +107,9 @@ class CameraProjectionResolver {
 
     final focus = _n(settings.focusDistance.clamp(1.0, 5000.0));
     final depth = '(' + layer.positionZ + '-(' + camera.positionZ + '))';
-    final distance = 'max(1,(' + focus + ')-' + depth + ')';
+    final nearPlane = '((' + focus + ')*0.05)';
+    final distance =
+        'max(' + nearPlane + ',(' + focus + ')-' + depth + ')';
     final fov = settings.fieldOfView.clamp(10.0, 120.0) * math.pi / 180;
     final fovFactor = math.tan(25 * math.pi / 180) /
         math.tan(fov / 2);
@@ -141,7 +143,7 @@ class CameraProjectionResolver {
     required double relativeDepth,
   }) {
     final focus = settings.focusDistance.clamp(1.0, 5000.0);
-    final distance = math.max(1.0, focus - relativeDepth);
+    final distance = math.max(focus * 0.05, focus - relativeDepth);
     final fov = settings.fieldOfView.clamp(10.0, 120.0) * math.pi / 180;
     final fovFactor = math.tan(25 * math.pi / 180) /
         math.tan(fov / 2);
