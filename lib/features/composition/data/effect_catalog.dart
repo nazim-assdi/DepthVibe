@@ -193,6 +193,31 @@ class EffectCatalog {
       ffmpegFilter: 'split',
     ),
     EffectDefinition(
+      id: 'displacement',
+      name: 'Displacement',
+      category: 'VFX',
+      description: 'Warp pixels with animated procedural X/Y displacement fields.',
+      parameters: [
+        EffectParameterDefinition(id: 'amount', label: 'Amount', min: 0, max: 64, defaultValue: 12, unit: 'px'),
+        EffectParameterDefinition(id: 'wavelength', label: 'Wavelength', min: 20, max: 500, defaultValue: 80, unit: 'px'),
+        EffectParameterDefinition(id: 'speed', label: 'Animation speed', min: 0, max: 8, defaultValue: 1),
+      ],
+      ffmpegFilter: '',
+    ),
+    EffectDefinition(
+      id: 'particle_dust',
+      name: 'Particle Dust',
+      category: 'VFX',
+      description: 'Add an animated procedural dust-particle field with adjustable spacing and drift.',
+      parameters: [
+        EffectParameterDefinition(id: 'spacing', label: 'Particle spacing', min: 16, max: 160, defaultValue: 72, unit: 'px'),
+        EffectParameterDefinition(id: 'size', label: 'Particle size', min: 1, max: 12, defaultValue: 2, unit: 'px'),
+        EffectParameterDefinition(id: 'intensity', label: 'Intensity', min: 0, max: 1, defaultValue: 0.55),
+        EffectParameterDefinition(id: 'speed', label: 'Drift speed', min: 0, max: 8, defaultValue: 1),
+      ],
+      ffmpegFilter: '',
+    ),
+    EffectDefinition(
       id: 'motion_blur',
       name: 'Motion Blur',
       category: 'Motion',
