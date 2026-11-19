@@ -40,7 +40,7 @@ enum MaskOperation { add, subtract, intersect, difference }
 
 enum LightKind { ambient, directional, point, spot, area }
 
-enum Interpolation { hold, linear, easeIn, easeOut, easeInOut }
+enum Interpolation { hold, linear, easeIn, easeOut, easeInOut, cubicBezier }
 
 enum TransitionKind {
   dissolve,
@@ -242,6 +242,68 @@ class LayerTransform {
   }
 }
 
+/// Cubic Bezier easing controls in normalized time/value coordinates.
+/// X controls are constrained to [0, 1] so the curve can be inverted safely.
+class BezierCurve {
+  const BezierCurve({
+    this.x1 = 0.25,
+    this.y1 = 0.1,
+    this.x2 = 0.25,
+    this.y2 = 1,
+  });
+
+  final double x1;
+  final double y1;
+  final double x2;
+  final double y2;
+
+  double sample(double progress) {
+    final target = progress.clamp(0.0, 1.0).toDouble();
+    if (target == 0 || target == 1) return target;
+
+    final controlX1 = x1.clamp(0.0, 1.0).toDouble();
+    final controlX2 = x2.clamp(0.0, 1.0).toDouble();
+    var lower = 0.0;
+    var upper = 1.0;
+    var parameter = target;
+
+    // Bisection is stable even for flat handles where Newton iteration
+    // can have a near-zero derivative.
+    for (var iteration = 0; iteration < 28; iteration++) {
+      final inverse = 1 - parameter;
+      final x = 3 * inverse * inverse * parameter * controlX1 +
+          3 * inverse * parameter * parameter * controlX2 +
+          parameter * parameter * parameter;
+      if ((x - target).abs() < 1e-8) break;
+      if (x < target) {
+        lower = parameter;
+      } else {
+        upper = parameter;
+      }
+      parameter = (lower + upper) / 2;
+    }
+
+    final inverse = 1 - parameter;
+    return 3 * inverse * inverse * parameter * y1 +
+        3 * inverse * parameter * parameter * y2 +
+        parameter * parameter * parameter;
+  }
+
+  Map<String, Object> toJson() => {
+        'x1': x1,
+        'y1': y1,
+        'x2': x2,
+        'y2': y2,
+      };
+
+  factory BezierCurve.fromJson(Map<String, Object?> json) => BezierCurve(
+        x1: (json['x1'] as num?)?.toDouble() ?? 0.25,
+        y1: (json['y1'] as num?)?.toDouble() ?? 0.1,
+        x2: (json['x2'] as num?)?.toDouble() ?? 0.25,
+        y2: (json['y2'] as num?)?.toDouble() ?? 1,
+      );
+}
+
 class ScalarKeyframe {
   const ScalarKeyframe({
     required this.timeMs,
@@ -312,6 +374,7 @@ class KeyframeTrack {
         Interpolation.easeInOut => t < 0.5
             ? 2 * t * t
             : 1 - math.pow(-2 * t + 2, 2).toDouble() / 2,
+        Interpolation.cubicBezier => left.bezier.sample(t),
       };
       return left.value + (right.value - left.value) * t;
     }
