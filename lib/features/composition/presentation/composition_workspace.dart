@@ -15,6 +15,7 @@ import '../engine/parent_transform_resolver.dart';
 import '../engine/composition_export_service.dart';
 import '../engine/audio_waveform_service.dart';
 import '../engine/motion_tracking_service.dart';
+import '../engine/transition_frame_validator.dart';
 
 class CompositionWorkspace extends StatefulWidget {
   const CompositionWorkspace({super.key});
@@ -1304,7 +1305,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
   }
 
   Widget _buildTransitionsPanel(CompositionLayer layer) {
-    final transitions = _controller.document.transitions.where(
+    const validator = TransitionFrameValidator();
+    final document = _controller.document;
+    final report = validator.validate(document);
+    final transitions = document.transitions.where(
       (item) => item.fromLayerId == layer.id || item.toLayerId == layer.id,
     ).toList();
     final layers = _controller.document.layers;
@@ -1331,6 +1335,61 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                 Icon(Icons.add, size: 16),
                 SizedBox(width: 6),
                 Text('Add transition to adjacent clip'),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xFF141D2B),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: report.isValid
+                  ? const Color(0xFF35445C)
+                  : const Color(0xFF8E6541),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(9),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'FRAME VALIDATION · ${document.frameRate.toStringAsFixed(3)} FPS',
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.7,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  report.isValid
+                      ? report.warningCount == 0
+                          ? 'All transitions pass timing and clip-range checks.'
+                          : '${report.warningCount} frame/range warning(s).'
+                      : '${report.errorCount} error(s), ${report.warningCount} warning(s).',
+                  style: const TextStyle(fontSize: 10),
+                ),
+                for (final issue in report.issues.where(
+                  (item) => transitions.any(
+                    (transition) => transition.id == item.transitionId,
+                  ),
+                ))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '• ${issue.message}',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: issue.severity ==
+                                TransitionIssueSeverity.error
+                            ? const Color(0xFFFFB18C)
+                            : const Color(0xFFE5C18C),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
