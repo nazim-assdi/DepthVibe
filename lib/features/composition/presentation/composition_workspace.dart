@@ -2155,6 +2155,77 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     );
   }
 
+  Widget _animatedMaskVertexPropertyRow(
+    MaskModel mask,
+    int vertexIndex,
+    String label,
+    String component,
+    double min,
+    double max,
+  ) {
+    final playhead = _controller.document.playheadMs;
+    final property = 'vertex.$vertexIndex.$component';
+    final value = mask.vertexValueAt(vertexIndex, component, playhead);
+    final tracks = mask.keyframeTracks.where(
+      (track) => track.property == property,
+    );
+    final animated = tracks.isNotEmpty && tracks.first.keyframes.isNotEmpty;
+    final hasKeyAtPlayhead = animated &&
+        tracks.first.keyframes.any((frame) => frame.timeMs == playhead);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(label, style: const TextStyle(fontSize: 10)),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Add vertex keyframe at playhead',
+              onPressed: () => _controller.setMaskVertexAnimatedValue(
+                mask.id,
+                vertexIndex,
+                component,
+                value,
+                keyframe: true,
+              ),
+              icon: Icon(
+                Icons.diamond,
+                size: 15,
+                color: hasKeyAtPlayhead
+                    ? const Color(0xFFB8A4FF)
+                    : animated
+                        ? const Color(0xFF8D9AB2)
+                        : const Color(0xFF65738A),
+              ),
+            ),
+            SizedBox(
+              width: 48,
+              child: Text(
+                value.toStringAsFixed(3),
+                textAlign: TextAlign.end,
+                style: const TextStyle(fontSize: 9),
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          min: min,
+          max: max,
+          value: value.clamp(min, max).toDouble(),
+          onChanged: (next) => _controller.setMaskVertexAnimatedValue(
+            mask.id,
+            vertexIndex,
+            component,
+            next,
+            keyframe: animated,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildMasksPanel(CompositionLayer layer) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2207,11 +2278,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                     value: mask.inverted,
                     onChanged: (value) => _controller.setMaskParameters(mask.id, inverted: value),
                   ),
-                  if (mask.shape == MaskShape.bezier)
+                  if (mask.shape == MaskShape.bezier ||
+                      mask.shape == MaskShape.polygon)
                     ExpansionTile(
                       tilePadding: EdgeInsets.zero,
                       title: Text(
-                        'BEZIER VERTICES · ${mask.vertices.length}',
+                        'PATH VERTICES · ${mask.vertices.length}',
                         style: const TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
@@ -2222,24 +2294,6 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                           Builder(
                             builder: (context) {
                               final vertex = mask.vertices[index];
-                              void updateAnchor(double x, double y) =>
-                                  _controller.setMaskVertex(
-                                    mask.id,
-                                    index,
-                                    anchor: Vector2(x, y),
-                                  );
-                              void updateInHandle(double x, double y) =>
-                                  _controller.setMaskVertex(
-                                    mask.id,
-                                    index,
-                                    inHandle: Vector2(x, y),
-                                  );
-                              void updateOutHandle(double x, double y) =>
-                                  _controller.setMaskVertex(
-                                    mask.id,
-                                    index,
-                                    outHandle: Vector2(x, y),
-                                  );
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
@@ -2250,47 +2304,53 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                  _settingSlider(
+                                  _animatedMaskVertexPropertyRow(
+                                    mask,
+                                    index,
                                     'Anchor X',
-                                    vertex.anchor.x,
+                                    'anchor.x',
                                     0,
                                     1,
-                                    (value) => updateAnchor(value, vertex.anchor.y),
                                   ),
-                                  _settingSlider(
+                                  _animatedMaskVertexPropertyRow(
+                                    mask,
+                                    index,
                                     'Anchor Y',
-                                    vertex.anchor.y,
+                                    'anchor.y',
                                     0,
                                     1,
-                                    (value) => updateAnchor(vertex.anchor.x, value),
                                   ),
-                                  _settingSlider(
+                                  _animatedMaskVertexPropertyRow(
+                                    mask,
+                                    index,
                                     'In handle X',
-                                    vertex.inHandle.x,
+                                    'inHandle.x',
                                     -0.5,
                                     0.5,
-                                    (value) => updateInHandle(value, vertex.inHandle.y),
                                   ),
-                                  _settingSlider(
+                                  _animatedMaskVertexPropertyRow(
+                                    mask,
+                                    index,
                                     'In handle Y',
-                                    vertex.inHandle.y,
+                                    'inHandle.y',
                                     -0.5,
                                     0.5,
-                                    (value) => updateInHandle(vertex.inHandle.x, value),
                                   ),
-                                  _settingSlider(
+                                  _animatedMaskVertexPropertyRow(
+                                    mask,
+                                    index,
                                     'Out handle X',
-                                    vertex.outHandle.x,
+                                    'outHandle.x',
                                     -0.5,
                                     0.5,
-                                    (value) => updateOutHandle(value, vertex.outHandle.y),
                                   ),
-                                  _settingSlider(
+                                  _animatedMaskVertexPropertyRow(
+                                    mask,
+                                    index,
                                     'Out handle Y',
-                                    vertex.outHandle.y,
+                                    'outHandle.y',
                                     -0.5,
                                     0.5,
-                                    (value) => updateOutHandle(vertex.outHandle.x, value),
                                   ),
                                   SwitchListTile(
                                     contentPadding: EdgeInsets.zero,
@@ -2319,7 +2379,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             ),
           ),
         const Text(
-          'Rectangle, ellipse, polygon and cubic Bezier masks support feather, expansion, boolean operations and export rendering. Bezier vertices expose editable anchors and tangent handles.',
+          'Rectangle, ellipse, polygon and cubic Bezier masks support feather, expansion and boolean operations. Polygon/Bezier anchors and tangent handles can be keyframed for per-frame rotoscoping.',
           style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
         ),
       ],
