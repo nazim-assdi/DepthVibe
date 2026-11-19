@@ -12,6 +12,7 @@ import '../data/effect_catalog.dart';
 import '../data/photoshop_import_service.dart';
 import '../domain/composition_models.dart';
 import '../engine/parent_transform_resolver.dart';
+import '../engine/camera_projection_resolver.dart';
 import '../engine/composition_export_service.dart';
 import '../engine/audio_waveform_service.dart';
 import '../engine/motion_tracking_service.dart';
@@ -625,12 +626,38 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       layers: doc.layers,
     );
     if (!resolved.enabled) return const SizedBox.shrink();
-    final x = resolved.position.x;
-    final y = resolved.position.y;
-    final scaleX = resolved.scale.x / 100;
-    final scaleY = resolved.scale.y / 100;
-    final rotation = resolved.rotation.z * math.pi / 180;
-    final opacity = (resolved.opacity / 100).clamp(0, 1).toDouble();
+    final cameraLayer = doc.layers
+        .where((item) => item.kind == LayerKind.camera && item.enabled)
+        .firstOrNull;
+    final cameraTransform = cameraLayer == null
+        ? null
+        : const ParentTransformResolver().resolve(
+            layer: cameraLayer,
+            timeMs: timeMs,
+            layers: doc.layers,
+          );
+    final projected = cameraLayer != null &&
+            cameraTransform != null &&
+            cameraLayer.camera != null &&
+            layer.kind != LayerKind.camera &&
+            layer.kind != LayerKind.light &&
+            layer.kind != LayerKind.precomposition
+        ? const CameraProjectionResolver().project(
+            layer: resolved,
+            camera: cameraTransform,
+            settings: cameraLayer.camera!,
+          )
+        : null;
+    final displayPosition = projected?.position ?? resolved.position;
+    final displayScale = projected?.scale ?? resolved.scale;
+    final displayRotation = projected?.rotation ?? resolved.rotation;
+    final displayOpacity = projected?.opacity ?? resolved.opacity;
+    final x = displayPosition.x;
+    final y = displayPosition.y;
+    final scaleX = displayScale.x / 100;
+    final scaleY = displayScale.y / 100;
+    final rotation = displayRotation.z * math.pi / 180;
+    final opacity = (displayOpacity / 100).clamp(0, 1).toDouble();
 
     double baseWidth = 160;
     double baseHeight = 120;
