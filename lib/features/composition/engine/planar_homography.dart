@@ -54,13 +54,15 @@ class Homography2D {
       }
     }
 
+    final normalizedSource = _normalise(source);
+    final normalizedDestination = _normalise(destination);
     final rows = <List<double>>[];
     final targets = <double>[];
     for (var index = 0; index < source.length; index++) {
-      final x = source[index].x;
-      final y = source[index].y;
-      final u = destination[index].x;
-      final v = destination[index].y;
+      final x = normalizedSource.points[index].x;
+      final y = normalizedSource.points[index].y;
+      final u = normalizedDestination.points[index].x;
+      final v = normalizedDestination.points[index].y;
       rows.add([
         x, y, 1, 0, 0, 0, -u * x, -u * y,
       ]);
@@ -86,15 +88,78 @@ class Homography2D {
       }
     }
 
-    final solution = _solve(matrix, vector);
-    final values = List<double>.unmodifiable([
-      ...solution,
-      1,
-    ]);
+    final normalizedSolution = [..._solve(matrix, vector), 1.0];
+    final denormalized = _multiply3(
+      _multiply3(
+        normalizedDestination.inverse,
+        normalizedSolution,
+      ),
+      normalizedSource.transform,
+    );
+    final divisor = denormalized[8];
+    if (!divisor.isFinite || divisor.abs() < 1e-12) {
+      throw StateError('Homography normalisation produced a zero scale.');
+    }
+    final values = List<double>.unmodifiable(
+      denormalized.map((value) => value / divisor),
+    );
     final result = Homography2D._(values);
     if (!result.determinant.isFinite ||
         result.determinant.abs() < 1e-12) {
       throw StateError('Matched points do not define a stable homography.');
+    }
+    return result;
+  }
+
+  static _NormalizedPoints _normalise(List<Vector2> points) {
+    final centerX =
+        points.fold<double>(0, (sum, point) => sum + point.x) / points.length;
+    final centerY =
+        points.fold<double>(0, (sum, point) => sum + point.y) / points.length;
+    final meanDistance = points.fold<double>(0, (sum, point) {
+          final dx = point.x - centerX;
+          final dy = point.y - centerY;
+          return sum + math.sqrt(dx * dx + dy * dy);
+        }) /
+        points.length;
+    if (!meanDistance.isFinite || meanDistance < 1e-12) {
+      throw StateError('Matched points do not span a stable 2D region.');
+    }
+
+    final scale = math.sqrt(2) / meanDistance;
+    final normalized = points
+        .map((point) => Vector2(
+              (point.x - centerX) * scale,
+              (point.y - centerY) * scale,
+            ))
+        .toList(growable: false);
+    return _NormalizedPoints(
+      points: normalized,
+      transform: [
+        scale, 0, -scale * centerX,
+        0, scale, -scale * centerY,
+        0, 0, 1,
+      ],
+      inverse: [
+        1 / scale, 0, centerX,
+        0, 1 / scale, centerY,
+        0, 0, 1,
+      ],
+    );
+  }
+
+  static List<double> _multiply3(
+    List<double> left,
+    List<double> right,
+  ) {
+    final result = List<double>.filled(9, 0);
+    for (var row = 0; row < 3; row++) {
+      for (var column = 0; column < 3; column++) {
+        for (var index = 0; index < 3; index++) {
+          result[row * 3 + column] +=
+              left[row * 3 + index] * right[index * 3 + column];
+        }
+      }
     }
     return result;
   }
@@ -297,4 +362,16 @@ class PlanarHomographyEstimator {
       maximumReprojectionError: maximum,
     );
   }
+
+class _NormalizedPoints {
+  const _NormalizedPoints({
+    required this.points,
+    required this.transform,
+    required this.inverse,
+  });
+
+  final List<Vector2> points;
+  final List<double> transform;
+  final List<double> inverse;
+}
 }
