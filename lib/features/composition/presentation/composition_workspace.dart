@@ -148,7 +148,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       );
       setState(() {
         _notice =
-            'Imported ${document.visibleLayerCount} editable raster layers from ${document.width}×${document.height} Photoshop document';
+            'Imported ${document.visibleLayerCount} Photoshop layers, '
+            '${document.groupCount} groups, ${document.clippedLayerCount} clipping layers '
+            'and ${document.smartObjectCount} Smart Objects from '
+            '${document.width}×${document.height} document';
         _panel = 'Layers';
       });
     } catch (error) {
@@ -454,13 +457,42 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
               itemBuilder: (context, index) {
                 final layer = layers[index];
                 final selected = layer.id == _controller.document.selectedLayerId;
+                var depth = 0;
+                var ancestorId = layer.parentId;
+                while (ancestorId != null && depth <= layers.length) {
+                  final parents = layers.where((item) => item.id == ancestorId);
+                  if (parents.isEmpty) break;
+                  ancestorId = parents.first.parentId;
+                  depth++;
+                }
+                final metadata = <String>[
+                  layer.kind == LayerKind.precomposition
+                      ? 'PSD group'
+                      : layer.kind.name,
+                  if (layer.photoshopClipped)
+                    layer.clippingBaseLayerId == null
+                        ? 'clipped layer'
+                        : 'clipped to base',
+                  if (layer.smartObjectResourceId != null) 'Smart Object',
+                  if (layer.photoshopAdjustmentKey != null)
+                    'Adjustment ${layer.photoshopAdjustmentKey}',
+                ];
                 return ListTile(
                   dense: true,
+                  contentPadding: EdgeInsets.only(
+                    left: 10 + depth * 14,
+                    right: 8,
+                  ),
                   selected: selected,
                   selectedTileColor: const Color(0xFF263553),
-                  leading: Icon(_iconFor(layer.kind), size: 17),
+                  leading: Icon(
+                    layer.kind == LayerKind.precomposition
+                        ? Icons.folder_open
+                        : _iconFor(layer.kind),
+                    size: 17,
+                  ),
                   title: Text(layer.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
-                  subtitle: Text(layer.parentId == null ? layer.kind.name : 'Parent: ${layer.parentId}', maxLines: 1, style: const TextStyle(fontSize: 9)),
+                  subtitle: Text(metadata.join(' · '), maxLines: 1, style: const TextStyle(fontSize: 9)),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -667,7 +699,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         visual = const Icon(Icons.auto_awesome, color: Color(0xFFFFC98A), size: 32);
         break;
       case LayerKind.precomposition:
-        visual = const Icon(Icons.layers_outlined, color: Color(0xFFB3BEFF), size: 32);
+        visual = const SizedBox.shrink();
         break;
     }
 
@@ -788,6 +820,32 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         Text('Masks: ${layer.masks.length}'),
         Text('Effects: ${layer.effects.length}'),
         Text('Parent: ${layer.parentId ?? 'None'}'),
+        if (layer.photoshopClipped)
+          Text(
+            'Clipped to base: ${layer.clippingBaseLayerId ?? 'unresolved'}',
+            style: const TextStyle(fontSize: 10, color: Color(0xFFE4C38A)),
+          ),
+        if (layer.smartObjectResourceId != null)
+          Text(
+            'Smart Object ID: ${layer.smartObjectResourceId}',
+            style: const TextStyle(fontSize: 10, color: Color(0xFF9EDBCF)),
+          ),
+        if (layer.smartObjectSourceUri != null) ...[
+          const SizedBox(height: 6),
+          OutlinedButton.icon(
+            onPressed: () => Share.shareXFiles(
+              [XFile(layer.smartObjectSourceUri!)],
+              text: 'Embedded Photoshop Smart Object',
+            ),
+            icon: const Icon(Icons.open_in_new, size: 15),
+            label: const Text('Share embedded Smart Object source'),
+          ),
+        ],
+        if (layer.photoshopAdjustmentKey != null)
+          Text(
+            'PSD adjustment block: ${layer.photoshopAdjustmentKey}',
+            style: const TextStyle(fontSize: 10, color: Color(0xFFB6A5FF)),
+          ),
         const SizedBox(height: 8),
         DropdownButtonFormField<LayerBlendMode>(
           initialValue: layer.blendMode,
