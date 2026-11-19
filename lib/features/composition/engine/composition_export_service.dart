@@ -360,7 +360,6 @@ class CompositionExportService {
         inputLabel: sourceLayerLabel,
         layer: layer,
         index: index,
-        timeMs: document.playheadMs,
       );
       final x = '(' + posX + '-w/2)';
       final y = '(' + posY + '-h/2)';
