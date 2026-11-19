@@ -1,6 +1,7 @@
 import 'package:depthvibe/features/composition/domain/composition_models.dart';
 import 'package:depthvibe/features/composition/engine/camera_projection_resolver.dart';
 import 'package:depthvibe/features/composition/engine/parent_transform_expression_resolver.dart';
+import 'package:depthvibe/features/composition/engine/parent_transform_resolver.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
