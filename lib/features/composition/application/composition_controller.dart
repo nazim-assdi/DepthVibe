@@ -92,27 +92,39 @@ class CompositionController extends ChangeNotifier {
     required List<PhotoshopLayerAsset> assets,
   }) {
     final layers = <CompositionLayer>[];
-    for (final asset in assets.where((item) => !item.isGroup)) {
-      final kind = asset.textContent != null
-          ? LayerKind.text
-          : asset.isAdjustment
-              ? LayerKind.adjustment
-              : LayerKind.photoshopLayer;
+    final sourceIds = <int, String>{};
+
+    for (final asset in assets) {
+      final kind = asset.isGroup
+          ? LayerKind.precomposition
+          : asset.textContent != null
+              ? LayerKind.text
+              : asset.isAdjustment
+                  ? LayerKind.adjustment
+                  : LayerKind.photoshopLayer;
       final original = _defaultLayer(
         kind,
         name: asset.name.trim().isEmpty
-            ? 'Photoshop Layer ${asset.sourceIndex + 1}'
+            ? (asset.isGroup
+                ? 'Group ${asset.sourceIndex + 1}'
+                : 'Photoshop Layer ${asset.sourceIndex + 1}')
             : asset.name,
       );
+      final hasBounds = asset.width > 0 && asset.height > 0;
       final initialTransform = LayerTransform(
-        position: Vector3(
-          asset.left + asset.width / 2,
-          asset.top + asset.height / 2,
-          0,
-        ),
+        position: hasBounds
+            ? Vector3(
+                asset.left + asset.width / 2,
+                asset.top + asset.height / 2,
+                0,
+              )
+            : Vector3(documentWidth / 2, documentHeight / 2, 0),
         opacity: asset.opacity / 255 * 100,
       );
-      layers.add(original.copyWith(
+      final parentId = asset.parentGroupSourceIndex == null
+          ? null
+          : sourceIds[asset.parentGroupSourceIndex];
+      final imported = original.copyWith(
         sourceUri: asset.assetPath.isEmpty ? null : asset.assetPath,
         sourceDocumentUri: sourceDocumentUri,
         sourceLayerIndex: asset.sourceIndex,
@@ -120,14 +132,37 @@ class CompositionController extends ChangeNotifier {
         sourceWidth: asset.width,
         sourceHeight: asset.height,
         enabled: asset.visible,
-        blendMode: _photoshopLayerBlendMode(asset.blendMode),
+        parentId: parentId,
+        photoshopClipped: asset.clipping != 0,
+        smartObjectSourceUri: asset.smartObjectSourceUri,
+        smartObjectResourceId: asset.smartObjectResourceId,
+        photoshopAdjustmentKey: asset.adjustmentKey,
         transform: initialTransform,
-      ));
+      );
+      layers.add(imported);
+      sourceIds[asset.sourceIndex] = imported.id;
     }
+
+    // Resolve clipping-base references only after all source records have IDs.
+    for (var index = 0; index < layers.length; index++) {
+      final sourceIndex = layers[index].sourceLayerIndex;
+      if (sourceIndex == null) continue;
+      final asset = assets.firstWhere(
+        (item) => item.sourceIndex == sourceIndex,
+      );
+      final baseId = asset.clippingBaseSourceIndex == null
+          ? null
+          : sourceIds[asset.clippingBaseSourceIndex];
+      layers[index] = layers[index].copyWith(
+        clippingBaseLayerId: baseId,
+        clearClippingBase: baseId == null,
+      );
+    }
+
     _set(_document.copyWith(
       width: documentWidth,
       height: documentHeight,
-      name: sourceDocumentUri.split(RegExp(r'[/\\]')).last,
+      name: sourceDocumentUri.split(RegExp(r'[/\\\\]')).last,
       layers: [...layers, ..._document.layers],
       selectedLayerId: layers.isEmpty ? _document.selectedLayerId : layers.first.id,
     ));
@@ -197,7 +232,8 @@ class CompositionController extends ChangeNotifier {
       if (parent == null) return false;
       if (parent.kind != LayerKind.nullObject &&
           parent.kind != LayerKind.threeDModel &&
-          parent.kind != LayerKind.camera) {
+          parent.kind != LayerKind.camera &&
+          parent.kind != LayerKind.precomposition) {
         return false;
       }
       var cursor = parent;
