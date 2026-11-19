@@ -362,6 +362,7 @@ class PlanarHomographyEstimator {
       maximumReprojectionError: maximum,
     );
   }
+}
 
 class _NormalizedPoints {
   const _NormalizedPoints({
@@ -373,5 +374,4 @@ class _NormalizedPoints {
   final List<Vector2> points;
   final List<double> transform;
   final List<double> inverse;
-}
 }
