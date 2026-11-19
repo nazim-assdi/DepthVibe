@@ -92,6 +92,45 @@ void main() {
     expect(expression, contains('min(1,max(0,'));
   });
 
+  test('flattens Bezier mask handles into curved export outlines', () {
+    const compiler = FfmpegAnimationCompiler();
+    final vertices = [
+      const MaskVertex(
+        anchor: Vector2(0.2, 0.2),
+        outHandle: Vector2(0.25, 0),
+      ),
+      const MaskVertex(
+        anchor: Vector2(0.8, 0.2),
+        inHandle: Vector2(-0.25, 0.25),
+      ),
+      const MaskVertex(
+        anchor: Vector2(0.5, 0.8),
+        outHandle: Vector2(0, -0.2),
+      ),
+    ];
+
+    final polygon = compiler.maskAlphaExpression([
+      MaskModel(
+        id: 'polygon',
+        name: 'Polygon',
+        shape: MaskShape.polygon,
+        vertices: vertices,
+      ),
+    ]);
+    final bezier = compiler.maskAlphaExpression([
+      MaskModel(
+        id: 'bezier',
+        name: 'Bezier',
+        shape: MaskShape.bezier,
+        vertices: vertices,
+      ),
+    ]);
+
+    final polygonEdges = RegExp('hypot\\(').allMatches(polygon).length;
+    final bezierEdges = RegExp('hypot\\(').allMatches(bezier).length;
+    expect(bezierEdges, greaterThan(polygonEdges));
+  });
+
   test('compiles wipe alpha and slide position transitions', () {
     const layer = CompositionLayer(
       id: 'clip-b',
