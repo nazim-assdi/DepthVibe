@@ -469,6 +469,56 @@ void main() {
       controller.dispose();
     });
 
+    test('polygon and Bezier mask vertex components can be keyframed', () {
+      final controller = CompositionController();
+      controller.addLayer(LayerKind.shape);
+      controller.addMask(shape: MaskShape.bezier);
+      final maskId = controller.selectedLayer!.masks.single.id;
+
+      controller.setPlayhead(0);
+      controller.setMaskVertexAnimatedValue(
+        maskId,
+        0,
+        'anchor.x',
+        0.2,
+        keyframe: true,
+      );
+      controller.setMaskVertexAnimatedValue(
+        maskId,
+        0,
+        'outHandle.y',
+        0.1,
+        keyframe: true,
+      );
+      controller.setPlayhead(1000);
+      controller.setMaskVertexAnimatedValue(
+        maskId,
+        0,
+        'anchor.x',
+        0.6,
+        keyframe: true,
+      );
+      controller.setMaskVertexAnimatedValue(
+        maskId,
+        0,
+        'outHandle.y',
+        0.3,
+        keyframe: true,
+      );
+
+      final mask = controller.selectedLayer!.masks.single;
+      expect(mask.vertexValueAt(0, 'anchor.x', 500), closeTo(0.4, 0.001));
+      expect(mask.vertexValueAt(0, 'outHandle.y', 500), closeTo(0.2, 0.001));
+      expect(
+        mask.keyframeTracks.map((track) => track.property),
+        containsAll([
+          'vertex.0.anchor.x',
+          'vertex.0.outHandle.y',
+        ]),
+      );
+      controller.dispose();
+    });
+
     test('Bezier mask handles can be edited independently', () {
       final controller = CompositionController();
       controller.addLayer(LayerKind.shape);
