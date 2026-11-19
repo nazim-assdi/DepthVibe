@@ -36,6 +36,22 @@ def replace_min_sdk(path: Path) -> None:
     text = re.sub(r"minSdkVersion\s+flutter\.minSdkVersion", "minSdkVersion 26", text)
     path.write_text(text, encoding="utf-8")
 
+def replace_compile_sdk(path: Path, version: int = 37) -> None:
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    text = re.sub(
+        r"compileSdk\s*=\s*(?:flutter\.compileSdkVersion|\d+)",
+        f"compileSdk = {version}",
+        text,
+    )
+    text = re.sub(
+        r"compileSdkVersion\s+(?:flutter\.compileSdkVersion|\d+)",
+        f"compileSdkVersion {version}",
+        text,
+    )
+    path.write_text(text, encoding="utf-8")
+
 def add_android_gallery_permission(path: Path) -> None:
     if not path.exists():
         return
@@ -147,6 +163,8 @@ def add_camera_entitlements(path: Path) -> None:
             dictionary.extend([key_node, value_node])
     tree.write(path, encoding="utf-8", xml_declaration=True)
 
+replace_compile_sdk(ROOT / "android/app/build.gradle.kts", 37)
+replace_compile_sdk(ROOT / "android/app/build.gradle", 37)
 replace_min_sdk(ROOT / "android/app/build.gradle.kts")
 add_camera_compile_dependency(ROOT / "android/build.gradle.kts")
 add_camera_compile_dependency(ROOT / "android/build.gradle")
