@@ -905,6 +905,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             if (value != null) _controller.setLayerBlendMode(value);
           },
         ),
+        if (layer.blendMode != LayerBlendMode.normal) ...[
+          const SizedBox(height: 5),
+          const Text(
+            'Selected blend mode is applied in FFmpeg export. Canvas preview still uses normal source-over compositing.',
+            style: TextStyle(fontSize: 9, color: Color(0xFFE3C28D)),
+          ),
+        ],
         const SizedBox(height: 12),
         FilledButton.icon(
           onPressed: () => _addKeyframe('position.x'),
