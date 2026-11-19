@@ -236,6 +236,57 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     setState(() => _notice = 'Keyframe added at ${_time(_controller.document.playheadMs)}');
   }
 
+  Future<void> _editBezierCurve(
+    String property,
+    BezierCurve initialCurve,
+  ) async {
+    var draft = initialCurve;
+    final result = await showDialog<BezierCurve>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('BEZIER GRAPH EDITOR'),
+          content: SizedBox(
+            width: 340,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Drag either control handle to shape the animation easing.',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF9AA8BD)),
+                ),
+                const SizedBox(height: 12),
+                _BezierCurveEditor(
+                  curve: draft,
+                  onChanged: (curve) => setDialogState(() => draft = curve),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'P1  ${draft.x1.toStringAsFixed(2)}, ${draft.y1.toStringAsFixed(2)}'
+                  '     P2  ${draft.x2.toStringAsFixed(2)}, ${draft.y2.toStringAsFixed(2)}',
+                  style: const TextStyle(fontSize: 10, color: Color(0xFFB7C3D5)),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('CANCEL'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(draft),
+              child: const Text('APPLY CURVE'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    _controller.setBezierCurve(property, result);
+    setState(() => _notice = 'Bezier curve updated for $property');
+  }
+
   String _time(int ms) {
     final seconds = ms ~/ 1000;
     final frames = ((ms % 1000) / 1000 * _controller.document.frameRate).floor();
@@ -851,8 +902,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     double max,
   ) {
     final value = layer.valueAt(property, _controller.document.playheadMs);
-    final track = layer.keyframeTracks.where((item) => item.property == property);
-    final keyframes = track.isEmpty ? 0 : track.first.keyframes.length;
+    final matchingTracks =
+        layer.keyframeTracks.where((item) => item.property == property);
+    final keyframes =
+        matchingTracks.isEmpty ? 0 : matchingTracks.first.keyframes.length;
+    ScalarKeyframe? activeKeyframe;
+    if (matchingTracks.isNotEmpty) {
+      for (final frame in matchingTracks.first.keyframes) {
+        if (frame.timeMs == _controller.document.playheadMs) {
+          activeKeyframe = frame;
+          break;
+        }
+      }
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -863,16 +925,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
               visualDensity: VisualDensity.compact,
               tooltip: 'Add keyframe at current playhead',
               onPressed: () => _addKeyframe(property),
-              icon: Icon(Icons.diamond, size: 16, color: keyframes > 0 ? const Color(0xFFB6A5FF) : const Color(0xFF8A98B0)),
+              icon: Icon(
+                Icons.diamond,
+                size: 16,
+                color: keyframes > 0
+                    ? const Color(0xFFB6A5FF)
+                    : const Color(0xFF8A98B0),
+              ),
             ),
             if (keyframes > 0)
               PopupMenuButton<Interpolation>(
                 tooltip: 'Set keyframe interpolation at playhead',
                 icon: const Icon(Icons.linear_scale, size: 16),
-                onSelected: (value) => _controller.setInterpolation(
-                  property,
-                  value,
-                ),
+                onSelected: (value) =>
+                    _controller.setInterpolation(property, value),
                 itemBuilder: (_) => Interpolation.values
                     .map((value) => PopupMenuItem(
                           value: value,
@@ -880,9 +946,23 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                         ))
                     .toList(),
               ),
+            if (activeKeyframe?.interpolation == Interpolation.cubicBezier)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Edit Bezier graph',
+                icon: const Icon(Icons.timeline, size: 16),
+                onPressed: () => _editBezierCurve(
+                  property,
+                  activeKeyframe!.bezier,
+                ),
+              ),
             SizedBox(
               width: 54,
-              child: Text(value.toStringAsFixed(1), textAlign: TextAlign.end, style: const TextStyle(fontSize: 10)),
+              child: Text(
+                value.toStringAsFixed(1),
+                textAlign: TextAlign.end,
+                style: const TextStyle(fontSize: 10),
+              ),
             ),
           ],
         ),
@@ -890,11 +970,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
           min: min,
           max: max,
           value: value.clamp(min, max).toDouble(),
-          onChanged: (next) {
-            _controller.setTransformValue(property, next);
-          },
+          onChanged: (next) => _controller.setTransformValue(property, next),
           onChangeEnd: (next) {
-            if (keyframes > 0) _controller.setTransformValue(property, next, keyframe: true);
+            if (keyframes > 0) {
+              _controller.setTransformValue(property, next, keyframe: true);
+            }
           },
         ),
       ],
@@ -1859,4 +1939,154 @@ class _CanvasGridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CanvasGridPainter oldDelegate) => false;
+}
+
+
+/// Interactive cubic Bezier graph used by the keyframe interpolation editor.
+class _BezierCurveEditor extends StatefulWidget {
+  const _BezierCurveEditor({
+    required this.curve,
+    required this.onChanged,
+  });
+
+  final BezierCurve curve;
+  final ValueChanged<BezierCurve> onChanged;
+
+  @override
+  State<_BezierCurveEditor> createState() => _BezierCurveEditorState();
+}
+
+class _BezierCurveEditorState extends State<_BezierCurveEditor> {
+  int _activeHandle = 1;
+
+  Rect _plotRect(Size size) =>
+      Rect.fromLTWH(24, 12, size.width - 48, size.height - 36);
+
+  Offset _handlePoint(BezierCurve curve, Rect plot, int handle) {
+    final x = handle == 1 ? curve.x1 : curve.x2;
+    final y = handle == 1 ? curve.y1 : curve.y2;
+    return Offset(plot.left + x * plot.width, plot.bottom - y * plot.height);
+  }
+
+  void _beginDrag(Offset position, Size size) {
+    final plot = _plotRect(size);
+    final first = _handlePoint(widget.curve, plot, 1);
+    final second = _handlePoint(widget.curve, plot, 2);
+    _activeHandle =
+        (position - first).distance <= (position - second).distance ? 1 : 2;
+  }
+
+  void _updateDrag(Offset position, Size size) {
+    final plot = _plotRect(size);
+    final x = ((position.dx - plot.left) / plot.width).clamp(0.0, 1.0);
+    final y = (1 - (position.dy - plot.top) / plot.height).clamp(0.0, 1.0);
+    final current = widget.curve;
+    widget.onChanged(
+      _activeHandle == 1
+          ? BezierCurve(x1: x, y1: y, x2: current.x2, y2: current.y2)
+          : BezierCurve(x1: current.x1, y1: current.y1, x2: x, y2: y),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 320,
+        height: 190,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final size = Size(constraints.maxWidth, constraints.maxHeight);
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanStart: (details) =>
+                  _beginDrag(details.localPosition, size),
+              onPanUpdate: (details) =>
+                  _updateDrag(details.localPosition, size),
+              child: CustomPaint(
+                painter: _BezierCurveGraphPainter(widget.curve),
+                size: size,
+              ),
+            );
+          },
+        ),
+      );
+}
+
+class _BezierCurveGraphPainter extends CustomPainter {
+  const _BezierCurveGraphPainter(this.curve);
+
+  final BezierCurve curve;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final plot = Rect.fromLTWH(24, 12, size.width - 48, size.height - 36);
+    final background = Paint()..color = const Color(0xFF101827);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(plot, const Radius.circular(8)),
+      background,
+    );
+
+    final grid = Paint()
+      ..color = const Color(0xFF2A3850)
+      ..strokeWidth = 0.8;
+    for (var index = 0; index <= 4; index++) {
+      final x = plot.left + plot.width * index / 4;
+      final y = plot.top + plot.height * index / 4;
+      canvas.drawLine(Offset(x, plot.top), Offset(x, plot.bottom), grid);
+      canvas.drawLine(Offset(plot.left, y), Offset(plot.right, y), grid);
+    }
+
+    Offset point(double x, double y) =>
+        Offset(plot.left + x * plot.width, plot.bottom - y * plot.height);
+    final start = point(0, 0);
+    final end = point(1, 1);
+    final first = point(curve.x1.clamp(0.0, 1.0), curve.y1.clamp(0.0, 1.0));
+    final second = point(curve.x2.clamp(0.0, 1.0), curve.y2.clamp(0.0, 1.0));
+
+    canvas.drawLine(
+      start,
+      end,
+      Paint()
+        ..color = const Color(0xFF64748B)
+        ..strokeWidth = 1
+        ..style = PaintingStyle.stroke,
+    );
+    canvas.drawLine(
+      start,
+      first,
+      Paint()
+        ..color = const Color(0xFF7C8CFF)
+        ..strokeWidth = 1.5,
+    );
+    canvas.drawLine(
+      end,
+      second,
+      Paint()
+        ..color = const Color(0xFF37D6C0)
+        ..strokeWidth = 1.5,
+    );
+
+    final curvePath = Path()
+      ..moveTo(start.dx, start.dy)
+      ..cubicTo(first.dx, first.dy, second.dx, second.dy, end.dx, end.dy);
+    canvas.drawPath(
+      curvePath,
+      Paint()
+        ..color = const Color(0xFFB6A5FF)
+        ..strokeWidth = 3
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round,
+    );
+
+    canvas.drawCircle(start, 4, Paint()..color = const Color(0xFFE2E8F0));
+    canvas.drawCircle(end, 4, Paint()..color = const Color(0xFFE2E8F0));
+    canvas.drawCircle(first, 7, Paint()..color = const Color(0xFF7C8CFF));
+    canvas.drawCircle(second, 7, Paint()..color = const Color(0xFF37D6C0));
+  }
+
+  @override
+  bool shouldRepaint(covariant _BezierCurveGraphPainter oldDelegate) =>
+      oldDelegate.curve.x1 != curve.x1 ||
+      oldDelegate.curve.y1 != curve.y1 ||
+      oldDelegate.curve.x2 != curve.x2 ||
+      oldDelegate.curve.y2 != curve.y2;
 }
