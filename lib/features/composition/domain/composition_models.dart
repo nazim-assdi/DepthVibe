@@ -143,6 +143,7 @@ class AudioBus {
     this.makeupGainDb = 0,
     this.limiterEnabled = false,
     this.limiterCeilingDb = -1,
+    this.keyframeTracks = const [],
   });
 
   final String id;
@@ -159,6 +160,21 @@ class AudioBus {
   final double makeupGainDb;
   final bool limiterEnabled;
   final double limiterCeilingDb;
+  final List<KeyframeTrack> keyframeTracks;
+
+  double valueAt(String property, int timeMs) {
+    final fallback = switch (property) {
+      'gainDb' => gainDb,
+      'pan' => pan,
+      _ => 0.0,
+    };
+    final matching = keyframeTracks.where(
+      (track) => track.property == property,
+    );
+    return matching.isEmpty
+        ? fallback
+        : matching.first.sample(timeMs, fallback: fallback);
+  }
 
   AudioBus copyWith({
     String? name,
@@ -173,6 +189,7 @@ class AudioBus {
     double? makeupGainDb,
     bool? limiterEnabled,
     double? limiterCeilingDb,
+    List<KeyframeTrack>? keyframeTracks,
   }) => AudioBus(
         id: id,
         name: name ?? this.name,
@@ -190,6 +207,7 @@ class AudioBus {
         makeupGainDb: makeupGainDb ?? this.makeupGainDb,
         limiterEnabled: limiterEnabled ?? this.limiterEnabled,
         limiterCeilingDb: limiterCeilingDb ?? this.limiterCeilingDb,
+        keyframeTracks: keyframeTracks ?? this.keyframeTracks,
       );
 }
 
