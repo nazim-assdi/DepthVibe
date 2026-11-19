@@ -41,6 +41,33 @@ void main() {
   });
 
 
+  test('compiles posterize with an alpha-safe native LUT instead of an optional filter', () {
+    const layer = CompositionLayer(
+      id: 'posterize-layer',
+      name: 'Posterize',
+      kind: LayerKind.adjustment,
+      effects: [
+        EffectInstance(
+          id: 'psd-posterize',
+          effectId: 'posterize',
+          name: 'Photoshop Posterize',
+          parameters: {'levels': 6},
+        ),
+      ],
+    );
+
+    final filters = const FfmpegFilterCompiler().compileEffects(
+      layer,
+      timeMs: 0,
+    );
+
+    expect(filters, hasLength(1));
+    expect(filters.single, contains('format=rgba,lutrgb='));
+    expect(filters.single, contains("round(val*5/255)*255/5"));
+    expect(filters.single, contains(':a=val'));
+    expect(filters.single, isNot(contains('posterize=')));
+  });
+
   test('compiles threshold adjustment to an alpha-preserving RGB LUT', () {
     const layer = CompositionLayer(
       id: 'threshold-layer',
