@@ -74,6 +74,7 @@ class AudioSettings {
     this.lowEqDb = 0,
     this.midEqDb = 0,
     this.highEqDb = 0,
+    this.busId,
   });
 
   final double gainDb;
@@ -89,6 +90,7 @@ class AudioSettings {
   final double lowEqDb;
   final double midEqDb;
   final double highEqDb;
+  final String? busId;
 
   AudioSettings copyWith({
     double? gainDb,
@@ -104,6 +106,8 @@ class AudioSettings {
     double? lowEqDb,
     double? midEqDb,
     double? highEqDb,
+    String? busId,
+    bool clearBus = false,
   }) => AudioSettings(
     gainDb: gainDb ?? this.gainDb,
     pan: pan ?? this.pan,
@@ -118,7 +122,75 @@ class AudioSettings {
     lowEqDb: lowEqDb ?? this.lowEqDb,
     midEqDb: midEqDb ?? this.midEqDb,
     highEqDb: highEqDb ?? this.highEqDb,
+    busId: clearBus ? null : (busId ?? this.busId),
   );
+}
+
+/// A routed audio submix with bus-level gain, pan and dynamics.
+class AudioBus {
+  const AudioBus({
+    required this.id,
+    required this.name,
+    this.isMaster = false,
+    this.gainDb = 0,
+    this.pan = 0,
+    this.muted = false,
+    this.compressorEnabled = false,
+    this.compressorThresholdDb = -18,
+    this.compressorRatio = 3,
+    this.compressorAttackMs = 15,
+    this.compressorReleaseMs = 180,
+    this.makeupGainDb = 0,
+    this.limiterEnabled = false,
+    this.limiterCeilingDb = -1,
+  });
+
+  final String id;
+  final String name;
+  final bool isMaster;
+  final double gainDb;
+  final double pan;
+  final bool muted;
+  final bool compressorEnabled;
+  final double compressorThresholdDb;
+  final double compressorRatio;
+  final double compressorAttackMs;
+  final double compressorReleaseMs;
+  final double makeupGainDb;
+  final bool limiterEnabled;
+  final double limiterCeilingDb;
+
+  AudioBus copyWith({
+    String? name,
+    double? gainDb,
+    double? pan,
+    bool? muted,
+    bool? compressorEnabled,
+    double? compressorThresholdDb,
+    double? compressorRatio,
+    double? compressorAttackMs,
+    double? compressorReleaseMs,
+    double? makeupGainDb,
+    bool? limiterEnabled,
+    double? limiterCeilingDb,
+  }) => AudioBus(
+        id: id,
+        name: name ?? this.name,
+        isMaster: isMaster,
+        gainDb: gainDb ?? this.gainDb,
+        pan: pan ?? this.pan,
+        muted: muted ?? this.muted,
+        compressorEnabled: compressorEnabled ?? this.compressorEnabled,
+        compressorThresholdDb:
+            compressorThresholdDb ?? this.compressorThresholdDb,
+        compressorRatio: compressorRatio ?? this.compressorRatio,
+        compressorAttackMs: compressorAttackMs ?? this.compressorAttackMs,
+        compressorReleaseMs:
+            compressorReleaseMs ?? this.compressorReleaseMs,
+        makeupGainDb: makeupGainDb ?? this.makeupGainDb,
+        limiterEnabled: limiterEnabled ?? this.limiterEnabled,
+        limiterCeilingDb: limiterCeilingDb ?? this.limiterCeilingDb,
+      );
 }
 
 class MotionTrackSample {
@@ -880,6 +952,9 @@ class CompositionDocument {
     this.durationMs = 30000,
     this.layers = const [],
     this.transitions = const [],
+    this.audioBuses = const [
+      AudioBus(id: 'master', name: 'Master', isMaster: true),
+    ],
     this.playheadMs = 0,
     this.selectedLayerId,
   });
@@ -891,6 +966,7 @@ class CompositionDocument {
   final int durationMs;
   final List<CompositionLayer> layers;
   final List<CompositionTransition> transitions;
+  final List<AudioBus> audioBuses;
   final int playheadMs;
   final String? selectedLayerId;
 
@@ -902,6 +978,7 @@ class CompositionDocument {
     int? durationMs,
     List<CompositionLayer>? layers,
     List<CompositionTransition>? transitions,
+    List<AudioBus>? audioBuses,
     int? playheadMs,
     String? selectedLayerId,
     bool clearSelectedLayer = false,
@@ -914,6 +991,7 @@ class CompositionDocument {
         durationMs: durationMs ?? this.durationMs,
         layers: layers ?? this.layers,
         transitions: transitions ?? this.transitions,
+        audioBuses: audioBuses ?? this.audioBuses,
         playheadMs: playheadMs ?? this.playheadMs,
         selectedLayerId: clearSelectedLayer ? null : (selectedLayerId ?? this.selectedLayerId),
       );
