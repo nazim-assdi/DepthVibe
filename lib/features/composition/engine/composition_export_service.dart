@@ -10,6 +10,7 @@ import 'audio_bus_compiler.dart';
 import 'audio_equalizer_compiler.dart';
 import 'ffmpeg_animation_compiler.dart';
 import 'ffmpeg_filter_compiler.dart';
+import 'parent_transform_expression_resolver.dart';
 
 typedef CompositionExportProgress = void Function(double value);
 
@@ -33,12 +34,14 @@ class CompositionExportService {
     this.animationCompiler = const FfmpegAnimationCompiler(),
     this.audioEqualizerCompiler = const AudioEqualizerCompiler(),
     this.audioBusCompiler = const AudioBusCompiler(),
+    this.parentTransformResolver = const ParentTransformExpressionResolver(),
   });
 
   final FfmpegFilterCompiler filterCompiler;
   final FfmpegAnimationCompiler animationCompiler;
   final AudioEqualizerCompiler audioEqualizerCompiler;
   final AudioBusCompiler audioBusCompiler;
+  final ParentTransformExpressionResolver parentTransformResolver;
 
   Future<CompositionExportResult> export(
     CompositionDocument document, {
@@ -254,14 +257,12 @@ class CompositionExportService {
       final inputIndex = mediaInputIndices[layer.id]!;
       final start = (layer.startMs / 1000).toStringAsFixed(3);
       final duration = (layer.durationMs / 1000).toStringAsFixed(3);
-      final sxBase = animationCompiler.scalarExpression(
-        layer: layer, property: 'scale.x',
-        fallback: layer.transform.scale.x,
+      final resolvedTransform = parentTransformResolver.resolve(
+        layer: layer,
+        layers: document.layers,
       );
-      final syBase = animationCompiler.scalarExpression(
-        layer: layer, property: 'scale.y',
-        fallback: layer.transform.scale.y,
-      );
+      final sxBase = resolvedTransform.scaleX;
+      final syBase = resolvedTransform.scaleY;
       final sx = animationCompiler.transitionScaleExpression(
         layer: layer, transitions: document.transitions,
         baseExpression: sxBase,
@@ -270,22 +271,10 @@ class CompositionExportService {
         layer: layer, transitions: document.transitions,
         baseExpression: syBase,
       );
-      final rotation = animationCompiler.scalarExpression(
-        layer: layer, property: 'rotation.z',
-        fallback: layer.transform.rotation.z,
-      );
-      final opacity = animationCompiler.scalarExpression(
-        layer: layer, property: 'opacity',
-        fallback: layer.transform.opacity, timeVariable: 'T',
-      );
-      final posXBase = animationCompiler.scalarExpression(
-        layer: layer, property: 'position.x',
-        fallback: layer.transform.position.x,
-      );
-      final posYBase = animationCompiler.scalarExpression(
-        layer: layer, property: 'position.y',
-        fallback: layer.transform.position.y,
-      );
+      final rotation = resolvedTransform.rotationZ;
+      final opacity = resolvedTransform.opacity;
+      final posXBase = resolvedTransform.positionX;
+      final posYBase = resolvedTransform.positionY;
       final posX = animationCompiler.transitionPositionExpression(
         layer: layer, transitions: document.transitions,
         baseExpression: posXBase, axis: 'x',
