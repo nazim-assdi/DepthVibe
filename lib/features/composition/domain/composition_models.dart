@@ -962,6 +962,7 @@ class PhotoshopLayerAsset {
     this.smartObjectSourceUri,
     this.smartObjectResourceId,
     this.adjustmentKey,
+    this.adjustmentEffects = const [],
   });
 
   final int sourceIndex;
@@ -984,6 +985,7 @@ class PhotoshopLayerAsset {
   final String? smartObjectSourceUri;
   final String? smartObjectResourceId;
   final String? adjustmentKey;
+  final List<EffectInstance> adjustmentEffects;
 }
 
 class CompositionDocument {
