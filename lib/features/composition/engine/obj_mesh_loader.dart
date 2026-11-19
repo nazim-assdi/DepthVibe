@@ -175,7 +175,7 @@ class ObjMeshLoader {
 
       void save() {
         if (name != null) {
-          result[name!] = ObjMaterial(
+          result[name] = ObjMaterial(
             red: red.clamp(0.0, 1.0).toDouble(),
             green: green.clamp(0.0, 1.0).toDouble(),
             blue: blue.clamp(0.0, 1.0).toDouble(),

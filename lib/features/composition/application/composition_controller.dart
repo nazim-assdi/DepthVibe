@@ -174,21 +174,6 @@ class CompositionController extends ChangeNotifier {
     ));
   }
 
-  LayerBlendMode _photoshopLayerBlendMode(String mode) => switch (mode) {
-    'mul ' => LayerBlendMode.multiply,
-    'scrn' => LayerBlendMode.screen,
-    'over' => LayerBlendMode.overlay,
-    'sLit' => LayerBlendMode.softLight,
-    'hLit' => LayerBlendMode.hardLight,
-    'dodge' => LayerBlendMode.colorDodge,
-    'div ' => LayerBlendMode.colorBurn,
-    'diff' => LayerBlendMode.difference,
-    'dark' => LayerBlendMode.darken,
-    'lite' => LayerBlendMode.lighten,
-    'add ' => LayerBlendMode.add,
-    _ => LayerBlendMode.normal,
-  };
-
   void setLayerBlendMode(LayerBlendMode mode) {
     final layer = selectedLayer;
     if (layer == null) return;
