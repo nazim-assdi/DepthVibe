@@ -716,7 +716,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                for (final panel in const ['Layers', 'Timing', 'Transform', 'Animation', 'Shape', 'Effects', 'Masks', 'Audio', 'Tracking', 'Transitions', 'Parent', '3D'])
+                for (final panel in const ['Layers', 'Timing', 'Transform', 'Animation', 'Shape', 'Effects', 'Masks', 'Audio', 'Bus Mixer', 'Tracking', 'Transitions', 'Parent', '3D'])
                   TextButton(
                     onPressed: () => setState(() => _panel = panel),
                     child: Text(panel, style: TextStyle(fontSize: 10, fontWeight: _panel == panel ? FontWeight.w900 : FontWeight.normal)),
@@ -727,7 +727,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
           const Divider(height: 1, color: Color(0xFF29354A)),
           Expanded(
             child: layer == null
-                ? const Center(child: Text('Select a layer to edit'))
+                ? _panel == 'Bus Mixer'
+                    ? SingleChildScrollView(
+                        padding: const EdgeInsets.all(12),
+                        child: _buildAudioBusPanel(null),
+                      )
+                    : const Center(child: Text('Select a layer to edit'))
                 : SingleChildScrollView(
                     padding: const EdgeInsets.all(12),
                     child: _panelContent(layer),
@@ -754,6 +759,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         return _buildMasksPanel(layer);
       case 'Audio':
         return _buildAudioPanel(layer);
+      case 'Bus Mixer':
+        return _buildAudioBusPanel(layer);
       case 'Tracking':
         return _buildTrackingPanel(layer);
       case 'Transitions':
@@ -1467,6 +1474,199 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
           'Tracker type: template matching at 10 samples/second. It handles translation on a mostly unchanged object; fast scale changes, rotation, occlusion and planar perspective need a stronger optical-flow/planar tracker.',
           style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
         ),
+      ],
+    );
+  }
+
+  Widget _buildAudioBusPanel(CompositionLayer? layer) {
+    final buses = _controller.document.audioBuses;
+    final master = buses.where((bus) => bus.isMaster).firstOrNull;
+    final selectedBusId = layer?.audioSettings.busId ??
+        master?.id ??
+        buses.firstOrNull?.id;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _panelHeader('AUDIO BUS MIXER', Icons.tune),
+        const Text(
+          'Route audio and video tracks into submix buses. Each bus has independent gain, stereo balance, compression and limiting.',
+          style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
+        ),
+        if (layer != null &&
+            (layer.kind == LayerKind.audio || layer.kind == LayerKind.video)) ...[
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue: selectedBusId,
+            decoration: const InputDecoration(
+              labelText: 'Selected track output',
+              isDense: true,
+            ),
+            items: buses
+                .map((bus) => DropdownMenuItem(
+                      value: bus.id,
+                      child: Text(bus.name),
+                    ))
+                .toList(),
+            onChanged: (value) =>
+                _controller.assignSelectedAudioBus(value),
+          ),
+        ],
+        const SizedBox(height: 10),
+        FilledButton.icon(
+          onPressed: () {
+            _controller.addAudioBus();
+            setState(() => _notice = 'New audio submix bus added');
+          },
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('ADD SUBMIX BUS'),
+        ),
+        const SizedBox(height: 8),
+        for (final bus in buses)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        bus.isMaster ? Icons.speaker : Icons.graphic_eq,
+                        size: 17,
+                        color: bus.isMaster
+                            ? const Color(0xFF7EDBCB)
+                            : const Color(0xFFB6A5FF),
+                      ),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          bus.name.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.7,
+                          ),
+                        ),
+                      ),
+                      Switch(
+                        value: !bus.muted,
+                        onChanged: (value) => _controller.updateAudioBus(
+                          bus.copyWith(muted: !value),
+                        ),
+                      ),
+                      if (!bus.isMaster)
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Remove bus and route its tracks to Master',
+                          onPressed: () => _controller.removeAudioBus(bus.id),
+                          icon: const Icon(Icons.delete_outline, size: 17),
+                        ),
+                    ],
+                  ),
+                  _settingSlider(
+                    'Bus gain (dB)',
+                    bus.gainDb,
+                    -24,
+                    12,
+                    (value) => _controller.updateAudioBus(
+                      bus.copyWith(gainDb: value),
+                    ),
+                  ),
+                  _settingSlider(
+                    'Bus pan',
+                    bus.pan,
+                    -1,
+                    1,
+                    (value) => _controller.updateAudioBus(
+                      bus.copyWith(pan: value),
+                    ),
+                  ),
+                  const Divider(height: 16),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text(
+                      'Compressor',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                    value: bus.compressorEnabled,
+                    onChanged: (value) => _controller.updateAudioBus(
+                      bus.copyWith(compressorEnabled: value),
+                    ),
+                  ),
+                  if (bus.compressorEnabled) ...[
+                    _settingSlider(
+                      'Threshold (dB)',
+                      bus.compressorThresholdDb,
+                      -48,
+                      0,
+                      (value) => _controller.updateAudioBus(
+                        bus.copyWith(compressorThresholdDb: value),
+                      ),
+                    ),
+                    _settingSlider(
+                      'Ratio',
+                      bus.compressorRatio,
+                      1,
+                      20,
+                      (value) => _controller.updateAudioBus(
+                        bus.copyWith(compressorRatio: value),
+                      ),
+                    ),
+                    _settingSlider(
+                      'Attack (ms)',
+                      bus.compressorAttackMs,
+                      1,
+                      200,
+                      (value) => _controller.updateAudioBus(
+                        bus.copyWith(compressorAttackMs: value),
+                      ),
+                    ),
+                    _settingSlider(
+                      'Release (ms)',
+                      bus.compressorReleaseMs,
+                      10,
+                      1000,
+                      (value) => _controller.updateAudioBus(
+                        bus.copyWith(compressorReleaseMs: value),
+                      ),
+                    ),
+                    _settingSlider(
+                      'Makeup gain (dB)',
+                      bus.makeupGainDb,
+                      -6,
+                      18,
+                      (value) => _controller.updateAudioBus(
+                        bus.copyWith(makeupGainDb: value),
+                      ),
+                    ),
+                  ],
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text(
+                      'Output limiter',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                    value: bus.limiterEnabled,
+                    onChanged: (value) => _controller.updateAudioBus(
+                      bus.copyWith(limiterEnabled: value),
+                    ),
+                  ),
+                  if (bus.limiterEnabled)
+                    _settingSlider(
+                      'Ceiling (dBFS)',
+                      bus.limiterCeilingDb,
+                      -12,
+                      0,
+                      (value) => _controller.updateAudioBus(
+                        bus.copyWith(limiterCeilingDb: value),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
