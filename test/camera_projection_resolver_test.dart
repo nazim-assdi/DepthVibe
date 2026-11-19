@@ -130,4 +130,122 @@ void main() {
     expect(projected.scaleX, contains('1000.000000'));
     expect(projected.scaleX, contains('500.00000'));
   });
+  test('camera yaw moves objects through camera-space coordinates', () {
+    const camera = ResolvedLayerTransform(
+      position: Vector3(960, 540, 0),
+      scale: Vector3(100, 100, 100),
+      rotation: Vector3(0, 90, 0),
+      opacity: 100,
+      enabled: true,
+    );
+    const layer = ResolvedLayerTransform(
+      position: Vector3(960, 540, 500),
+      scale: Vector3(100, 100, 100),
+      rotation: Vector3(0, 0, 0),
+      opacity: 100,
+      enabled: true,
+    );
+
+    final projected = resolver.project(
+      layer: layer,
+      camera: camera,
+      settings: const CameraSettings(),
+    );
+
+    expect(projected.position.x, closeTo(460, 0.001));
+    expect(projected.position.y, closeTo(540, 0.001));
+  });
+
+  test('camera roll rotates the view and counter-rotates layer cards', () {
+    const camera = ResolvedLayerTransform(
+      position: Vector3(960, 540, 0),
+      scale: Vector3(100, 100, 100),
+      rotation: Vector3(0, 0, 90),
+      opacity: 100,
+      enabled: true,
+    );
+    const layer = ResolvedLayerTransform(
+      position: Vector3(1060, 540, 0),
+      scale: Vector3(100, 100, 100),
+      rotation: Vector3(0, 0, 0),
+      opacity: 100,
+      enabled: true,
+    );
+
+    final projected = resolver.project(
+      layer: layer,
+      camera: camera,
+      settings: const CameraSettings(projection: 'orthographic'),
+    );
+
+    expect(projected.position.x, closeTo(960, 0.001));
+    expect(projected.position.y, closeTo(440, 0.001));
+    expect(projected.rotation.z, -90);
+  });
+
+  test('perspective camera hides layers behind its near plane', () {
+    const camera = ResolvedLayerTransform(
+      position: Vector3(960, 540, 0),
+      scale: Vector3(100, 100, 100),
+      rotation: Vector3(0, 0, 0),
+      opacity: 100,
+      enabled: true,
+    );
+    const layer = ResolvedLayerTransform(
+      position: Vector3(1100, 540, 1100),
+      scale: Vector3(100, 100, 100),
+      rotation: Vector3(0, 0, 0),
+      opacity: 75,
+      enabled: true,
+    );
+
+    final projected = resolver.project(
+      layer: layer,
+      camera: camera,
+      settings: const CameraSettings(focusDistance: 1000),
+    );
+
+    expect(projected.opacity, 0);
+    expect(projected.scale.x, lessThanOrEqualTo(2000));
+  });
+
+  test('FFmpeg camera projection includes orientation and near-plane culling', () {
+    const parentResolver = ParentTransformExpressionResolver();
+    const cameraLayer = CompositionLayer(
+      id: 'camera',
+      name: 'Camera',
+      kind: LayerKind.camera,
+      transform: LayerTransform(
+        rotation: Vector3(12, 25, 35),
+      ),
+    );
+    const objectLayer = CompositionLayer(
+      id: 'object',
+      name: 'Object',
+      kind: LayerKind.image,
+      transform: LayerTransform(
+        position: Vector3(1200, 540, 500),
+      ),
+    );
+
+    final camera = parentResolver.resolve(
+      layer: cameraLayer,
+      layers: const [cameraLayer, objectLayer],
+    );
+    final layer = parentResolver.resolve(
+      layer: objectLayer,
+      layers: const [cameraLayer, objectLayer],
+    );
+    final projected = resolver.compile(
+      layer: layer,
+      camera: camera,
+      settings: const CameraSettings(),
+    );
+
+    expect(projected.positionX, contains('sin('));
+    expect(projected.positionY, contains('cos('));
+    expect(projected.rotationZ, contains('35.00000'));
+    expect(projected.opacity, contains('if(gte('));
+    expect(projected.scaleX, contains('min(20,'));
+  });
 }
