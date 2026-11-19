@@ -143,17 +143,22 @@ class CompositionController extends ChangeNotifier {
       sourceIds[asset.sourceIndex] = imported.id;
     }
 
-    // Resolve clipping-base references only after all source records have IDs.
+    // Resolve group parents and clipping bases after all source records
+    // have been assigned composition-layer IDs.
     for (var index = 0; index < layers.length; index++) {
       final sourceIndex = layers[index].sourceLayerIndex;
       if (sourceIndex == null) continue;
       final asset = assets.firstWhere(
         (item) => item.sourceIndex == sourceIndex,
       );
+      final parentId = asset.parentGroupSourceIndex == null
+          ? null
+          : sourceIds[asset.parentGroupSourceIndex];
       final baseId = asset.clippingBaseSourceIndex == null
           ? null
           : sourceIds[asset.clippingBaseSourceIndex];
       layers[index] = layers[index].copyWith(
+        parentId: parentId,
         clippingBaseLayerId: baseId,
         clearClippingBase: baseId == null,
       );
