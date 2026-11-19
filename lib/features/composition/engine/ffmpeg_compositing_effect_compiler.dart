@@ -272,14 +272,19 @@ class FfmpegCompositingEffectCompiler {
           ':h=ih+2*' + pad + ':x=' + pad + ':y=' + pad +
           ':color=black@0,format=rgba[' + bodyCanvas + ']',
         );
+        final shadowBackdrop = 'shadowBackdrop' + suffix;
         filters.add(
-          '[' + shadowCanvas + "]overlay=x='" + pad + '+(' + offset +
-          ")':y='" + pad + '+(' + offset +
+          '[' + bodyCanvas +
+          ']format=rgba,geq=r=0:g=0:b=0:a=0[' + shadowBackdrop + ']',
+        );
+        filters.add(
+          '[' + shadowBackdrop + "][" + shadowCanvas +
+          "]overlay=x='(" + offset + ")':y='(" + offset +
           ")':eval=frame:shortest=1:format=auto[" + placed + ']',
         );
         filters.add(
-          '[' + placed + '][' + bodyCanvas + ']overlay=x=' + pad +
-          ':y=' + pad + ':shortest=1:format=auto[' + output + ']',
+          '[' + placed + '][' + bodyCanvas +
+          ']overlay=x=0:y=0:shortest=1:format=auto[' + output + ']',
         );
         current = output;
       }
