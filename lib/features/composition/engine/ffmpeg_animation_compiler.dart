@@ -488,11 +488,11 @@ class FfmpegAnimationCompiler {
       ')/' + _n(item.durationMs / 1000) + '))';
 
   String _n(num value) => value.toStringAsFixed(5);
+}
 
 class _MaskPointExpression {
   const _MaskPointExpression({required this.x, required this.y});
 
   final String x;
   final String y;
-}
 }
