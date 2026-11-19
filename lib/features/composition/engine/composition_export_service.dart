@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../data/effect_catalog.dart';
 import '../domain/composition_models.dart';
+import 'audio_bus_compiler.dart';
 import 'audio_equalizer_compiler.dart';
 import 'ffmpeg_animation_compiler.dart';
 import 'ffmpeg_filter_compiler.dart';
@@ -31,11 +32,13 @@ class CompositionExportService {
     this.filterCompiler = const FfmpegFilterCompiler(),
     this.animationCompiler = const FfmpegAnimationCompiler(),
     this.audioEqualizerCompiler = const AudioEqualizerCompiler(),
+    this.audioBusCompiler = const AudioBusCompiler(),
   });
 
   final FfmpegFilterCompiler filterCompiler;
   final FfmpegAnimationCompiler animationCompiler;
   final AudioEqualizerCompiler audioEqualizerCompiler;
+  final AudioBusCompiler audioBusCompiler;
 
   Future<CompositionExportResult> export(
     CompositionDocument document, {
@@ -253,7 +256,10 @@ class CompositionExportService {
         compositionWidth: document.width,
         compositionHeight: document.height,
       );
-      final mask = animationCompiler.maskAlphaExpression(layer.masks);
+      final mask = animationCompiler.maskAlphaExpression(
+        layer.masks,
+        timeVariable: 'T',
+      );
       final transition = animationCompiler.transitionAlphaExpression(
         layer: layer, transitions: document.transitions,
       );
@@ -319,6 +325,7 @@ class CompositionExportService {
         filters: filters,
         audioSources: audioSources,
         durationMs: document.durationMs,
+        audioBuses: document.audioBuses,
       );
     }
 
@@ -516,6 +523,7 @@ class CompositionExportService {
   void _appendAudioMix({
     required List<String> filters,
     required List<_AudioSource> audioSources,
+    required List<AudioBus> audioBuses,
     required int durationMs,
   }) {
     final total = (durationMs / 1000).toStringAsFixed(3);
@@ -596,18 +604,88 @@ class CompositionExportService {
       }
     }
 
-    final labels = <String>[
-      for (var index = 0; index < audioSources.length; index++)
-        '[' + (replacements[index] ?? 'aud' + index.toString()) + ']',
+    final buses = audioBuses.isEmpty
+        ? <AudioBus>[
+            const AudioBus(
+              id: 'master',
+              name: 'Master',
+              isMaster: true,
+              limiterEnabled: true,
+            ),
+          ]
+        : audioBuses;
+    AudioBus? masterBus;
+    for (final bus in buses) {
+      if (bus.isMaster) {
+        masterBus = bus;
+        break;
+      }
+    }
+    masterBus ??= buses.first;
+
+    final validBusIds = buses.map((bus) => bus.id).toSet();
+    final effectiveBusIds = <String>[
+      for (final source in audioSources)
+        source.layer.audioSettings.busId != null &&
+                validBusIds.contains(source.layer.audioSettings.busId)
+            ? source.layer.audioSettings.busId!
+            : masterBus.id,
     ];
-    if (labels.length == 1) {
-      filters.add(labels.first + 'apad=whole_dur=' + total +
-          ',atrim=duration=' + total + '[aout]');
+
+    final busOutputs = <String>[];
+    var busOutputIndex = 0;
+    for (final bus in buses) {
+      if (bus.muted) continue;
+      final sourceIndices = <int>[
+        for (var index = 0; index < audioSources.length; index++)
+          if (effectiveBusIds[index] == bus.id) index,
+      ];
+      if (sourceIndices.isEmpty) continue;
+
+      final inputLabels = sourceIndices
+          .map((index) =>
+              '[' + (replacements[index] ?? 'aud' + index.toString()) + ']')
+          .join();
+      final mixLabel = 'busMix' + busOutputIndex.toString();
+      final outputLabel = 'busOut' + busOutputIndex.toString();
+      if (sourceIndices.length == 1) {
+        filters.add(inputLabels + 'anull[' + mixLabel + ']');
+      } else {
+        filters.add(
+          inputLabels + 'amix=inputs=' + sourceIndices.length.toString() +
+          ':duration=longest:normalize=0[' + mixLabel + ']',
+        );
+      }
+
+      final busFilters = audioBusCompiler.compile(bus);
+      if (busFilters.isEmpty) {
+        filters.add('[' + mixLabel + ']anull[' + outputLabel + ']');
+      } else {
+        filters.add(
+          '[' + mixLabel + ']' + busFilters.join(',') + '[' + outputLabel + ']',
+        );
+      }
+      busOutputs.add('[' + outputLabel + ']');
+      busOutputIndex++;
+    }
+
+    if (busOutputs.isEmpty) {
+      filters.add(
+        'anullsrc=channel_layout=stereo:sample_rate=48000:d=' +
+            total + '[aout]',
+      );
+    } else if (busOutputs.length == 1) {
+      filters.add(
+        busOutputs.single + 'apad=whole_dur=' + total +
+            ',atrim=duration=' + total + '[aout]',
+      );
     } else {
-      filters.add(labels.join() + 'amix=inputs=' + labels.length.toString() +
-          ':duration=longest:dropout_transition=0:normalize=0,' +
-          'apad=whole_dur=' + total + ',atrim=duration=' + total +
-          ',alimiter=limit=0.95[aout]');
+      filters.add(
+        busOutputs.join() + 'amix=inputs=' + busOutputs.length.toString() +
+            ':duration=longest:dropout_transition=0:normalize=0,' +
+            'apad=whole_dur=' + total + ',atrim=duration=' + total +
+            ',alimiter=limit=0.95[aout]',
+      );
     }
   }
 
