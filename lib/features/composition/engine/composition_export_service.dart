@@ -533,6 +533,12 @@ class CompositionExportService {
         'atrim=duration=' + (layer.durationMs / 1000).toStringAsFixed(3),
         'asetpts=PTS-STARTPTS+' + start.toStringAsFixed(3) + '/TB',
         'aformat=channel_layouts=stereo',
+        if (settings.lowEqDb.abs() >= 0.01)
+          'equalizer=f=120:t=q:w=0.8:g=' + settings.lowEqDb.toStringAsFixed(2),
+        if (settings.midEqDb.abs() >= 0.01)
+          'equalizer=f=1000:t=q:w=1:g=' + settings.midEqDb.toStringAsFixed(2),
+        if (settings.highEqDb.abs() >= 0.01)
+          'equalizer=f=8000:t=q:w=0.8:g=' + settings.highEqDb.toStringAsFixed(2),
         "volume='pow(10,(" + gain + ")/20)':eval=frame",
         'pan=stereo|c0=c0*' + left + '|c1=c1*' + right,
         if (settings.fadeInMs > 0)
