@@ -121,6 +121,22 @@ class EffectCatalog {
       ffmpegFilter: 'pixelize',
     ),
     EffectDefinition(
+      id: 'threshold',
+      name: 'Threshold',
+      category: 'Color',
+      description: 'Convert pixel intensity into hard black and white regions.',
+      parameters: [
+        EffectParameterDefinition(
+          id: 'value',
+          label: 'Threshold',
+          min: 0,
+          max: 255,
+          defaultValue: 128,
+        ),
+      ],
+      ffmpegFilter: 'lutrgb',
+    ),
+    EffectDefinition(
       id: 'invert',
       name: 'Invert',
       category: 'Stylize',
