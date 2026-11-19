@@ -213,6 +213,33 @@ void main() {
       controller.dispose();
     });
 
+    test('new and edited transitions snap to composition frames', () {
+      final controller = CompositionController(
+        document: const CompositionDocument(
+          frameRate: 24,
+          durationMs: 3000,
+        ),
+      );
+      controller.addLayer(LayerKind.video);
+      controller.addLayer(LayerKind.image);
+      controller.setPlayhead(123);
+
+      controller.addTransition(TransitionKind.dissolve);
+      var transition = controller.document.transitions.single;
+      expect(transition.startMs, 125);
+      expect(transition.durationMs, 500);
+
+      controller.updateTransition(
+        transition.id,
+        startMs: 333,
+        durationMs: 350,
+      );
+      transition = controller.document.transitions.single;
+      expect(transition.startMs, 333);
+      expect(transition.durationMs, 333);
+      controller.dispose();
+    });
+
     test('audio tracks can be routed to a submix bus and back to master', () {
       final controller = CompositionController();
       controller.addLayer(LayerKind.audio);
