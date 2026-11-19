@@ -170,21 +170,18 @@ class Software3dRenderer {
       ));
     }
 
-    final shadowMaps = List<_DirectionalShadowMap?>.generate(
+    final shadowMaps = List<_SceneShadowMap?>.generate(
       lights.length,
       (index) {
         final light = lights[index];
-        if (light.settings.kind != LightKind.directional ||
-            !light.settings.castShadows) {
+        if (!light.settings.castShadows ||
+            light.settings.kind == LightKind.ambient) {
           return null;
         }
-        return _DirectionalShadowMap.build(
+        return _createShadowMapForLight(
+          light,
           worldVertices,
           mesh.triangles,
-          direction: _normalize(_rotate(
-            const Vector3(0, 0, 1),
-            light.transform.rotation,
-          )),
         );
       },
     );
@@ -323,6 +320,8 @@ class Software3dRenderer {
       depthOfField: cameraSettings.depthOfField,
       focusDistance: cameraSettings.focusDistance,
       aperture: cameraSettings.aperture,
+      focalLength: cameraSettings.focalLength,
+      sensorWidthMm: cameraSettings.sensorWidthMm,
     );
   }
 
@@ -369,7 +368,7 @@ class Software3dRenderer {
     Vector3 normal,
     Vector3 faceCenter,
     List<SceneLight> lights,
-    List<_DirectionalShadowMap?> shadowMaps,
+    List<_SceneShadowMap?> shadowMaps,
   ) {
     var redLight = 0.20;
     var greenLight = 0.20;
@@ -385,7 +384,8 @@ class Software3dRenderer {
     } else {
       for (var lightIndex = 0; lightIndex < lights.length; lightIndex++) {
         final light = lights[lightIndex];
-        final intensity = light.settings.intensity.clamp(0.0, 1000.0).toDouble() / 100.0;
+        final intensity =
+            light.settings.intensity.clamp(0.0, 1000.0).toDouble() / 100.0;
         if (intensity <= 0) continue;
         final lightColor = _parseColor(light.settings.color);
         if (light.settings.kind == LightKind.ambient) {
@@ -397,12 +397,22 @@ class Software3dRenderer {
         }
 
         final samples = light.settings.kind == LightKind.area
-            ? _areaLightSamples(light)
+            ? areaLightSamplePositions(light)
             : <Vector3>[light.transform.position];
+        final shadowMap = shadowMaps[lightIndex];
+        final shadowVisibility = shadowMap?.visibilityAt(
+              faceCenter,
+              softness: light.settings.shadowSoftness,
+            ) ??
+            1.0;
         var totalContribution = 0.0;
+
         for (final samplePosition in samples) {
           Vector3 toLight;
           var attenuation = 1.0;
+          var emitterCosine = 1.0;
+          var distance = double.infinity;
+
           if (light.settings.kind == LightKind.directional) {
             toLight = _normalize(_rotate(
               const Vector3(0, 0, 1),
@@ -414,11 +424,26 @@ class Software3dRenderer {
               samplePosition.y - faceCenter.y,
               samplePosition.z - faceCenter.z,
             );
-            final distance = _length(delta);
+            distance = _length(delta);
             toLight = distance <= 0.0001
                 ? const Vector3(0, 0, 1)
                 : _multiply(delta, 1 / distance);
-            attenuation = 1 / (1 + math.pow(distance / 1000, 2));
+
+            // Inverse-square falloff, referenced to one scene unit of 1000.
+            attenuation = 1 /
+                math.max(0.01, math.pow(distance / 1000, 2).toDouble());
+
+            if (light.settings.kind == LightKind.spot ||
+                light.settings.kind == LightKind.area) {
+              final emitterDirection = _normalize(_rotate(
+                const Vector3(0, 0, -1),
+                light.transform.rotation,
+              ));
+              final fromLight = _multiply(toLight, -1);
+              emitterCosine =
+                  _dot(emitterDirection, fromLight).clamp(0.0, 1.0).toDouble();
+              if (emitterCosine <= 0) continue;
+            }
           }
 
           if (light.settings.kind == LightKind.spot) {
@@ -426,33 +451,28 @@ class Software3dRenderer {
               const Vector3(0, 0, -1),
               light.transform.rotation,
             ));
-            final fromLight = _normalize(Vector3(
-              faceCenter.x - samplePosition.x,
-              faceCenter.y - samplePosition.y,
-              faceCenter.z - samplePosition.z,
-            ));
+            final fromLight = _multiply(toLight, -1);
             final alignment = _dot(spotDirection, fromLight);
             final cutoff = math.cos(
-              light.settings.coneAngle.clamp(1.0, 180.0) * math.pi / 360,
+              light.settings.coneAngle.clamp(1.0, 175.0) * math.pi / 360,
             );
             if (alignment <= cutoff) continue;
-            attenuation *= ((alignment - cutoff) / (1 - cutoff))
+            final coneWidth = math.max(0.0001, 1 - cutoff);
+            attenuation *= ((alignment - cutoff) / coneWidth)
                 .clamp(0.0, 1.0)
                 .toDouble();
           }
 
+          if (light.settings.kind == LightKind.area) {
+            final size = light.settings.areaSize.clamp(1.0, 1000.0);
+            attenuation *= emitterCosine * math.pow(size / 160, 2).toDouble();
+          }
+
           final diffuse = _dot(normal, toLight).clamp(0.0, 1.0).toDouble();
-          totalContribution += diffuse * attenuation;
+          totalContribution += diffuse * attenuation * shadowVisibility;
         }
 
         totalContribution /= samples.length;
-        final shadowMap = shadowMaps[lightIndex];
-        if (shadowMap != null && shadowMap.isOccluded(
-          faceCenter,
-          softness: light.settings.shadowSoftness,
-        )) {
-          totalContribution *= 0.20;
-        }
         final amount = (intensity * 0.62 * totalContribution)
             .clamp(0.0, 1.5)
             .toDouble();
@@ -472,16 +492,35 @@ class Software3dRenderer {
     );
   }
 
-  List<Vector3> _areaLightSamples(SceneLight light) {
+  /// Deterministic Hammersley samples over a rectangular area emitter.
+  ///
+  /// The radical-inverse sequence distributes samples across the full emitter
+  /// without random frame-to-frame noise. The result is stable for preview
+  /// rendering, playback and export.
+  List<Vector3> areaLightSamplePositions(SceneLight light) {
+    final count = light.settings.areaSamples.clamp(1, 64).toInt();
     final half = light.settings.areaSize.clamp(1.0, 1000.0).toDouble() / 2;
-    return [
-      for (final x in [-0.5, 0.5])
-        for (final y in [-0.5, 0.5])
-          _add(
-            light.transform.position,
-            _rotate(Vector3(half * x, half * y, 0), light.transform.rotation),
-          ),
-    ];
+    return List<Vector3>.generate(count, (index) {
+      final x = (index + 0.5) / count - 0.5;
+      final y = _radicalInverse(index) - 0.5;
+      return _add(
+        light.transform.position,
+        _rotate(Vector3(half * x * 2, half * y * 2, 0),
+            light.transform.rotation),
+      );
+    }, growable: false);
+  }
+
+  double _radicalInverse(int value) {
+    var n = value;
+    var inverse = 0.0;
+    var factor = 0.5;
+    while (n > 0) {
+      inverse += (n & 1).toDouble() * factor;
+      n >>= 1;
+      factor *= 0.5;
+    }
+    return inverse;
   }
 
   Vector3 _add(Vector3 a, Vector3 b) =>
@@ -543,7 +582,118 @@ class Software3dRenderer {
   }
 }
 
-class _DirectionalShadowMap {
+abstract interface class _SceneShadowMap {
+  double visibilityAt(Vector3 point, {double softness = 0});
+}
+
+/// Public diagnostic wrapper for validating the active scene-light shadow map.
+class Software3dShadowMap {
+  const Software3dShadowMap._(this._map);
+
+  final _SceneShadowMap _map;
+
+  factory Software3dShadowMap.forLight({
+    required SceneLight light,
+    required List<Vector3> vertices,
+    required List<ObjTriangle> triangles,
+    int resolution = 128,
+  }) {
+    final map = _createShadowMapForLight(
+      light,
+      vertices,
+      triangles,
+      resolution: resolution,
+    );
+    if (map == null) {
+      throw ArgumentError('Ambient lights do not cast shadow maps.');
+    }
+    return Software3dShadowMap._(map);
+  }
+
+  double visibilityAt(Vector3 point, {double softness = 0}) =>
+      _map.visibilityAt(point, softness: softness);
+}
+
+_SceneShadowMap? _createShadowMapForLight(
+  SceneLight light,
+  List<Vector3> vertices,
+  List<ObjTriangle> triangles, {
+  int resolution = 128,
+}) {
+  if (vertices.isEmpty || triangles.isEmpty) return null;
+  final position = light.transform.position;
+  switch (light.settings.kind) {
+    case LightKind.ambient:
+      return null;
+    case LightKind.directional:
+      return _DirectionalShadowMap.build(
+        vertices,
+        triangles,
+        direction: _normalizeShadow(_rotateShadow(
+          const Vector3(0, 0, 1),
+          light.transform.rotation,
+        )),
+        resolution: math.max(32, resolution).toInt(),
+      );
+    case LightKind.spot:
+      final forward = _normalizeShadow(_rotateShadow(
+        const Vector3(0, 0, -1),
+        light.transform.rotation,
+      ));
+      return _SpotShadowMap.build(
+        vertices,
+        triangles,
+        origin: position,
+        forward: forward,
+        coneAngle: light.settings.coneAngle,
+        resolution: resolution,
+      );
+    case LightKind.point:
+    case LightKind.area:
+      return _PointShadowMap.build(
+        vertices,
+        triangles,
+        origin: position,
+        resolution: resolution,
+      );
+  }
+}
+
+Vector3 _rotateShadow(Vector3 value, Vector3 degrees) {
+  final rx = degrees.x * math.pi / 180;
+  final ry = degrees.y * math.pi / 180;
+  final rz = degrees.z * math.pi / 180;
+  final cy = math.cos(rx);
+  final sy = math.sin(rx);
+  final y1 = value.y * cy - value.z * sy;
+  final z1 = value.y * sy + value.z * cy;
+  final cx = math.cos(ry);
+  final sx = math.sin(ry);
+  final x2 = value.x * cx + z1 * sx;
+  final z2 = -value.x * sx + z1 * cx;
+  final cz = math.cos(rz);
+  final sz = math.sin(rz);
+  return Vector3(x2 * cz - y1 * sz, x2 * sz + y1 * cz, z2);
+}
+
+Vector3 _normalizeShadow(Vector3 value) {
+  final length = math.sqrt(
+    value.x * value.x + value.y * value.y + value.z * value.z,
+  );
+  if (length <= 0.000001) return const Vector3(0, 0, 1);
+  return Vector3(value.x / length, value.y / length, value.z / length);
+}
+
+double _dotShadow(Vector3 a, Vector3 b) =>
+    a.x * b.x + a.y * b.y + a.z * b.z;
+
+Vector3 _crossShadow(Vector3 a, Vector3 b) => Vector3(
+      a.y * b.z - a.z * b.y,
+      a.z * b.x - a.x * b.z,
+      a.x * b.y - a.y * b.x,
+    );
+
+class _DirectionalShadowMap implements _SceneShadowMap {
   const _DirectionalShadowMap({
     required this.width,
     required this.height,
@@ -577,12 +727,12 @@ class _DirectionalShadowMap {
     final upAxis = direction.y.abs() > 0.95
         ? const Vector3(1, 0, 0)
         : const Vector3(0, 1, 0);
-    final right = _normalize(_cross(upAxis, direction));
-    final up = _normalize(_cross(direction, right));
+    final right = _normalizeShadow(_crossShadow(upAxis, direction));
+    final up = _normalizeShadow(_crossShadow(direction, right));
     final projected = vertices.map((point) => Vector3(
-      _dot(point, right),
-      _dot(point, up),
-      _dot(point, direction),
+      _dotShadow(point, right),
+      _dotShadow(point, up),
+      _dotShadow(point, direction),
     )).toList();
     final minX = projected.map((p) => p.x).reduce((a, b) => a < b ? a : b);
     final maxX = projected.map((p) => p.x).reduce((a, b) => a > b ? a : b);
@@ -609,21 +759,27 @@ class _DirectionalShadowMap {
       final a = screen[triangle.a];
       final b = screen[triangle.b];
       final c = screen[triangle.c];
-      final minPixelX = math.max(0, math.min(a.dx, math.min(b.dx, c.dx)).floor()).toInt();
-      final maxPixelX = math.min(width - 1, math.max(a.dx, math.max(b.dx, c.dx)).ceil()).toInt();
-      final minPixelY = math.max(0, math.min(a.dy, math.min(b.dy, c.dy)).floor()).toInt();
-      final maxPixelY = math.min(height - 1, math.max(a.dy, math.max(b.dy, c.dy)).ceil()).toInt();
-      final area = _edge(a, b, c);
-      if (area.abs() < 0.000001 || minPixelX > maxPixelX || minPixelY > maxPixelY) continue;
-
+      final area = _edgeShadow(a, b, c);
+      if (area.abs() < 0.000001) continue;
+      final minPixelX =
+          math.max(0, math.min(a.dx, math.min(b.dx, c.dx)).floor()).toInt();
+      final maxPixelX = math
+          .min(width - 1, math.max(a.dx, math.max(b.dx, c.dx)).ceil())
+          .toInt();
+      final minPixelY =
+          math.max(0, math.min(a.dy, math.min(b.dy, c.dy)).floor()).toInt();
+      final maxPixelY = math
+          .min(height - 1, math.max(a.dy, math.max(b.dy, c.dy)).ceil())
+          .toInt();
+      if (minPixelX > maxPixelX || minPixelY > maxPixelY) continue;
       final za = projected[triangle.a].z;
       final zb = projected[triangle.b].z;
       final zc = projected[triangle.c].z;
       for (var y = minPixelY; y <= maxPixelY; y++) {
         for (var x = minPixelX; x <= maxPixelX; x++) {
-          final point = Offset(x + 0.5, y + 0.5);
-          final wa = _edge(b, c, point) / area;
-          final wb = _edge(c, a, point) / area;
+          final p = Offset(x + 0.5, y + 0.5);
+          final wa = _edgeShadow(b, c, p) / area;
+          final wb = _edgeShadow(c, a, p) / area;
           final wc = 1 - wa - wb;
           if (wa < -0.00001 || wb < -0.00001 || wc < -0.00001) continue;
           final z = wa * za + wb * zb + wc * zc;
@@ -647,51 +803,371 @@ class _DirectionalShadowMap {
     );
   }
 
-  bool isOccluded(Vector3 point, {double softness = 0}) {
-    final x = _dot(point, right);
-    final y = _dot(point, up);
-    final z = _dot(point, direction);
+  @override
+  double visibilityAt(Vector3 point, {double softness = 0}) {
+    final x = _dotShadow(point, right);
+    final y = _dotShadow(point, up);
+    final z = _dotShadow(point, direction);
     final pixelX = ((x - minX) / rangeX * (width - 1)).round();
     final pixelY = (((minY + rangeY) - y) / rangeY * (height - 1)).round();
     if (pixelX < 0 || pixelX >= width || pixelY < 0 || pixelY >= height) {
-      return false;
+      return 1;
     }
-    final radius = (softness.clamp(0.0, 100.0) / 35).round().clamp(0, 3).toInt();
-    var occludedSamples = 0;
-    var testedSamples = 0;
+    final radius = (softness.clamp(0.0, 100.0) / 20)
+        .round()
+        .clamp(0, 5)
+        .toInt();
+    final bias = math.max(0.5, z.abs() * 0.0005);
+    var visible = 0.0;
+    var samples = 0;
     for (var dy = -radius; dy <= radius; dy++) {
       for (var dx = -radius; dx <= radius; dx++) {
         final sx = pixelX + dx;
         final sy = pixelY + dy;
-        if (sx < 0 || sx >= width || sy < 0 || sy >= height) continue;
+        samples++;
+        if (sx < 0 || sx >= width || sy < 0 || sy >= height) {
+          visible += 1;
+          continue;
+        }
         final nearest = depth[sy * width + sx];
-        if (!nearest.isFinite) continue;
-        testedSamples++;
-        if (z < nearest - 0.001) occludedSamples++;
+        if (!nearest.isFinite || z >= nearest - bias) visible += 1;
       }
     }
-    return testedSamples > 0 && occludedSamples / testedSamples >= 0.35;
+    return samples == 0 ? 1 : visible / samples;
   }
-
-  static double _dot(Vector3 a, Vector3 b) =>
-      a.x * b.x + a.y * b.y + a.z * b.z;
-
-  static Vector3 _cross(Vector3 a, Vector3 b) => Vector3(
-    a.y * b.z - a.z * b.y,
-    a.z * b.x - a.x * b.z,
-    a.x * b.y - a.y * b.x,
-  );
-
-  static Vector3 _normalize(Vector3 value) {
-    final length = math.sqrt(_dot(value, value));
-    if (length <= 0.000001) return const Vector3(0, 0, 1);
-    return Vector3(value.x / length, value.y / length, value.z / length);
-  }
-
-  static double _edge(Offset a, Offset b, Offset p) =>
-      (p.dx - a.dx) * (b.dy - a.dy) -
-      (p.dy - a.dy) * (b.dx - a.dx);
 }
+
+class _SpotShadowMap implements _SceneShadowMap {
+  const _SpotShadowMap(this._projection);
+
+  final _PerspectiveShadowMap _projection;
+
+  static _SpotShadowMap build(
+    List<Vector3> vertices,
+    List<ObjTriangle> triangles, {
+    required Vector3 origin,
+    required Vector3 forward,
+    required double coneAngle,
+    int resolution = 128,
+  }) {
+    final maxDistance = vertices
+        .map((v) => math.sqrt(
+              math.pow(v.x - origin.x, 2) +
+                  math.pow(v.y - origin.y, 2) +
+                  math.pow(v.z - origin.z, 2),
+            ))
+        .reduce((a, b) => a > b ? a : b);
+    final far = math.max(10.0, maxDistance * 1.05).toDouble();
+    return _SpotShadowMap(_PerspectiveShadowMap.build(
+      vertices,
+      triangles,
+      origin: origin,
+      forward: forward,
+      upAxis: math.sqrt(forward.x * forward.x + forward.z * forward.z) < 0.001
+          ? const Vector3(0, 0, 1)
+          : const Vector3(0, 1, 0),
+      halfFovRadians:
+          coneAngle.clamp(2.0, 175.0) * math.pi / 360,
+      near: math.max(0.1, far * 0.0005).toDouble(),
+      far: far,
+      resolution: resolution,
+    ));
+  }
+
+  @override
+  double visibilityAt(Vector3 point, {double softness = 0}) =>
+      _projection.visibilityAt(point, softness: softness);
+}
+
+class _PointShadowMap implements _SceneShadowMap {
+  const _PointShadowMap(this.origin, this.faces);
+
+  final Vector3 origin;
+  final List<_PerspectiveShadowMap> faces;
+
+  static _PointShadowMap build(
+    List<Vector3> vertices,
+    List<ObjTriangle> triangles, {
+    required Vector3 origin,
+    int resolution = 128,
+  }) {
+    final maxDistance = vertices
+        .map((v) => math.sqrt(
+              math.pow(v.x - origin.x, 2) +
+                  math.pow(v.y - origin.y, 2) +
+                  math.pow(v.z - origin.z, 2),
+            ))
+        .reduce((a, b) => a > b ? a : b);
+    final far = math.max(10.0, maxDistance * 1.05).toDouble();
+    final near = math.max(0.1, far * 0.0005).toDouble();
+    const directions = [
+      Vector3(1, 0, 0),
+      Vector3(-1, 0, 0),
+      Vector3(0, 1, 0),
+      Vector3(0, -1, 0),
+      Vector3(0, 0, 1),
+      Vector3(0, 0, -1),
+    ];
+    const upAxes = [
+      Vector3(0, 1, 0),
+      Vector3(0, 1, 0),
+      Vector3(0, 0, -1),
+      Vector3(0, 0, 1),
+      Vector3(0, 1, 0),
+      Vector3(0, 1, 0),
+    ];
+    final faces = List<_PerspectiveShadowMap>.generate(6, (index) {
+      return _PerspectiveShadowMap.build(
+        vertices,
+        triangles,
+        origin: origin,
+        forward: directions[index],
+        upAxis: upAxes[index],
+        halfFovRadians: math.pi / 4,
+        near: near,
+        far: far,
+        resolution: resolution,
+      );
+    }, growable: false);
+    return _PointShadowMap(origin, faces);
+  }
+
+  @override
+  double visibilityAt(Vector3 point, {double softness = 0}) {
+    final delta = Vector3(
+      point.x - origin.x,
+      point.y - origin.y,
+      point.z - origin.z,
+    );
+    final ax = delta.x.abs();
+    final ay = delta.y.abs();
+    final az = delta.z.abs();
+    final faceIndex = ax >= ay && ax >= az
+        ? (delta.x >= 0 ? 0 : 1)
+        : ay >= ax && ay >= az
+            ? (delta.y >= 0 ? 2 : 3)
+            : (delta.z >= 0 ? 4 : 5);
+    return faces[faceIndex].visibilityAt(point, softness: softness);
+  }
+}
+
+class _ShadowVertex {
+  const _ShadowVertex(this.x, this.y, this.z);
+
+  final double x;
+  final double y;
+  final double z;
+
+  _ShadowVertex lerp(_ShadowVertex other, double t) => _ShadowVertex(
+        x + (other.x - x) * t,
+        y + (other.y - y) * t,
+        z + (other.z - z) * t,
+      );
+}
+
+class _PerspectiveShadowMap implements _SceneShadowMap {
+  const _PerspectiveShadowMap({
+    required this.origin,
+    required this.right,
+    required this.up,
+    required this.forward,
+    required this.halfFovTangent,
+    required this.near,
+    required this.far,
+    required this.width,
+    required this.height,
+    required this.depth,
+  });
+
+  final Vector3 origin;
+  final Vector3 right;
+  final Vector3 up;
+  final Vector3 forward;
+  final double halfFovTangent;
+  final double near;
+  final double far;
+  final int width;
+  final int height;
+  final Float32List depth;
+
+  static _PerspectiveShadowMap build(
+    List<Vector3> vertices,
+    List<ObjTriangle> triangles, {
+    required Vector3 origin,
+    required Vector3 forward,
+    required Vector3 upAxis,
+    required double halfFovRadians,
+    required double near,
+    required double far,
+    required int resolution,
+  }) {
+    final normalizedForward = _normalizeShadow(forward);
+    final right = _normalizeShadow(_crossShadow(upAxis, normalizedForward));
+    final up = _normalizeShadow(_crossShadow(normalizedForward, right));
+    final halfFovTangent =
+        math.tan(halfFovRadians.clamp(0.001, math.pi / 2 - 0.001));
+    final width = resolution.clamp(32, 512).toInt();
+    final height = resolution.clamp(32, 512).toInt();
+    final depth = Float32List(width * height);
+    depth.fillRange(0, depth.length, double.infinity);
+
+    final localVertices = vertices.map((point) {
+      final delta = Vector3(
+        point.x - origin.x,
+        point.y - origin.y,
+        point.z - origin.z,
+      );
+      return _ShadowVertex(
+        _dotShadow(delta, right),
+        _dotShadow(delta, up),
+        _dotShadow(delta, normalizedForward),
+      );
+    }).toList();
+
+    double planeValue(_ShadowVertex v, int plane) => switch (plane) {
+          0 => v.z - near,
+          1 => far - v.z,
+          2 => v.x + v.z * halfFovTangent,
+          3 => v.z * halfFovTangent - v.x,
+          4 => v.y + v.z * halfFovTangent,
+          _ => v.z * halfFovTangent - v.y,
+        };
+
+    List<_ShadowVertex> clip(
+        List<_ShadowVertex> polygon, int plane) {
+      if (polygon.isEmpty) return const [];
+      final output = <_ShadowVertex>[];
+      for (var i = 0; i < polygon.length; i++) {
+        final current = polygon[i];
+        final previous = polygon[(i + polygon.length - 1) % polygon.length];
+        final currentValue = planeValue(current, plane);
+        final previousValue = planeValue(previous, plane);
+        final currentInside = currentValue >= 0;
+        final previousInside = previousValue >= 0;
+        if (currentInside != previousInside) {
+          final denominator = previousValue - currentValue;
+          final t = denominator.abs() < 1e-12
+              ? 0.0
+              : (previousValue / denominator).clamp(0.0, 1.0).toDouble();
+          output.add(previous.lerp(current, t));
+        }
+        if (currentInside) output.add(current);
+      }
+      return output;
+    }
+
+    for (final triangle in triangles) {
+      var polygon = <_ShadowVertex>[
+        localVertices[triangle.a],
+        localVertices[triangle.b],
+        localVertices[triangle.c],
+      ];
+      for (var plane = 0; plane < 6 && polygon.isNotEmpty; plane++) {
+        polygon = clip(polygon, plane);
+      }
+      if (polygon.length < 3) continue;
+
+      Offset project(_ShadowVertex v) {
+        final nx = v.x / (v.z * halfFovTangent);
+        final ny = v.y / (v.z * halfFovTangent);
+        return Offset(
+          (nx * 0.5 + 0.5) * (width - 1),
+          (0.5 - ny * 0.5) * (height - 1),
+        );
+      }
+
+      final projected = polygon.map(project).toList();
+      for (var i = 1; i < polygon.length - 1; i++) {
+        final a = projected[0];
+        final b = projected[i];
+        final c = projected[i + 1];
+        final area = _edgeShadow(a, b, c);
+        if (area.abs() < 1e-8) continue;
+        final minX =
+            math.max(0, math.min(a.dx, math.min(b.dx, c.dx)).floor()).toInt();
+        final maxX = math
+            .min(width - 1, math.max(a.dx, math.max(b.dx, c.dx)).ceil())
+            .toInt();
+        final minY =
+            math.max(0, math.min(a.dy, math.min(b.dy, c.dy)).floor()).toInt();
+        final maxY = math
+            .min(height - 1, math.max(a.dy, math.max(b.dy, c.dy)).ceil())
+            .toInt();
+        final za = polygon[0].z;
+        final zb = polygon[i].z;
+        final zc = polygon[i + 1].z;
+        for (var y = minY; y <= maxY; y++) {
+          for (var x = minX; x <= maxX; x++) {
+            final p = Offset(x + 0.5, y + 0.5);
+            final wa = _edgeShadow(b, c, p) / area;
+            final wb = _edgeShadow(c, a, p) / area;
+            final wc = 1 - wa - wb;
+            if (wa < -1e-5 || wb < -1e-5 || wc < -1e-5) continue;
+            final z = 1 / (wa / za + wb / zb + wc / zc);
+            final index = y * width + x;
+            if (z < depth[index]) depth[index] = z;
+          }
+        }
+      }
+    }
+
+    return _PerspectiveShadowMap(
+      origin: origin,
+      right: right,
+      up: up,
+      forward: normalizedForward,
+      halfFovTangent: halfFovTangent,
+      near: near,
+      far: far,
+      width: width,
+      height: height,
+      depth: depth,
+    );
+  }
+
+  @override
+  double visibilityAt(Vector3 point, {double softness = 0}) {
+    final delta = Vector3(
+      point.x - origin.x,
+      point.y - origin.y,
+      point.z - origin.z,
+    );
+    final x = _dotShadow(delta, right);
+    final y = _dotShadow(delta, up);
+    final z = _dotShadow(delta, forward);
+    if (z < near || z > far) return 1;
+    final nx = x / (z * halfFovTangent);
+    final ny = y / (z * halfFovTangent);
+    if (nx < -1 || nx > 1 || ny < -1 || ny > 1) return 1;
+    final pixelX = ((nx * 0.5 + 0.5) * (width - 1)).round();
+    final pixelY = ((0.5 - ny * 0.5) * (height - 1)).round();
+    final radius = (softness.clamp(0.0, 100.0) / 20)
+        .round()
+        .clamp(0, 5)
+        .toInt();
+    final bias = math.max(0.5, z * 0.0005);
+    var visible = 0.0;
+    var samples = 0;
+    for (var dy = -radius; dy <= radius; dy++) {
+      for (var dx = -radius; dx <= radius; dx++) {
+        final sx = pixelX + dx;
+        final sy = pixelY + dy;
+        samples++;
+        if (sx < 0 || sx >= width || sy < 0 || sy >= height) {
+          visible += 1;
+          continue;
+        }
+        final nearest = depth[sy * width + sx];
+        if (!nearest.isFinite || z <= nearest + bias) visible += 1;
+      }
+    }
+    return samples == 0 ? 1 : visible / samples;
+  }
+}
+
+double _edgeShadow(Offset a, Offset b, Offset p) =>
+    (p.dx - a.dx) * (b.dy - a.dy) -
+    (p.dy - a.dy) * (b.dx - a.dx);
 
 class Software3dFrame {
   const Software3dFrame({
@@ -707,6 +1183,31 @@ class Software3dFrame {
   final Float32List depth;
 }
 
+/// Thin-lens depth-of-field circle-of-confusion model.
+class DepthOfFieldModel {
+  const DepthOfFieldModel._();
+
+  /// Returns the CoC radius in pixels for a 36 mm reference sensor.
+  ///
+  /// Inputs use the same scene-distance unit as CameraSettings.
+  static double circleOfConfusionRadiusPixels({
+    required double objectDistance,
+    required double focusDistance,
+    required double focalLength,
+    required double fNumber,
+    required double pixelsPerMillimetre,
+  }) {
+    final focal = focalLength.clamp(1.0, 300.0).toDouble();
+    final object = objectDistance.clamp(focal + 0.001, 10000000.0).toDouble();
+    final focus = focusDistance.clamp(focal + 0.001, 10000000.0).toDouble();
+    final aperture = fNumber.clamp(0.7, 32.0).toDouble();
+    final sensorScale = pixelsPerMillimetre.clamp(0.01, 10000.0).toDouble();
+    final cocDiameterMm = focal * focal * (object - focus).abs() /
+        (aperture * object * (focus - focal));
+    return cocDiameterMm * sensorScale / 2;
+  }
+}
+
 class Software3dRasterizer {
   Software3dFrame rasterize(
     List<ProjectedMeshTriangle> triangles, {
@@ -715,7 +1216,9 @@ class Software3dRasterizer {
     bool depthOfField = false,
     double focusDistance = 1000,
     double aperture = 2.8,
-    int maximumDofRadius = 3,
+    double focalLength = 50,
+    double sensorWidthMm = 36,
+    int maximumDofRadius = 6,
   }) {
     if (width <= 0 || height <= 0 || width * height > 16000000) {
       throw ArgumentError('Raster dimensions must be positive and at most 16 MP.');
@@ -793,7 +1296,9 @@ class Software3dRasterizer {
         height,
         focusDistance,
         aperture,
-        maximumDofRadius.clamp(0, 6),
+        focalLength,
+        sensorWidthMm,
+        maximumDofRadius.clamp(0, 6).toInt(),
       );
     }
     return Software3dFrame(
@@ -811,50 +1316,87 @@ class Software3dRasterizer {
     int height,
     double focusDistance,
     double aperture,
+    double focalLength,
+    double sensorWidthMm,
     int maxRadius,
   ) {
     if (maxRadius == 0) return;
     final source = Uint8List.fromList(rgba);
-    final focus = math.max(1.0, focusDistance);
-    for (var y = 1; y < height - 1; y++) {
-      for (var x = 1; x < width - 1; x++) {
+    final focus = math.max(focalLength + 0.01, focusDistance).toDouble();
+    final fNumber = aperture.clamp(0.7, 32.0).toDouble();
+    final focal = focalLength.clamp(1.0, 300.0).toDouble();
+    final pixelsPerMillimetre =
+        width / sensorWidthMm.clamp(1.0, 100.0).toDouble();
+
+    for (var y = 0; y < height; y++) {
+      for (var x = 0; x < width; x++) {
         final pixel = y * width + x;
-        if (!depth[pixel].isFinite) continue;
-        final blur = ((depth[pixel] - focus).abs() / focus) *
-            aperture.clamp(0.7, 22.0) *
-            1.15;
-        final radius = blur.round().clamp(0, maxRadius).toInt();
-        if (radius == 0 ||
-            x - radius < 0 ||
-            x + radius >= width ||
-            y - radius < 0 ||
-            y + radius >= height) {
-          continue;
-        }
-        var red = 0;
-        var green = 0;
-        var blue = 0;
-        var alpha = 0;
-        var samples = 0;
+        final z = depth[pixel];
+        if (!z.isFinite) continue;
+        final cocRadius = DepthOfFieldModel.circleOfConfusionRadiusPixels(
+          objectDistance: z,
+          focusDistance: focus,
+          focalLength: focal,
+          fNumber: fNumber,
+          pixelsPerMillimetre: pixelsPerMillimetre,
+        );
+        if (cocRadius < 0.015) continue;
+        final sampleRadius = math.max(1.0, cocRadius);
+        final radius = sampleRadius.ceil().clamp(1, maxRadius).toInt();
+        var red = 0.0;
+        var green = 0.0;
+        var blue = 0.0;
+        var alpha = 0.0;
+        var totalWeight = 0.0;
+        final sigma = math.max(0.45, cocRadius * 0.58);
+        final invTwoSigmaSquared = 1 / (2 * sigma * sigma);
+
         for (var dy = -radius; dy <= radius; dy++) {
+          final sy = y + dy;
+          if (sy < 0 || sy >= height) continue;
           for (var dx = -radius; dx <= radius; dx++) {
-            final index = ((y + dy) * width + x + dx) * 4;
-            red += source[index];
-            green += source[index + 1];
-            blue += source[index + 2];
-            alpha += source[index + 3];
-            samples++;
+            final distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared > sampleRadius * sampleRadius + 0.25) continue;
+            final sx = x + dx;
+            if (sx < 0 || sx >= width) continue;
+
+            final neighbour = sy * width + sx;
+            final neighbourDepth = depth[neighbour];
+            if (neighbourDepth.isFinite) {
+              // Avoid pulling a substantially farther layer into a nearer
+              // focused surface. Background pixels remain available at edges.
+              final depthDelta = neighbourDepth - z;
+              final depthTolerance = math.max(2.0, z * 0.002);
+              if (depthDelta > depthTolerance &&
+                  neighbourDepth > focus) {
+                continue;
+              }
+            }
+            final weight = math.exp(
+              -distanceSquared * invTwoSigmaSquared,
+            );
+            final offset = neighbour * 4;
+            final a = source[offset + 3] / 255;
+            red += source[offset] * a * weight;
+            green += source[offset + 1] * a * weight;
+            blue += source[offset + 2] * a * weight;
+            alpha += a * weight;
+            totalWeight += weight;
           }
         }
-        final target = pixel * 4;
-        final mix = (blur / (maxRadius + 1)).clamp(0.0, 0.85);
-        rgba[target] = (source[target] * (1 - mix) + red / samples * mix).round();
-        rgba[target + 1] =
-            (source[target + 1] * (1 - mix) + green / samples * mix).round();
-        rgba[target + 2] =
-            (source[target + 2] * (1 - mix) + blue / samples * mix).round();
-        rgba[target + 3] =
-            (source[target + 3] * (1 - mix) + alpha / samples * mix).round();
+
+        if (totalWeight <= 1e-8) continue;
+        final outputOffset = pixel * 4;
+        final coverage = (alpha / totalWeight).clamp(0.0, 1.0);
+        if (alpha > 1e-8) {
+          rgba[outputOffset] = (red / alpha).round().clamp(0, 255).toInt();
+          rgba[outputOffset + 1] =
+              (green / alpha).round().clamp(0, 255).toInt();
+          rgba[outputOffset + 2] =
+              (blue / alpha).round().clamp(0, 255).toInt();
+        }
+        rgba[outputOffset + 3] =
+            (coverage * 255).round().clamp(0, 255).toInt();
       }
     }
   }

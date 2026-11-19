@@ -160,6 +160,12 @@ class _Gpu3dMeshViewState extends State<Gpu3dMeshView> {
 
   @override
   Widget build(BuildContext context) {
+    // The current WGSL mesh pass has no sampled depth-buffer post-process.
+    // Route DOF-enabled frames through the CPU thin-lens CoC pipeline until
+    // the GPU post-process pass is integrated.
+    if (widget.cameraSettings.depthOfField) {
+      return _cpuFallback('CPU thin-lens depth of field');
+    }
     return FutureBuilder<_GpuBoot>(
       future: _boot,
       builder: (context, snapshot) {

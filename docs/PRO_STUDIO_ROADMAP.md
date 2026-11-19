@@ -248,3 +248,19 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 - Base-colour texture bytes and UV0 are imported and retained, but texture images are not yet uploaded as GPU textures or sampled in the WGSL fragment shader. The current GPU shader still receives pre-shaded vertex colour; full UV texture sampling and material batching remain pending.
 - Metallic/roughness values and alpha modes are retained as material data; a full per-pixel metallic-roughness BRDF, normal/occlusion/emissive map sampling, alpha mask/blend parity, and GPU light evaluation remain pending.
 - Node TRS animation is evaluated for preview/export, but skeletal skinning, inverse-bind matrices, joint weights, morph targets and weights animation are not deformed/rendered yet.
+
+
+### Light transport and lens pass increment — 19 November 2026
+
+- **Directional shadows:** the orthographic light-space depth map now returns percentage-closer filtered visibility rather than a single boolean cutoff.
+- **Spot shadows:** added a cone-projected perspective depth map. Scene triangles are clipped to the light frustum before rasterization; receiver samples outside the cone remain lit.
+- **Point shadows:** added a six-face perspective cubemap depth map with per-face depth testing and filtered lookup. Area emitters use the point-shadow map at their source centre while sample positions provide area-light integration.
+- **Bias/filtering:** depth-dependent bias reduces self-shadow acne; the Shadow Softness control selects a bounded PCF kernel. The current shadow maps are CPU-built depth maps shared by the CPU projector and the GPU vertex-colour preview (visibility is resolved before upload), not GPU-resident shadow textures.
+- **Depth of field:** replaced the relative-distance blur heuristic with a thin-lens circle-of-confusion radius using object distance, focus distance, focal length, f-number/aperture, sensor width and preview pixel density. The screen-space disk gather uses premultiplied-alpha accumulation and a depth-aware rejection step to reduce edge halos. DOF-enabled mesh previews intentionally use the CPU path until the GPU post-process shader is connected.
+- **Area lights:** replaced the fixed four corner points with deterministic Hammersley samples over the rotated rectangular emitter. The Area Samples control supports 1–64 samples; the Area Size control changes emitter dimensions and emitted contribution. A cosine-weighted emitter term and inverse-square distance falloff are included.
+
+### Remaining physical-rendering limits
+
+- Point/spot maps are software cube/perspective maps rebuilt from the current mesh on scene updates. They are not yet GPU shadow render passes, cached across static frames, cascaded, or filtered with variance/PCSS methods.
+- The thin-lens CoC is physically parameterized, but the current bounded screen-space gather is not a full lens/bokeh renderer: polygonal aperture blades, anamorphic bokeh, chromatic aberration, sensor clipping and temporal accumulation remain future work.
+- Area lighting uses low-discrepancy deterministic samples and a central point-shadow map for visibility. Per-sample area-source shadow maps, multiple-scattering integration and a complete energy-conserving PBR BRDF remain outstanding.

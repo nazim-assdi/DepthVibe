@@ -767,6 +767,7 @@ class CameraSettings {
     this.nearClip = 50,
     this.farClip = 5000,
     this.aperture = 2.8,
+    this.sensorWidthMm = 36,
     this.depthOfField = false,
   });
 
@@ -777,6 +778,7 @@ class CameraSettings {
   final double nearClip;
   final double farClip;
   final double aperture;
+  final double sensorWidthMm;
   final bool depthOfField;
 
   CameraSettings copyWith({
@@ -787,6 +789,7 @@ class CameraSettings {
     double? nearClip,
     double? farClip,
     double? aperture,
+    double? sensorWidthMm,
     bool? depthOfField,
   }) => CameraSettings(
     projection: projection ?? this.projection,
@@ -796,6 +799,7 @@ class CameraSettings {
     nearClip: nearClip ?? this.nearClip,
     farClip: farClip ?? this.farClip,
     aperture: aperture ?? this.aperture,
+    sensorWidthMm: sensorWidthMm ?? this.sensorWidthMm,
     depthOfField: depthOfField ?? this.depthOfField,
   );
 }
@@ -809,6 +813,7 @@ class LightSettings {
     this.castShadows = true,
     this.shadowSoftness = 20,
     this.areaSize = 160,
+    this.areaSamples = 16,
   });
 
   final LightKind kind;
@@ -818,6 +823,7 @@ class LightSettings {
   final bool castShadows;
   final double shadowSoftness;
   final double areaSize;
+  final int areaSamples;
 
   LightSettings copyWith({
     LightKind? kind,
@@ -827,6 +833,7 @@ class LightSettings {
     bool? castShadows,
     double? shadowSoftness,
     double? areaSize,
+    int? areaSamples,
   }) => LightSettings(
     kind: kind ?? this.kind,
     color: color ?? this.color,
@@ -835,6 +842,7 @@ class LightSettings {
     castShadows: castShadows ?? this.castShadows,
     shadowSoftness: shadowSoftness ?? this.shadowSoftness,
     areaSize: areaSize ?? this.areaSize,
+    areaSamples: areaSamples ?? this.areaSamples,
   );
 }
 

@@ -2574,8 +2574,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                   ))),
           _settingSlider('Far Clip', camera.farClip, camera.nearClip + 1, 50000,
               (value) => _controller.setCameraSettings(camera.copyWith(farClip: value))),
-          _settingSlider('Aperture', camera.aperture, 0.7, 22,
+          _settingSlider('Aperture · f-stop', camera.aperture, 0.7, 22,
               (value) => _controller.setCameraSettings(camera.copyWith(aperture: value))),
+          _settingSlider('Sensor Width · mm', camera.sensorWidthMm, 18, 70,
+              (value) => _controller.setCameraSettings(camera.copyWith(sensorWidthMm: value))),
           const SizedBox(height: 8),
           const Text(
             'CAMERA ORIENTATION',
@@ -2605,7 +2607,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         children: [
           _panelHeader('LIGHT CONTROLS', Icons.lightbulb_outline),
           const Text(
-            'Ambient, directional, point, spot and area lights shade mesh previews. CPU shadow-map preview and depth-of-field blur are available for supported mesh frames.',
+            'Directional, spot and point lights use depth-tested shadow maps with percentage-closer filtering. Mesh frames also use thin-lens depth of field and deterministic area-light sampling.',
             style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
           ),
           const SizedBox(height: 8),
@@ -2625,9 +2627,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
               (value) => _controller.setLightSettings(light.copyWith(coneAngle: value))),
           _settingSlider('Shadow Softness', light.shadowSoftness, 0, 100,
               (value) => _controller.setLightSettings(light.copyWith(shadowSoftness: value))),
-          if (light.kind == LightKind.area)
+          if (light.kind == LightKind.area) ...[
             _settingSlider('Area Size', light.areaSize, 1, 1000,
                 (value) => _controller.setLightSettings(light.copyWith(areaSize: value))),
+            _settingSlider('Area Samples', light.areaSamples.toDouble(), 1, 64,
+                (value) => _controller.setLightSettings(
+                    light.copyWith(areaSamples: value.round()))),
+          ],
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Cast Shadows', style: TextStyle(fontSize: 11)),
