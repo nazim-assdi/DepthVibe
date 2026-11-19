@@ -64,7 +64,7 @@ void main() {
     expect(filters, hasLength(1));
     expect(filters.single, contains('format=rgba,lutrgb='));
     expect(filters.single, contains("r='if(gte(val,128.00),255,0)'"));
-    expect(filters.single, contains("a=alpha"));
+    expect(filters.single, contains(':a=val'));
   });
 
   test('compiles an effect stack into FFmpeg filters', () {
