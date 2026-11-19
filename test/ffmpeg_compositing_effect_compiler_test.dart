@@ -125,6 +125,7 @@ void main() {
     expect(graph, contains('overlay=x='));
     expect(graph, contains(':eval=frame:shortest=1'));
     expect(graph, contains('if(lt(T,1.00000)'));
+    expect(graph, contains('if(lt(t,1.00000)'));
     expect(graph, contains('0.90000'));
     expect(graph, contains('24.00000'));
   });
