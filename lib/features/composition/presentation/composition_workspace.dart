@@ -1461,12 +1461,119 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                     value: mask.inverted,
                     onChanged: (value) => _controller.setMaskParameters(mask.id, inverted: value),
                   ),
+                  if (mask.shape == MaskShape.bezier)
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: Text(
+                        'BEZIER VERTICES · ${mask.vertices.length}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      children: [
+                        for (var index = 0; index < mask.vertices.length; index++)
+                          Builder(
+                            builder: (context) {
+                              final vertex = mask.vertices[index];
+                              void updateAnchor(double x, double y) =>
+                                  _controller.setMaskVertex(
+                                    mask.id,
+                                    index,
+                                    anchor: Vector2(x, y),
+                                  );
+                              void updateInHandle(double x, double y) =>
+                                  _controller.setMaskVertex(
+                                    mask.id,
+                                    index,
+                                    inHandle: Vector2(x, y),
+                                  );
+                              void updateOutHandle(double x, double y) =>
+                                  _controller.setMaskVertex(
+                                    mask.id,
+                                    index,
+                                    outHandle: Vector2(x, y),
+                                  );
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(
+                                    'Vertex ${index + 1}',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  _settingSlider(
+                                    'Anchor X',
+                                    vertex.anchor.x,
+                                    0,
+                                    1,
+                                    (value) => updateAnchor(value, vertex.anchor.y),
+                                  ),
+                                  _settingSlider(
+                                    'Anchor Y',
+                                    vertex.anchor.y,
+                                    0,
+                                    1,
+                                    (value) => updateAnchor(vertex.anchor.x, value),
+                                  ),
+                                  _settingSlider(
+                                    'In handle X',
+                                    vertex.inHandle.x,
+                                    -0.5,
+                                    0.5,
+                                    (value) => updateInHandle(value, vertex.inHandle.y),
+                                  ),
+                                  _settingSlider(
+                                    'In handle Y',
+                                    vertex.inHandle.y,
+                                    -0.5,
+                                    0.5,
+                                    (value) => updateInHandle(vertex.inHandle.x, value),
+                                  ),
+                                  _settingSlider(
+                                    'Out handle X',
+                                    vertex.outHandle.x,
+                                    -0.5,
+                                    0.5,
+                                    (value) => updateOutHandle(value, vertex.outHandle.y),
+                                  ),
+                                  _settingSlider(
+                                    'Out handle Y',
+                                    vertex.outHandle.y,
+                                    -0.5,
+                                    0.5,
+                                    (value) => updateOutHandle(vertex.outHandle.x, value),
+                                  ),
+                                  SwitchListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                    title: const Text(
+                                      'Smooth tangent',
+                                      style: TextStyle(fontSize: 10),
+                                    ),
+                                    value: vertex.smooth,
+                                    onChanged: (value) =>
+                                        _controller.setMaskVertex(
+                                      mask.id,
+                                      index,
+                                      smooth: value,
+                                    ),
+                                  ),
+                                  const Divider(height: 12),
+                                ],
+                              );
+                            },
+                          ),
+                      ],
+                    ),
                 ],
               ),
             ),
           ),
         const Text(
-          'Rectangle, ellipse and polygon alpha masks with position, size, feather, expansion and boolean operations are rendered in the compositor.',
+          'Rectangle, ellipse, polygon and cubic Bezier masks support feather, expansion, boolean operations and export rendering. Bezier vertices expose editable anchors and tangent handles.',
           style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
         ),
       ],
