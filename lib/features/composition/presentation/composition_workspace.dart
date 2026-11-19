@@ -745,6 +745,17 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     final left = x / doc.width * canvasSize.width - width / 2;
     final top = y / doc.height * canvasSize.height - height / 2;
 
+    final activeMasks = layer.masks.where((mask) => mask.enabled).toList();
+    final maskedVisual = activeMasks.isEmpty
+        ? visual
+        : ClipPath(
+            clipper: _AnimatedMaskClipper(
+              masks: activeMasks,
+              timeMs: timeMs,
+            ),
+            child: visual,
+          );
+
     return Positioned(
       left: left,
       top: top,
@@ -757,7 +768,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
           child: Transform.scale(
             scaleX: scaleX.isNegative ? -1 : 1,
             scaleY: scaleY.isNegative ? -1 : 1,
-            child: visual,
+            child: maskedVisual,
           ),
         ),
       ),
@@ -2814,6 +2825,173 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         LayerKind.particle => Icons.auto_awesome,
         LayerKind.precomposition => Icons.layers_outlined,
       };
+}
+
+/// Clips a layer to its frame-evaluated polygon/Bezier mask stack.
+class _AnimatedMaskClipper extends CustomClipper<Path> {
+  const _AnimatedMaskClipper({
+    required this.masks,
+    required this.timeMs,
+  });
+
+  final List<MaskModel> masks;
+  final int timeMs;
+
+  Path _shape(MaskModel mask, Size size) {
+    final left = mask.valueAt('left', timeMs).clamp(0.0, 1.0);
+    final top = mask.valueAt('top', timeMs).clamp(0.0, 1.0);
+    final width = mask.valueAt('width', timeMs).clamp(0.01, 1.0);
+    final height = mask.valueAt('height', timeMs).clamp(0.01, 1.0);
+    final bounds = Rect.fromLTWH(
+      left * size.width,
+      top * size.height,
+      width * size.width,
+      height * size.height,
+    );
+
+    switch (mask.shape) {
+      case MaskShape.rectangle:
+        return Path()..addRect(bounds);
+      case MaskShape.ellipse:
+        return Path()..addOval(bounds);
+      case MaskShape.polygon:
+      case MaskShape.bezier:
+        if (mask.vertices.length < 3) return Path();
+        final base = _baseOutline(mask);
+        if (base.isEmpty) return Path();
+        final minX = base.map((point) => point.dx).reduce(math.min);
+        final maxX = base.map((point) => point.dx).reduce(math.max);
+        final minY = base.map((point) => point.dy).reduce(math.min);
+        final maxY = base.map((point) => point.dy).reduce(math.max);
+        final spanX = (maxX - minX).abs() < 0.0001 ? 1.0 : maxX - minX;
+        final spanY = (maxY - minY).abs() < 0.0001 ? 1.0 : maxY - minY;
+        Offset mapPoint(double x, double y) => Offset(
+              bounds.left + (x - minX) / spanX * bounds.width,
+              bounds.top + (y - minY) / spanY * bounds.height,
+            );
+        final vertices = [
+          for (var index = 0; index < mask.vertices.length; index++)
+            Offset(
+              mask.vertexValueAt(index, 'anchor.x', timeMs),
+              mask.vertexValueAt(index, 'anchor.y', timeMs),
+            ),
+        ];
+        final path = Path()..moveTo(
+            mapPoint(vertices.first.dx, vertices.first.dy).dx,
+            mapPoint(vertices.first.dx, vertices.first.dy).dy,
+          );
+        for (var index = 0; index < vertices.length; index++) {
+          final next = (index + 1) % vertices.length;
+          if (mask.shape == MaskShape.polygon) {
+            final point = mapPoint(vertices[next].dx, vertices[next].dy);
+            path.lineTo(point.dx, point.dy);
+          } else {
+            final start = vertices[index];
+            final end = vertices[next];
+            final p1 = mapPoint(
+              start.dx +
+                  mask.vertexValueAt(index, 'outHandle.x', timeMs),
+              start.dy +
+                  mask.vertexValueAt(index, 'outHandle.y', timeMs),
+            );
+            final p2 = mapPoint(
+              end.dx +
+                  mask.vertexValueAt(next, 'inHandle.x', timeMs),
+              end.dy +
+                  mask.vertexValueAt(next, 'inHandle.y', timeMs),
+            );
+            final p3 = mapPoint(end.dx, end.dy);
+            path.cubicTo(p1.dx, p1.dy, p2.dx, p2.dy, p3.dx, p3.dy);
+          }
+        }
+        path.close();
+        return path;
+    }
+  }
+
+  List<Offset> _baseOutline(MaskModel mask) {
+    if (mask.shape != MaskShape.bezier) {
+      return [
+        for (var index = 0; index < mask.vertices.length; index++)
+          Offset(
+            mask.vertices[index].anchor.x,
+            mask.vertices[index].anchor.y,
+          ),
+      ];
+    }
+    const subdivisions = 8;
+    final points = <Offset>[];
+    for (var index = 0; index < mask.vertices.length; index++) {
+      final next = (index + 1) % mask.vertices.length;
+      final start = mask.vertices[index];
+      final end = mask.vertices[next];
+      final p0 = start.anchor;
+      final p1 = Offset(
+        p0.x + start.outHandle.x,
+        p0.y + start.outHandle.y,
+      );
+      final p3 = end.anchor;
+      final p2 = Offset(
+        p3.x + end.inHandle.x,
+        p3.y + end.inHandle.y,
+      );
+      for (var step = 0; step < subdivisions; step++) {
+        final t = step / subdivisions;
+        final inverse = 1 - t;
+        final a = inverse * inverse * inverse;
+        final b = 3 * inverse * inverse * t;
+        final c = 3 * inverse * t * t;
+        final d = t * t * t;
+        points.add(Offset(
+          a * p0.x + b * p1.dx + c * p2.dx + d * p3.x,
+          a * p0.y + b * p1.dy + c * p2.dy + d * p3.y,
+        ));
+      }
+    }
+    return points;
+  }
+
+  @override
+  Path getClip(Size size) {
+    if (masks.isEmpty) return Path()..addRect(Offset.zero & size);
+    Path? combined;
+    for (final mask in masks.where((item) => item.enabled)) {
+      var shape = _shape(mask, size);
+      if (mask.inverted) {
+        final inverse = Path()
+          ..fillType = PathFillType.evenOdd
+          ..addRect(Offset.zero & size)
+          ..addPath(shape, Offset.zero);
+        shape = inverse;
+      }
+      if (combined == null) {
+        combined = mask.operation == MaskOperation.subtract
+            ? Path.combine(
+                PathOperation.difference,
+                Path()..addRect(Offset.zero & size),
+                shape,
+              )
+            : shape;
+        continue;
+      }
+      final operation = switch (mask.operation) {
+        MaskOperation.add => PathOperation.union,
+        MaskOperation.subtract => PathOperation.difference,
+        MaskOperation.intersect => PathOperation.intersect,
+        MaskOperation.difference => PathOperation.xor,
+      };
+      try {
+        combined = Path.combine(operation, combined, shape);
+      } on Exception {
+        // Keep the last valid path if a malformed transient path cannot combine.
+      }
+    }
+    return combined ?? (Path()..addRect(Offset.zero & size));
+  }
+
+  @override
+  bool shouldReclip(covariant _AnimatedMaskClipper oldClipper) =>
+      oldClipper.timeMs != timeMs || oldClipper.masks != masks;
 }
 
 class _ShapeLayerPainter extends CustomPainter {
