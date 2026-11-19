@@ -1338,6 +1338,27 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         ),
         _settingSlider('Pan', audio.pan, -1, 1,
             (value) => _controller.setAudioSettings(audio.copyWith(pan: value))),
+        const Divider(height: 18),
+        const Text(
+          '3-BAND PARAMETRIC EQ',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.8,
+          ),
+        ),
+        _settingSlider('Low · 120 Hz (dB)', audio.lowEqDb, -12, 12,
+            (value) => _controller.setAudioSettings(
+              audio.copyWith(lowEqDb: value),
+            )),
+        _settingSlider('Mid · 1 kHz (dB)', audio.midEqDb, -12, 12,
+            (value) => _controller.setAudioSettings(
+              audio.copyWith(midEqDb: value),
+            )),
+        _settingSlider('High · 8 kHz (dB)', audio.highEqDb, -12, 12,
+            (value) => _controller.setAudioSettings(
+              audio.copyWith(highEqDb: value),
+            )),
         _settingSlider('Fade In (ms)', audio.fadeInMs.toDouble(), 0, 5000,
             (value) => _controller.setAudioSettings(
               audio.copyWith(fadeInMs: value.round()),
