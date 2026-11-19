@@ -172,3 +172,7 @@ Local FFmpeg 7.1.5 smoke tests succeeded for animated bus Gain/Pan, Bezier frame
 - Camera/light records and 3D transforms still do not have an integrated GLB/OBJ scene renderer, depth-of-field or shadow-map pipeline.
 - Tracking is still template-based translation tracking; planar homography tracking, perspective feature tracking and 3D camera solve remain outstanding.
 - Displacement and particles currently use a CPU FFmpeg backend; GPU multi-pass render graph, caching and real-time preview integration remain outstanding.
+
+### Camera preview/export increment — 19 November 2026
+
+A shared **2.5D perspective projection** now runs in both the compositor preview and FFmpeg export when an enabled Camera layer is present. The focus plane remains neutral by default; relative layer depth, Field of View and focal length influence projected position and scale. Orthographic projection bypasses depth scaling, and a near-plane guard limits extreme values. This is not a full 3D renderer: it does not render mesh geometry, camera orientation, materials, light interaction, shadow maps or depth-of-field blur. The Depth of Field UI control is visibly marked as pending rather than pretending to affect the render.
