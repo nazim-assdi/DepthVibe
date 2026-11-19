@@ -78,7 +78,8 @@ class CompositionExportService {
         } else {
           audioLayers.add(layer);
         }
-      } else if (layer.kind != LayerKind.nullObject) {
+      } else if (layer.kind != LayerKind.nullObject &&
+          layer.kind != LayerKind.precomposition) {
         skipped.add(layer.name);
       }
     }
