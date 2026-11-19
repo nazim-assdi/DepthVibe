@@ -60,7 +60,12 @@ class CompositionExportService {
       LayerKind.image,
       LayerKind.photoshopLayer,
     };
-    final anySolo = document.layers.any((layer) => layer.enabled && layer.solo);
+    final anySolo = document.layers.any((layer) =>
+        layer.enabled &&
+        layer.solo &&
+        (visualKinds.contains(layer.kind) ||
+            layer.kind == LayerKind.adjustment ||
+            layer.kind == LayerKind.audio));
     // The workspace paints the reversed layer list: the first item in the
     // document stack is the top layer. Export composites bottom-to-top too.
     final enabled = document.layers.reversed.where(
