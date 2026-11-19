@@ -529,16 +529,22 @@ class CompositionExportService {
         layer: layer, property: 'audio.gainDb',
         fallback: settings.gainDb,
       );
-      final pan = settings.pan.clamp(-1, 1);
-      final left = (1 - (pan > 0 ? pan : 0)).toStringAsFixed(4);
-      final right = (1 + (pan < 0 ? pan : 0)).toStringAsFixed(4);
+      final pan = animationCompiler.scalarExpression(
+        layer: layer,
+        property: 'audio.pan',
+        fallback: settings.pan,
+      );
+      final boundedPan = 'max(-1,min(1,' + pan + '))';
+      final leftPan = '1-max(0,' + boundedPan + ')';
+      final rightPan = '1+min(0,' + boundedPan + ')';
       final chain = <String>[
         'atrim=duration=' + (layer.durationMs / 1000).toStringAsFixed(3),
         'asetpts=PTS-STARTPTS+' + start.toStringAsFixed(3) + '/TB',
         'aformat=channel_layouts=stereo',
         ...audioEqualizerCompiler.compile(settings),
         "volume='pow(10,(" + gain + ")/20)':eval=frame",
-        'pan=stereo|c0=c0*' + left + '|c1=c1*' + right,
+        "aeval=exprs='val(0)*(" + leftPan + ")|val(1)*(" + rightPan +
+            ")':channel_layout=stereo",
         if (settings.fadeInMs > 0)
           'afade=t=in:st=' + start.toStringAsFixed(3) +
           ':d=' + (settings.fadeInMs / 1000).toStringAsFixed(3),
