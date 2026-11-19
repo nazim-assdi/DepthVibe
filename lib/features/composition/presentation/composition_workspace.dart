@@ -1978,8 +1978,12 @@ class _BezierCurveEditorState extends State<_BezierCurveEditor> {
 
   void _updateDrag(Offset position, Size size) {
     final plot = _plotRect(size);
-    final x = ((position.dx - plot.left) / plot.width).clamp(0.0, 1.0);
-    final y = (1 - (position.dy - plot.top) / plot.height).clamp(0.0, 1.0);
+    final x = ((position.dx - plot.left) / plot.width)
+        .clamp(0.0, 1.0)
+        .toDouble();
+    final y = (1 - (position.dy - plot.top) / plot.height)
+        .clamp(0.0, 1.0)
+        .toDouble();
     final current = widget.curve;
     widget.onChanged(
       _activeHandle == 1
@@ -2039,8 +2043,14 @@ class _BezierCurveGraphPainter extends CustomPainter {
         Offset(plot.left + x * plot.width, plot.bottom - y * plot.height);
     final start = point(0, 0);
     final end = point(1, 1);
-    final first = point(curve.x1.clamp(0.0, 1.0), curve.y1.clamp(0.0, 1.0));
-    final second = point(curve.x2.clamp(0.0, 1.0), curve.y2.clamp(0.0, 1.0));
+    final first = point(
+      curve.x1.clamp(0.0, 1.0).toDouble(),
+      curve.y1.clamp(0.0, 1.0).toDouble(),
+    );
+    final second = point(
+      curve.x2.clamp(0.0, 1.0).toDouble(),
+      curve.y2.clamp(0.0, 1.0).toDouble(),
+    );
 
     canvas.drawLine(
       start,
