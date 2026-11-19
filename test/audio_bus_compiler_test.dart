@@ -35,6 +35,35 @@ void main() {
     expect(filters[3], startsWith('alimiter=limit='));
   });
 
+  test('compiles animated bus gain and pan into audio-time expressions', () {
+    final filters = compiler.compile(const AudioBus(
+      id: 'music',
+      name: 'Music',
+      keyframeTracks: [
+        KeyframeTrack(
+          property: 'gainDb',
+          keyframes: [
+            ScalarKeyframe(timeMs: 0, value: -12),
+            ScalarKeyframe(timeMs: 1000, value: 0),
+          ],
+        ),
+        KeyframeTrack(
+          property: 'pan',
+          keyframes: [
+            ScalarKeyframe(timeMs: 0, value: -1),
+            ScalarKeyframe(timeMs: 1000, value: 1),
+          ],
+        ),
+      ],
+    ));
+
+    expect(filters, hasLength(2));
+    expect(filters.first, contains("volume='pow(10,("));
+    expect(filters.first, contains('if(lt(t,1.00000)'));
+    expect(filters.last, contains('aeval=exprs='));
+    expect(filters.last, contains('if(lt(t,1.00000)'));
+  });
+
   test('clamps dynamics values before generating FFmpeg filters', () {
     final filters = compiler.compile(const AudioBus(
       id: 'extreme',
