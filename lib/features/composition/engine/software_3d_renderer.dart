@@ -879,11 +879,6 @@ class _ProjectedVertex {
     required this.visible,
   });
 
-  const _ProjectedVertex.hidden()
-      : point = Offset.zero,
-        distance = 0,
-        visible = false;
-
   final Offset point;
   final double distance;
   final bool visible;

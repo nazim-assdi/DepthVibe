@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:gltfx/gltfx.dart' as gltf;
 
@@ -297,7 +298,7 @@ class GltfSceneMeshLoader {
         ));
       }
       animations.add(GltfMeshAnimationMetadata(
-        name: animation.name ?? 'Animation \${entry.$1 + 1}',
+        name: animation.name ?? 'Animation ' + (entry.$1 + 1).toString(),
         durationSeconds: animation.getDuration(document),
         channels: List.unmodifiable(channels),
       ));
