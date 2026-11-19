@@ -148,34 +148,38 @@ class FfmpegAnimationCompiler {
           cy + ')/(' + ry + '),2)))*min((' + rx + '),(' + ry + '))';
     } else if ((mask.shape == MaskShape.polygon || mask.shape == MaskShape.bezier) &&
         mask.vertices.length >= 3) {
-      final outline = _maskOutline(mask);
-      final minX = outline.map((point) => point.x).reduce(
+      final baseOutline = _maskOutline(mask);
+      final minX = baseOutline.map((point) => point.x).reduce(
             (a, b) => a < b ? a : b,
           );
-      final maxX = outline.map((point) => point.x).reduce(
+      final maxX = baseOutline.map((point) => point.x).reduce(
             (a, b) => a > b ? a : b,
           );
-      final minY = outline.map((point) => point.y).reduce(
+      final minY = baseOutline.map((point) => point.y).reduce(
             (a, b) => a < b ? a : b,
           );
-      final maxY = outline.map((point) => point.y).reduce(
+      final maxY = baseOutline.map((point) => point.y).reduce(
             (a, b) => a > b ? a : b,
           );
       final spanX = (maxX - minX).abs() < 0.0001 ? 1.0 : maxX - minX;
       final spanY = (maxY - minY).abs() < 0.0001 ? 1.0 : maxY - minY;
+      final outline = _maskOutlineExpressions(
+        mask,
+        timeVariable: timeVariable,
+      );
       final crossings = <String>[];
       final edgeDistances = <String>[];
       for (var i = 0; i < outline.length; i++) {
         final a = outline[i];
         final bPoint = outline[(i + 1) % outline.length];
-        final ax = '(W*(' + l + '+' +
-            _n((a.x - minX) / spanX) + '*' + w + '))';
-        final ay = '(H*(' + t + '+' +
-            _n((a.y - minY) / spanY) + '*' + h + '))';
-        final bx = '(W*(' + l + '+' +
-            _n((bPoint.x - minX) / spanX) + '*' + w + '))';
-        final by = '(H*(' + t + '+' +
-            _n((bPoint.y - minY) / spanY) + '*' + h + '))';
+        final ax = '(W*(' + l + '+((' + a.x + ')-' +
+            _n(minX) + ')/' + _n(spanX) + '*' + w + '))';
+        final ay = '(H*(' + t + '+((' + a.y + ')-' +
+            _n(minY) + ')/' + _n(spanY) + '*' + h + '))';
+        final bx = '(W*(' + l + '+((' + bPoint.x + ')-' +
+            _n(minX) + ')/' + _n(spanX) + '*' + w + '))';
+        final by = '(H*(' + t + '+((' + bPoint.y + ')-' +
+            _n(minY) + ')/' + _n(spanY) + '*' + h + '))';
         final dx = '(' + bx + '-' + ax + ')';
         final dy = '(' + by + '-' + ay + ')';
         final lengthSquared = '(pow(' + dx + ',2)+pow(' + dy + ',2))';
@@ -214,6 +218,104 @@ class FfmpegAnimationCompiler {
     final softEdge = 'min(1,max(0,0.5+(' + distance +
         ')/max(0.001,' + feather + ')))';
     return 'if(lte(' + feather + ',0),' + hardEdge + ',' + softEdge + ')';
+  }
+
+  String _maskVertexValue(
+    MaskModel mask,
+    int vertexIndex,
+    String component, {
+    required String timeVariable,
+  }) {
+    final vertex = mask.vertices[vertexIndex];
+    final fallback = switch (component) {
+      'anchor.x' => vertex.anchor.x,
+      'anchor.y' => vertex.anchor.y,
+      'inHandle.x' => vertex.inHandle.x,
+      'inHandle.y' => vertex.inHandle.y,
+      'outHandle.x' => vertex.outHandle.x,
+      'outHandle.y' => vertex.outHandle.y,
+      _ => 0.0,
+    };
+    final property = 'vertex.$vertexIndex.$component';
+    final tracks = mask.keyframeTracks.where(
+      (track) => track.property == property && track.enabled,
+    );
+    return keyframeExpression(
+      tracks.isEmpty ? null : tracks.first,
+      fallback: fallback,
+      timeVariable: timeVariable,
+    );
+  }
+
+  List<_MaskPointExpression> _maskOutlineExpressions(
+    MaskModel mask, {
+    required String timeVariable,
+  }) {
+    if (mask.shape != MaskShape.bezier) {
+      return [
+        for (var index = 0; index < mask.vertices.length; index++)
+          _MaskPointExpression(
+            x: _maskVertexValue(
+              mask,
+              index,
+              'anchor.x',
+              timeVariable: timeVariable,
+            ),
+            y: _maskVertexValue(
+              mask,
+              index,
+              'anchor.y',
+              timeVariable: timeVariable,
+            ),
+          ),
+      ];
+    }
+
+    const subdivisions = 8;
+    final outline = <_MaskPointExpression>[];
+    for (var index = 0; index < mask.vertices.length; index++) {
+      final next = (index + 1) % mask.vertices.length;
+      final p0x = _maskVertexValue(
+        mask, index, 'anchor.x', timeVariable: timeVariable,
+      );
+      final p0y = _maskVertexValue(
+        mask, index, 'anchor.y', timeVariable: timeVariable,
+      );
+      final p1x = '(' + p0x + '+' + _maskVertexValue(
+        mask, index, 'outHandle.x', timeVariable: timeVariable,
+      ) + ')';
+      final p1y = '(' + p0y + '+' + _maskVertexValue(
+        mask, index, 'outHandle.y', timeVariable: timeVariable,
+      ) + ')';
+      final p3x = _maskVertexValue(
+        mask, next, 'anchor.x', timeVariable: timeVariable,
+      );
+      final p3y = _maskVertexValue(
+        mask, next, 'anchor.y', timeVariable: timeVariable,
+      );
+      final p2x = '(' + p3x + '+' + _maskVertexValue(
+        mask, next, 'inHandle.x', timeVariable: timeVariable,
+      ) + ')';
+      final p2y = '(' + p3y + '+' + _maskVertexValue(
+        mask, next, 'inHandle.y', timeVariable: timeVariable,
+      ) + ')';
+
+      for (var step = 0; step < subdivisions; step++) {
+        final t = step / subdivisions;
+        final inverse = 1 - t;
+        final a = _n(inverse * inverse * inverse);
+        final b = _n(3 * inverse * inverse * t);
+        final c = _n(3 * inverse * t * t);
+        final d = _n(t * t * t);
+        outline.add(_MaskPointExpression(
+          x: '(' + a + '*' + p0x + '+' + b + '*' + p1x + '+' +
+              c + '*' + p2x + '+' + d + '*' + p3x + ')',
+          y: '(' + a + '*' + p0y + '+' + b + '*' + p1y + '+' +
+              c + '*' + p2y + '+' + d + '*' + p3y + ')',
+        ));
+      }
+    }
+    return outline;
   }
 
   List<Vector2> _maskOutline(MaskModel mask) {
@@ -386,4 +488,11 @@ class FfmpegAnimationCompiler {
       ')/' + _n(item.durationMs / 1000) + '))';
 
   String _n(num value) => value.toStringAsFixed(5);
+
+class _MaskPointExpression {
+  const _MaskPointExpression({required this.x, required this.y});
+
+  final String x;
+  final String y;
+}
 }
