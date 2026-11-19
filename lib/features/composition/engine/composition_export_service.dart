@@ -280,6 +280,7 @@ class CompositionExportService {
       final cameraSettings = cameraLayer?.camera;
       final projectedTransform = cameraLayer != null &&
               resolvedCamera != null &&
+              resolvedCamera.enabled &&
               cameraSettings != null &&
               layer.kind != LayerKind.camera &&
               layer.kind != LayerKind.light
