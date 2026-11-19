@@ -284,9 +284,10 @@ class BezierCurve {
     }
 
     final inverse = 1 - parameter;
-    return 3 * inverse * inverse * parameter * y1 +
-        3 * inverse * parameter * parameter * y2 +
-        parameter * parameter * parameter;
+    return (3 * inverse * inverse * parameter * y1 +
+            3 * inverse * parameter * parameter * y2 +
+            parameter * parameter * parameter)
+        .toDouble();
   }
 
   Map<String, Object> toJson() => {
