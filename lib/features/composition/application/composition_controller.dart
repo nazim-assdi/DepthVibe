@@ -312,6 +312,129 @@ class CompositionController extends ChangeNotifier {
     ));
   }
 
+  void setMaskAnimatedValue(
+    String maskId,
+    String property,
+    double value, {
+    bool keyframe = false,
+  }) {
+    final layer = selectedLayer;
+    if (layer == null) return;
+    _replace(layer.copyWith(
+      masks: layer.masks.map((mask) {
+        if (mask.id != maskId) return mask;
+        if (!keyframe) {
+          return switch (property) {
+            'feather' => mask.copyWith(feather: value),
+            'expansion' => mask.copyWith(expansion: value),
+            'opacity' => mask.copyWith(opacity: value.clamp(0, 100).toDouble()),
+            'left' => mask.copyWith(left: value.clamp(0, 1).toDouble()),
+            'top' => mask.copyWith(top: value.clamp(0, 1).toDouble()),
+            'width' => mask.copyWith(width: value.clamp(0.01, 1).toDouble()),
+            'height' => mask.copyWith(height: value.clamp(0.01, 1).toDouble()),
+            _ => mask,
+          };
+        }
+        final index = mask.keyframeTracks.indexWhere(
+          (track) => track.property == property,
+        );
+        final track = index < 0
+            ? KeyframeTrack(property: property)
+            : mask.keyframeTracks[index];
+        final updated = track.upsert(ScalarKeyframe(
+          timeMs: _document.playheadMs,
+          value: value,
+          interpolation: Interpolation.easeInOut,
+        ));
+        final tracks = [...mask.keyframeTracks];
+        if (index < 0) {
+          tracks.add(updated);
+        } else {
+          tracks[index] = updated;
+        }
+        return mask.copyWith(keyframeTracks: tracks);
+      }).toList(),
+    ));
+  }
+
+  void setMaskInterpolation(
+    String maskId,
+    String property,
+    Interpolation interpolation, {
+    int? timeMs,
+  }) {
+    final layer = selectedLayer;
+    if (layer == null) return;
+    final targetTimeMs = timeMs ?? _document.playheadMs;
+    _replace(layer.copyWith(
+      masks: layer.masks.map((mask) {
+        if (mask.id != maskId) return mask;
+        final tracks = mask.keyframeTracks.map((track) {
+          if (track.property != property) return track;
+          final frameIndex = track.keyframes.indexWhere(
+            (frame) => frame.timeMs == targetTimeMs,
+          );
+          if (frameIndex < 0) return track;
+          final frames = [...track.keyframes];
+          final old = frames[frameIndex];
+          frames[frameIndex] = ScalarKeyframe(
+            timeMs: old.timeMs,
+            value: old.value,
+            interpolation: interpolation,
+            inTangent: old.inTangent,
+            outTangent: old.outTangent,
+            bezier: old.bezier,
+          );
+          return KeyframeTrack(
+            property: track.property,
+            keyframes: frames,
+            enabled: track.enabled,
+          );
+        }).toList();
+        return mask.copyWith(keyframeTracks: tracks);
+      }).toList(),
+    ));
+  }
+
+  void setMaskBezierCurve(
+    String maskId,
+    String property,
+    BezierCurve curve, {
+    int? timeMs,
+  }) {
+    final layer = selectedLayer;
+    if (layer == null) return;
+    final targetTimeMs = timeMs ?? _document.playheadMs;
+    _replace(layer.copyWith(
+      masks: layer.masks.map((mask) {
+        if (mask.id != maskId) return mask;
+        final tracks = mask.keyframeTracks.map((track) {
+          if (track.property != property) return track;
+          final frameIndex = track.keyframes.indexWhere(
+            (frame) => frame.timeMs == targetTimeMs,
+          );
+          if (frameIndex < 0) return track;
+          final frames = [...track.keyframes];
+          final old = frames[frameIndex];
+          frames[frameIndex] = ScalarKeyframe(
+            timeMs: old.timeMs,
+            value: old.value,
+            interpolation: Interpolation.cubicBezier,
+            inTangent: old.inTangent,
+            outTangent: old.outTangent,
+            bezier: curve,
+          );
+          return KeyframeTrack(
+            property: track.property,
+            keyframes: frames,
+            enabled: track.enabled,
+          );
+        }).toList();
+        return mask.copyWith(keyframeTracks: tracks);
+      }).toList(),
+    ));
+  }
+
   void addEffect(String effectId) {
     final layer = selectedLayer;
     final definition = EffectCatalog.find(effectId);
