@@ -381,6 +381,73 @@ void main() {
       controller.dispose();
     });
 
+    test('audio buses store and edit gain and pan keyframes', () {
+      final controller = CompositionController();
+      final bus = controller.addAudioBus(name: 'Music');
+
+      controller.setPlayhead(0);
+      controller.setAudioBusValue(
+        bus.id,
+        'gainDb',
+        -12,
+        keyframe: true,
+      );
+      controller.setAudioBusValue(
+        bus.id,
+        'pan',
+        -1,
+        keyframe: true,
+      );
+      controller.setPlayhead(1000);
+      controller.setAudioBusValue(
+        bus.id,
+        'gainDb',
+        0,
+        keyframe: true,
+      );
+      controller.setAudioBusValue(
+        bus.id,
+        'pan',
+        1,
+        keyframe: true,
+      );
+
+      var updated = controller.document.audioBuses
+          .firstWhere((item) => item.id == bus.id);
+      expect(updated.valueAt('gainDb', 500), closeTo(-6, 0.001));
+      expect(updated.valueAt('pan', 500), closeTo(0, 0.001));
+
+      const curve = BezierCurve(x1: 0.2, y1: 0, x2: 0.8, y2: 1);
+      controller.setAudioBusBezierCurve(
+        bus.id,
+        'gainDb',
+        curve,
+        timeMs: 0,
+      );
+      controller.setAudioBusInterpolation(
+        bus.id,
+        'pan',
+        Interpolation.cubicBezier,
+        timeMs: 0,
+      );
+
+      updated = controller.document.audioBuses
+          .firstWhere((item) => item.id == bus.id);
+      expect(
+        updated.keyframeTracks.firstWhere(
+          (track) => track.property == 'gainDb',
+        ).keyframes.first.bezier.x1,
+        0.2,
+      );
+      expect(
+        updated.keyframeTracks.firstWhere(
+          (track) => track.property == 'pan',
+        ).keyframes.first.interpolation,
+        Interpolation.cubicBezier,
+      );
+      controller.dispose();
+    });
+
     test('audio bus dynamics can be updated without changing its identity', () {
       final controller = CompositionController();
       final bus = controller.addAudioBus(name: 'Dialogue');
