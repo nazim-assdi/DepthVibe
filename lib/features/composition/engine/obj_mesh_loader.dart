@@ -174,14 +174,14 @@ class ObjMeshLoader {
       var alpha = 1.0;
 
       void save() {
-        if (name != null) {
-          result[name] = ObjMaterial(
-            red: red.clamp(0.0, 1.0).toDouble(),
-            green: green.clamp(0.0, 1.0).toDouble(),
-            blue: blue.clamp(0.0, 1.0).toDouble(),
-            alpha: alpha.clamp(0.0, 1.0).toDouble(),
-          );
-        }
+        final materialName = name;
+        if (materialName == null) return;
+        result[materialName] = ObjMaterial(
+          red: red.clamp(0.0, 1.0).toDouble(),
+          green: green.clamp(0.0, 1.0).toDouble(),
+          blue: blue.clamp(0.0, 1.0).toDouble(),
+          alpha: alpha.clamp(0.0, 1.0).toDouble(),
+        );
       }
 
       for (final rawLine in source.split(RegExp(r'\r?\n'))) {
