@@ -311,6 +311,7 @@ class ScalarKeyframe {
     this.interpolation = Interpolation.linear,
     this.inTangent = 0,
     this.outTangent = 0,
+    this.bezier = const BezierCurve(),
   });
 
   final int timeMs;
@@ -318,6 +319,7 @@ class ScalarKeyframe {
   final Interpolation interpolation;
   final double inTangent;
   final double outTangent;
+  final BezierCurve bezier;
 
   Map<String, Object> toJson() => {
         'timeMs': timeMs,
@@ -325,19 +327,25 @@ class ScalarKeyframe {
         'interpolation': interpolation.name,
         'inTangent': inTangent,
         'outTangent': outTangent,
+        'bezier': bezier.toJson(),
       };
 
-  factory ScalarKeyframe.fromJson(Map<String, Object?> json) =>
-      ScalarKeyframe(
-        timeMs: (json['timeMs'] as num?)?.toInt() ?? 0,
-        value: (json['value'] as num?)?.toDouble() ?? 0,
-        interpolation: Interpolation.values.firstWhere(
-          (item) => item.name == json['interpolation'],
-          orElse: () => Interpolation.linear,
-        ),
-        inTangent: (json['inTangent'] as num?)?.toDouble() ?? 0,
-        outTangent: (json['outTangent'] as num?)?.toDouble() ?? 0,
-      );
+  factory ScalarKeyframe.fromJson(Map<String, Object?> json) {
+    final rawBezier = json['bezier'];
+    return ScalarKeyframe(
+      timeMs: (json['timeMs'] as num?)?.toInt() ?? 0,
+      value: (json['value'] as num?)?.toDouble() ?? 0,
+      interpolation: Interpolation.values.firstWhere(
+        (item) => item.name == json['interpolation'],
+        orElse: () => Interpolation.linear,
+      ),
+      inTangent: (json['inTangent'] as num?)?.toDouble() ?? 0,
+      outTangent: (json['outTangent'] as num?)?.toDouble() ?? 0,
+      bezier: rawBezier is Map
+          ? BezierCurve.fromJson(rawBezier.cast<String, Object?>())
+          : const BezierCurve(),
+    );
+  }
 }
 
 class KeyframeTrack {
