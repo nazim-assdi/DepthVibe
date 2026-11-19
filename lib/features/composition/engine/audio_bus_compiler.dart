@@ -17,7 +17,7 @@ class AudioBusCompiler {
     if (pan.abs() >= 0.001) {
       final left = (1 - math.max(0, pan)).toStringAsFixed(4);
       final right = (1 + math.min(0, pan)).toStringAsFixed(4);
-      filters.add('pan=stereo|c0=c0*$left|c1=c1*$right');
+      filters.add('pan=stereo|c0=$left*c0|c1=$right*c1');
     }
 
     if (bus.compressorEnabled) {
