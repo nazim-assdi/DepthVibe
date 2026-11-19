@@ -37,6 +37,44 @@ void main() {
     }
   });
 
+  test('RANSAC rejects mismatched feature pairs before refitting', () {
+    const source = [
+      Vector2(0, 0),
+      Vector2(100, 0),
+      Vector2(100, 100),
+      Vector2(0, 100),
+      Vector2(50, 50),
+      Vector2(25, 75),
+      Vector2(75, 25),
+      Vector2(60, 80),
+      Vector2(20, 30),
+      Vector2(90, 60),
+    ];
+    const h = [1.1, 0.08, 15.0, 0.03, 1.05, 8.0, 0.0008, 0.0003, 1.0];
+    final destination = source.map((point) {
+      final denominator = h[6] * point.x + h[7] * point.y + h[8];
+      return Vector2(
+        (h[0] * point.x + h[1] * point.y + h[2]) / denominator,
+        (h[3] * point.x + h[4] * point.y + h[5]) / denominator,
+      );
+    }).toList()
+      ..[8] = const Vector2(500, -200)
+      ..[9] = const Vector2(-100, 400);
+
+    final robust = estimator.estimateRansac(
+      source: source,
+      destination: destination,
+      reprojectionThreshold: 0.5,
+      maxIterations: 250,
+      randomSeed: 7,
+    );
+
+    expect(robust.inlierIndices, hasLength(8));
+    expect(robust.outlierIndices, [8, 9]);
+    expect(robust.fit.meanReprojectionError, lessThan(0.00001));
+    expect(robust.fit.maximumReprojectionError, lessThan(0.0001));
+  });
+
   test('supports affine translation and transforms a list of points', () {
     final transform = Homography2D.fromCorrespondences(
       source: const [
