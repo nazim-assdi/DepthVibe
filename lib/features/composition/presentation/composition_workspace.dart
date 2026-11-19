@@ -1598,6 +1598,73 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     );
   }
 
+  Widget _animatedMaskPropertyRow(
+    MaskModel mask,
+    String label,
+    String property,
+    double min,
+    double max,
+  ) {
+    final playhead = _controller.document.playheadMs;
+    final value = mask.valueAt(property, playhead);
+    final tracks = mask.keyframeTracks.where(
+      (track) => track.property == property,
+    );
+    final animated = tracks.isNotEmpty && tracks.first.keyframes.isNotEmpty;
+    final hasKeyAtPlayhead = animated &&
+        tracks.first.keyframes.any((frame) => frame.timeMs == playhead);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(label, style: const TextStyle(fontSize: 10)),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Add mask keyframe at playhead',
+              onPressed: () => _controller.setMaskAnimatedValue(
+                mask.id,
+                property,
+                value,
+                keyframe: true,
+              ),
+              icon: Icon(
+                Icons.diamond,
+                size: 15,
+                color: hasKeyAtPlayhead
+                    ? const Color(0xFFB8A4FF)
+                    : animated
+                        ? const Color(0xFF8D9AB2)
+                        : const Color(0xFF65738A),
+              ),
+            ),
+            SizedBox(
+              width: 48,
+              child: Text(
+                value.toStringAsFixed(2),
+                textAlign: TextAlign.end,
+                style: const TextStyle(fontSize: 9),
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          min: min,
+          max: max,
+          value: value.clamp(min, max).toDouble(),
+          onChanged: (next) => _controller.setMaskAnimatedValue(
+            mask.id,
+            property,
+            next,
+            keyframe: animated,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildMasksPanel(CompositionLayer layer) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1638,18 +1705,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                         .toList(),
                     onChanged: (value) => _controller.setMaskParameters(mask.id, operation: value),
                   ),
-                  _settingSlider('Feather', mask.feather, 0, 200,
-                      (value) => _controller.setMaskParameters(mask.id, feather: value)),
-                  _settingSlider('Expansion', mask.expansion, -100, 100,
-                      (value) => _controller.setMaskParameters(mask.id, expansion: value)),
-                  _settingSlider('Left', mask.left, 0, (1 - mask.width).clamp(0, 1),
-                      (value) => _controller.setMaskParameters(mask.id, left: value)),
-                  _settingSlider('Top', mask.top, 0, (1 - mask.height).clamp(0, 1),
-                      (value) => _controller.setMaskParameters(mask.id, top: value)),
-                  _settingSlider('Width', mask.width, 0.01, (1 - mask.left).clamp(0.01, 1),
-                      (value) => _controller.setMaskParameters(mask.id, width: value)),
-                  _settingSlider('Height', mask.height, 0.01, (1 - mask.top).clamp(0.01, 1),
-                      (value) => _controller.setMaskParameters(mask.id, height: value)),
+                  _animatedMaskPropertyRow(mask, 'Feather', 'feather', 0, 200),
+                  _animatedMaskPropertyRow(mask, 'Expansion', 'expansion', -100, 100),
+                  _animatedMaskPropertyRow(mask, 'Left', 'left', 0, (1 - mask.width).clamp(0, 1).toDouble()),
+                  _animatedMaskPropertyRow(mask, 'Top', 'top', 0, (1 - mask.height).clamp(0, 1).toDouble()),
+                  _animatedMaskPropertyRow(mask, 'Width', 'width', 0.01, (1 - mask.left).clamp(0.01, 1).toDouble()),
+                  _animatedMaskPropertyRow(mask, 'Height', 'height', 0.01, (1 - mask.top).clamp(0.01, 1).toDouble()),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Invert mask', style: TextStyle(fontSize: 10)),
