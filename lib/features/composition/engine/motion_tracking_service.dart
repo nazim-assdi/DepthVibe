@@ -5,6 +5,7 @@ import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../domain/composition_models.dart';
+import 'planar_homography.dart';
 
 class MotionTrackingResult {
   const MotionTrackingResult({
@@ -22,6 +23,21 @@ class MotionTrackingResult {
 /// It is not optical flow, planar tracking or a 3D camera solve.
 class MotionTrackingService {
   const MotionTrackingService();
+
+  /// Estimates a planar perspective transform from matched feature points.
+  ///
+  /// The current on-device tracker still produces translation samples; this
+  /// entry point is for feature-match providers that can supply four or more
+  /// stable point correspondences per frame.
+  HomographyFit estimatePlanarHomography({
+    required List<Vector2> sourcePoints,
+    required List<Vector2> destinationPoints,
+  }) {
+    return const PlanarHomographyEstimator().estimate(
+      source: sourcePoints,
+      destination: destinationPoints,
+    );
+  }
 
   Future<MotionTrackingResult> track({
     required String sourcePath,
