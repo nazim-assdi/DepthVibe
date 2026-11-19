@@ -638,6 +638,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
           );
     final projected = cameraLayer != null &&
             cameraTransform != null &&
+            cameraTransform.enabled &&
             cameraLayer.camera != null &&
             layer.kind != LayerKind.camera &&
             layer.kind != LayerKind.light &&
@@ -2366,6 +2367,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _panelHeader('CAMERA CONTROLS', Icons.videocam),
+          const Text(
+            '2.5D perspective projection affects layer position and scale in preview/export. Mesh rendering, camera orientation, depth-of-field blur and shadow maps are not integrated yet.',
+            style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
+          ),
+          const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             initialValue: camera.projection,
             decoration: const InputDecoration(labelText: 'Projection'),
@@ -2385,13 +2391,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
               (value) => _controller.setCameraSettings(camera.copyWith(focusDistance: value))),
           _settingSlider('Aperture', camera.aperture, 0.7, 22,
               (value) => _controller.setCameraSettings(camera.copyWith(aperture: value))),
-          SwitchListTile(
+          const SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Depth of Field', style: TextStyle(fontSize: 11)),
-            value: camera.depthOfField,
-            onChanged: (value) => _controller.setCameraSettings(
-              camera.copyWith(depthOfField: value),
+            title: Text(
+              'Depth of Field · renderer pending',
+              style: TextStyle(fontSize: 11),
             ),
+            value: false,
+            onChanged: null,
           ),
         ],
       );
@@ -2402,6 +2409,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _panelHeader('LIGHT CONTROLS', Icons.lightbulb_outline),
+          const Text(
+            'Light rig settings are stored in the project model. Surface shading, cast shadows and light interaction will render when the mesh lighting pipeline is integrated.',
+            style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
+          ),
+          const SizedBox(height: 8),
           DropdownButtonFormField<LightKind>(
             initialValue: light.kind,
             decoration: const InputDecoration(labelText: 'Light type'),
@@ -2432,7 +2444,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     return Column(
       children: [
         _panelHeader('3D LAYER', Icons.view_in_ar),
-        const Text('Camera, light, null and GLB/3D model transforms share the same keyframe system.', style: TextStyle(fontSize: 11)),
+        const Text(
+          'Camera and Null-parent transforms are evaluated in 2.5D. GLB/OBJ mesh import, material shading and full 3D scene rendering are not integrated yet.',
+          style: TextStyle(fontSize: 11),
+        ),
       ],
     );
   }
