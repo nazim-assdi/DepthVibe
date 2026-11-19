@@ -52,8 +52,7 @@ void main() {
       filters: filters,
       inputLabel: 'layerInput',
       layer: layer,
-      index: 0,
-      timeMs: 0,
+      index: 0
     );
 
     expect(output, 'glowOutput0_0');
@@ -114,8 +113,7 @@ void main() {
       filters: filters,
       inputLabel: 'titleInput',
       layer: layer,
-      index: 2,
-      timeMs: 0,
+      index: 2
     );
 
     final graph = filters.join(';');
@@ -155,8 +153,7 @@ void main() {
       filters: filters,
       inputLabel: 'staticInput',
       layer: layer,
-      index: 1,
-      timeMs: 500,
+      index: 1
     );
 
     expect(filters.join(';'), contains('gblur=sigma=14.000'));
