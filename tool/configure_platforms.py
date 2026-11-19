@@ -77,7 +77,7 @@ def add_camera_compile_dependency(path: Path) -> None:
     if path.name.endswith(".kts"):
         block = """
 subprojects {
-    afterEvaluate {
+    plugins.withId("com.android.library") {
         if (name == "camera_android_camerax") {
             dependencies.add("implementation", "androidx.concurrent:concurrent-futures:1.2.0")
         }
@@ -87,7 +87,7 @@ subprojects {
     else:
         block = """
 subprojects {
-    afterEvaluate {
+    plugins.withId('com.android.library') {
         if (name == 'camera_android_camerax') {
             dependencies {
                 implementation 'androidx.concurrent:concurrent-futures:1.2.0'
