@@ -583,7 +583,15 @@ class CompositionExportService {
 
     final replacements = <int, String>{};
     if (triggers.isNotEmpty && backgrounds.isNotEmpty) {
-      final triggerInputs = triggers.map((index) => '[aud' + index.toString() + ']').join();
+      final triggerInputs = triggers.map((index) {
+        final triggerLabel = 'audTrigger' + index.toString();
+        final busLabel = 'audBus' + index.toString();
+        filters.add(
+          '[aud' + index.toString() + ']asplit=2[' +
+              triggerLabel + '][' + busLabel + ']',
+        );
+        return '[' + triggerLabel + ']';
+      }).join();
       filters.add(triggerInputs + 'amix=inputs=' + triggers.length.toString() +
           ':duration=longest:normalize=0[ducksideRaw]');
       filters.add('[ducksideRaw]asplit=' + backgrounds.length.toString() +
@@ -642,10 +650,14 @@ class CompositionExportService {
       ];
       if (sourceIndices.isEmpty) continue;
 
-      final inputLabels = sourceIndices
-          .map((index) =>
-              '[' + (replacements[index] ?? 'aud' + index.toString()) + ']')
-          .join();
+      final inputLabels = sourceIndices.map((index) {
+        final replacement = replacements[index];
+        if (replacement != null) return '[' + replacement + ']';
+        if (triggers.contains(index)) {
+          return '[audBus' + index.toString() + ']';
+        }
+        return '[aud' + index.toString() + ']';
+      }).join();
       final mixLabel = 'busMix' + busOutputIndex.toString();
       final outputLabel = 'busOut' + busOutputIndex.toString();
       if (sourceIndices.length == 1) {
