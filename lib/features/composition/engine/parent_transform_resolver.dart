@@ -6,12 +6,14 @@ class ResolvedLayerTransform {
     required this.scale,
     required this.rotation,
     required this.opacity,
+    required this.enabled,
   });
 
   final Vector3 position;
   final Vector3 scale;
   final Vector3 rotation;
   final double opacity;
+  final bool enabled;
 
   LayerTransform toLayerTransform() => LayerTransform(
         position: position,
@@ -53,6 +55,7 @@ class ParentTransformResolver {
       layer.valueAt('rotation.z', timeMs),
     );
     var opacity = layer.valueAt('opacity', timeMs) / 100;
+    var enabled = layer.enabled;
 
     var parentId = layer.parentId;
     while (parentId != null) {
@@ -78,6 +81,7 @@ class ParentTransformResolver {
         parent.valueAt('rotation.z', timeMs),
       );
       final parentOpacity = parent.valueAt('opacity', timeMs) / 100;
+      enabled = enabled && parent.enabled;
 
       position = Vector3(
         parentPosition.x + position.x * parentScale.x / 100,
@@ -103,6 +107,7 @@ class ParentTransformResolver {
       scale: scale,
       rotation: rotation,
       opacity: (opacity * 100).clamp(0, 100).toDouble(),
+      enabled: enabled,
     );
   }
 }
