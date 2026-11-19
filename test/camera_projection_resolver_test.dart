@@ -126,7 +126,7 @@ void main() {
 
     expect(projected.positionX, contains('1200.00000'));
     expect(projected.positionX, contains('max(1,'));
-    expect(projected.scaleX, contains('focus'));
+    expect(projected.scaleX, contains('1000.000000'));
     expect(projected.scaleX, contains('500.00000'));
   });
 }
