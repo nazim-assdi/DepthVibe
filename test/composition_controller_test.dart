@@ -236,6 +236,34 @@ void main() {
       controller.dispose();
     });
 
+    test('smooth Bezier mask handles remain collinear and opposite', () {
+      final controller = CompositionController();
+      controller.addLayer(LayerKind.shape);
+      controller.addMask(shape: MaskShape.bezier);
+      final mask = controller.selectedLayer!.masks.single;
+
+      controller.setMaskVertex(
+        mask.id,
+        0,
+        inHandle: const Vector2(-0.1, 0.1),
+      );
+      controller.setMaskVertex(
+        mask.id,
+        0,
+        outHandle: const Vector2(0.2, 0),
+        smooth: true,
+      );
+
+      final vertex = controller.selectedLayer!.masks.single.vertices.first;
+      final cross = vertex.inHandle.x * vertex.outHandle.y -
+          vertex.inHandle.y * vertex.outHandle.x;
+      final dot = vertex.inHandle.x * vertex.outHandle.x +
+          vertex.inHandle.y * vertex.outHandle.y;
+      expect(cross, closeTo(0, 0.000001));
+      expect(dot, lessThan(0));
+      controller.dispose();
+    });
+
     test('Bezier graph edits are stored on the current keyframe', () {
       final controller = CompositionController();
       controller.addLayer(LayerKind.video);
