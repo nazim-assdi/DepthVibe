@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
 import 'package:path_provider/path_provider.dart';
@@ -13,6 +14,11 @@ import 'ffmpeg_compositing_effect_compiler.dart';
 import 'ffmpeg_blend_mode_compiler.dart';
 import 'parent_transform_expression_resolver.dart';
 import 'camera_projection_resolver.dart';
+import 'parent_transform_resolver.dart';
+import 'obj_mesh_loader.dart';
+import 'scene_mesh_loader.dart';
+import 'software_3d_renderer.dart';
+import 'software_3d_png_encoder.dart';
 
 typedef CompositionExportProgress = void Function(double value);
 
@@ -64,6 +70,7 @@ class CompositionExportService {
       LayerKind.video,
       LayerKind.image,
       LayerKind.photoshopLayer,
+      LayerKind.threeDModel,
     };
     final anySolo = document.layers.any((layer) =>
         layer.enabled &&
@@ -126,15 +133,26 @@ class CompositionExportService {
     final output = File(
       outputDirectory.path + Platform.pathSeparator + name + '.mp4',
     );
-    final command = await _buildCommand(
-      document,
-      visualLayers,
-      audioLayers,
-      output.path,
+    final meshTempDirectory = Directory(
+      outputDirectory.path + Platform.pathSeparator + '.mesh-render-' +
+      DateTime.now().microsecondsSinceEpoch.toString(),
     );
-    final completion = Completer<void>();
 
     try {
+      final meshVideoPaths = await _prepareMeshLayerVideos(
+        document,
+        visualLayers.where((layer) => layer.kind == LayerKind.threeDModel).toList(),
+        meshTempDirectory,
+        onProgress: onProgress,
+      );
+      final command = await _buildCommand(
+        document,
+        visualLayers,
+        audioLayers,
+        output.path,
+        meshVideoPaths: meshVideoPaths,
+      );
+      final completion = Completer<void>();
       final start = FFmpegKit.executeAsync(
         command,
         onStatistics: (statistics) {
@@ -162,6 +180,9 @@ class CompositionExportService {
       if (!await output.exists() || await output.length() == 0) {
         throw StateError('FFmpeg completed without producing an MP4 file.');
       }
+      if (await meshTempDirectory.exists()) {
+        await meshTempDirectory.delete(recursive: true);
+      }
       onProgress?.call(1);
       return CompositionExportResult(
         file: output,
@@ -170,16 +191,192 @@ class CompositionExportService {
       );
     } catch (_) {
       if (await output.exists()) await output.delete();
+      if (await meshTempDirectory.exists()) {
+        await meshTempDirectory.delete(recursive: true);
+      }
       rethrow;
     }
+  }
+
+  Future<Map<String, String>> _prepareMeshLayerVideos(
+    CompositionDocument document,
+    List<CompositionLayer> meshLayers,
+    Directory tempDirectory, {
+    CompositionExportProgress? onProgress,
+  }) async {
+    if (meshLayers.isEmpty) return const {};
+    await tempDirectory.create(recursive: true);
+    final result = <String, String>{};
+    final cameraLayer = document.layers
+        .where((layer) => layer.kind == LayerKind.camera && layer.enabled)
+        .firstOrNull;
+    final parentResolver = const ParentTransformResolver();
+    const renderer = Software3dRenderer();
+    const encoder = Software3dPngEncoder();
+
+    for (var layerIndex = 0; layerIndex < meshLayers.length; layerIndex++) {
+      final layer = meshLayers[layerIndex];
+      final sourcePath = layer.sourceUri;
+      if (sourcePath == null || sourcePath.isEmpty) {
+        throw StateError('3D mesh layer \${layer.name} has no local mesh source.');
+      }
+      final mesh = await const SceneMeshLoader().load(sourcePath);
+      final frameDirectory = Directory(
+        tempDirectory.path + Platform.pathSeparator + layer.id,
+      );
+      await frameDirectory.create(recursive: true);
+      final frameCount = math.max(
+        1,
+        (layer.durationMs * document.frameRate / 1000).ceil(),
+      ).toInt();
+      final frameRate = document.frameRate;
+      for (var frameIndex = 0; frameIndex < frameCount; frameIndex++) {
+        final localTimeMs = (frameIndex * 1000 / frameRate).round();
+        final compositionTimeMs = layer.startMs + localTimeMs;
+        final fileName = 'frame_' + frameIndex.toString().padLeft(6, '0') + '.png';
+        final frameFile = File(
+          frameDirectory.path + Platform.pathSeparator + fileName,
+        );
+
+        var rgbaFrame;
+        final isInsideLayer = localTimeMs < layer.durationMs;
+        final modelTransform = parentResolver.resolve(
+          layer: layer,
+          timeMs: compositionTimeMs,
+          layers: document.layers,
+        );
+        if (isInsideLayer && modelTransform.enabled) {
+          final cameraTransform = cameraLayer == null
+              ? const ResolvedLayerTransform(
+                  position: Vector3(0, 0, 0),
+                  scale: Vector3(100, 100, 100),
+                  rotation: Vector3(0, 0, 0),
+                  opacity: 100,
+                  enabled: true,
+                )
+              : parentResolver.resolve(
+                  layer: cameraLayer,
+                  timeMs: compositionTimeMs,
+                  layers: document.layers,
+                );
+          final lights = <SceneLight>[
+            for (final item in document.layers.where(
+              (candidate) =>
+                  candidate.kind == LayerKind.light && candidate.enabled,
+            ))
+              SceneLight(
+                transform: parentResolver.resolve(
+                  layer: item,
+                  timeMs: compositionTimeMs,
+                  layers: document.layers,
+                ),
+                settings: item.light ?? const LightSettings(),
+              ),
+          ];
+          rgbaFrame = renderer.rasterizeFrame(
+            mesh: mesh,
+            width: document.width,
+            height: document.height,
+            compositionWidth: document.width.toDouble(),
+            compositionHeight: document.height.toDouble(),
+            modelTransform: modelTransform,
+            cameraTransform: cameraTransform,
+            cameraSettings: cameraLayer?.camera ?? const CameraSettings(),
+            lights: lights,
+            centerOnModel: false,
+          );
+        } else {
+          rgbaFrame = renderer.rasterizeFrame(
+            mesh: const ObjMesh(
+              vertices: [],
+              triangles: [],
+              materials: {},
+              boundsMin: Vector3(0, 0, 0),
+              boundsMax: Vector3(0, 0, 0),
+            ),
+            width: document.width,
+            height: document.height,
+            compositionWidth: document.width.toDouble(),
+            compositionHeight: document.height.toDouble(),
+            modelTransform: const ResolvedLayerTransform(
+              position: Vector3(0, 0, 0),
+              scale: Vector3(100, 100, 100),
+              rotation: Vector3(0, 0, 0),
+              opacity: 0,
+              enabled: false,
+            ),
+            cameraTransform: const ResolvedLayerTransform(
+              position: Vector3(0, 0, 0),
+              scale: Vector3(100, 100, 100),
+              rotation: Vector3(0, 0, 0),
+              opacity: 100,
+              enabled: true,
+            ),
+            cameraSettings: const CameraSettings(),
+          );
+        }
+        final png = encoder.encodeRgba(
+          width: rgbaFrame.width,
+          height: rgbaFrame.height,
+          rgba: rgbaFrame.rgba,
+        );
+        await frameFile.writeAsBytes(png, flush: false);
+        onProgress?.call(
+          0.2 *
+              (layerIndex + (frameIndex + 1) / frameCount) /
+              meshLayers.length,
+        );
+      }
+
+      final duration = (layer.durationMs / 1000).toStringAsFixed(3);
+      final videoPath = tempDirectory.path +
+          Platform.pathSeparator +
+          layer.id +
+          '.mov';
+      final pattern = frameDirectory.path +
+          Platform.pathSeparator +
+          'frame_%06d.png';
+      final command = '-y -framerate ' + frameRate.toString() +
+          ' -start_number 0 -i ' + _quote(pattern) +
+          ' -frames:v ' + frameCount.toString() +
+          ' -an -c:v qtrle -pix_fmt argb -t ' + duration +
+          ' -r ' + frameRate.toString() + ' ' + _quote(videoPath);
+      await _executeFfmpeg(command);
+      result[layer.id] = videoPath;
+    }
+    return Map.unmodifiable(result);
+  }
+
+  Future<void> _executeFfmpeg(String command) async {
+    final completion = Completer<void>();
+    final start = FFmpegKit.executeAsync(
+      command,
+      onComplete: (session) {
+        if (ReturnCode.isSuccess(session.getReturnCode())) {
+          if (!completion.isCompleted) completion.complete();
+        } else if (!completion.isCompleted) {
+          completion.completeError(
+            StateError(session.getFailStackTrace() ?? '3D frame encoding failed.'),
+          );
+        }
+      },
+    );
+    unawaited(start.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        if (!completion.isCompleted) completion.completeError(error, stackTrace);
+      },
+    ));
+    await completion.future.timeout(const Duration(hours: 3));
   }
 
   Future<String> _buildCommand(
     CompositionDocument document,
     List<CompositionLayer> visualLayers,
     List<CompositionLayer> audioLayers,
-    String outputPath,
-  ) async {
+    String outputPath, {
+    required Map<String, String> meshVideoPaths,
+  }) async {
     final total = (document.durationMs / 1000).toStringAsFixed(3);
     final width = document.width;
     final height = document.height;
@@ -190,7 +387,8 @@ class CompositionExportService {
         .where((layer) =>
             layer.kind == LayerKind.video ||
             layer.kind == LayerKind.image ||
-            layer.kind == LayerKind.photoshopLayer)
+            layer.kind == LayerKind.photoshopLayer ||
+            layer.kind == LayerKind.threeDModel)
         .toList();
     final mediaInputIndices = <String, int>{
       for (var index = 0; index < mediaLayers.length; index++)
@@ -235,6 +433,14 @@ class CompositionExportService {
     buffer.write(' ');
 
     for (final layer in mediaLayers) {
+      if (layer.kind == LayerKind.threeDModel) {
+        final meshVideo = meshVideoPaths[layer.id];
+        if (meshVideo == null) {
+          throw StateError('3D mesh layer ${layer.name} has no rendered frame source.');
+        }
+        buffer.write('-i ' + _quote(meshVideo) + ' ');
+        continue;
+      }
       final duration = (layer.durationMs / 1000).toStringAsFixed(3);
       final source = _quote(layer.sourceUri!);
       if (layer.kind == LayerKind.image ||
@@ -288,7 +494,9 @@ class CompositionExportService {
       );
       if (!localTransform.enabled) continue;
       final cameraSettings = cameraLayer?.camera;
-      final projectedTransform = cameraLayer != null &&
+      final isMeshLayer = layer.kind == LayerKind.threeDModel;
+      final projectedTransform = !isMeshLayer &&
+              cameraLayer != null &&
               resolvedCamera != null &&
               resolvedCamera.enabled &&
               cameraSettings != null &&
@@ -301,8 +509,12 @@ class CompositionExportService {
             )
           : null;
       final resolvedTransform = projectedTransform;
-      final sxBase = resolvedTransform?.scaleX ?? localTransform.scaleX;
-      final syBase = resolvedTransform?.scaleY ?? localTransform.scaleY;
+      final sxBase = isMeshLayer
+          ? '100'
+          : resolvedTransform?.scaleX ?? localTransform.scaleX;
+      final syBase = isMeshLayer
+          ? '100'
+          : resolvedTransform?.scaleY ?? localTransform.scaleY;
       final sx = animationCompiler.transitionScaleExpression(
         layer: layer, transitions: document.transitions,
         baseExpression: sxBase,
@@ -311,12 +523,16 @@ class CompositionExportService {
         layer: layer, transitions: document.transitions,
         baseExpression: syBase,
       );
-      final rotation = resolvedTransform?.rotationZ ?? localTransform.rotationZ;
+      final rotation = isMeshLayer
+          ? '0'
+          : resolvedTransform?.rotationZ ?? localTransform.rotationZ;
       final opacity = resolvedTransform?.opacity ?? localTransform.opacity;
-      final posXBase =
-          resolvedTransform?.positionX ?? localTransform.positionX;
-      final posYBase =
-          resolvedTransform?.positionY ?? localTransform.positionY;
+      final posXBase = isMeshLayer
+          ? (width / 2).toStringAsFixed(3)
+          : resolvedTransform?.positionX ?? localTransform.positionX;
+      final posYBase = isMeshLayer
+          ? (height / 2).toStringAsFixed(3)
+          : resolvedTransform?.positionY ?? localTransform.positionY;
       final posX = animationCompiler.transitionPositionExpression(
         layer: layer, transitions: document.transitions,
         baseExpression: posXBase, axis: 'x',

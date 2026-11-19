@@ -808,6 +808,7 @@ class LightSettings {
     this.coneAngle = 45,
     this.castShadows = true,
     this.shadowSoftness = 20,
+    this.areaSize = 160,
   });
 
   final LightKind kind;
@@ -816,6 +817,7 @@ class LightSettings {
   final double coneAngle;
   final bool castShadows;
   final double shadowSoftness;
+  final double areaSize;
 
   LightSettings copyWith({
     LightKind? kind,
@@ -824,6 +826,7 @@ class LightSettings {
     double? coneAngle,
     bool? castShadows,
     double? shadowSoftness,
+    double? areaSize,
   }) => LightSettings(
     kind: kind ?? this.kind,
     color: color ?? this.color,
@@ -831,6 +834,7 @@ class LightSettings {
     coneAngle: coneAngle ?? this.coneAngle,
     castShadows: castShadows ?? this.castShadows,
     shadowSoftness: shadowSoftness ?? this.shadowSoftness,
+    areaSize: areaSize ?? this.areaSize,
   );
 }
 

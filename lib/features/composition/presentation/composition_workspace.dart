@@ -15,8 +15,9 @@ import '../engine/parent_transform_resolver.dart';
 import '../engine/camera_projection_resolver.dart';
 import '../engine/composition_export_service.dart';
 import '../engine/obj_mesh_loader.dart';
+import '../engine/scene_mesh_loader.dart';
 import '../engine/software_3d_renderer.dart';
-import '../engine/software_3d_mesh_painter.dart';
+import '../engine/software_3d_mesh_view.dart';
 import '../engine/audio_waveform_service.dart';
 import '../engine/motion_tracking_service.dart';
 import '../engine/transition_frame_validator.dart';
@@ -41,7 +42,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       _waveformJobs.putIfAbsent(path, () => _waveformService.generate(path));
 
   Future<ObjMesh> _meshFor(String path) =>
-      _meshJobs.putIfAbsent(path, () => const ObjMeshLoader().load(path));
+      _meshJobs.putIfAbsent(path, () => const SceneMeshLoader().load(path));
   bool _tracking = false;
   double _trackingLeft = 100;
   double _trackingTop = 100;
@@ -175,7 +176,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       final file = kind == LayerKind.threeDModel
           ? await FilePicker.pickFile(
               type: FileType.custom,
-              allowedExtensions: const ['obj'],
+              allowedExtensions: const ['obj', 'gltf', 'glb'],
             )
           : await FilePicker.pickFile(
               type: switch (kind) {
@@ -791,18 +792,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                   ),
                 );
               }
-              return CustomPaint(
-                painter: Software3dMeshPainter(
-                  mesh: mesh,
-                  modelTransform: resolved,
-                  cameraTransform: meshCamera,
-                  cameraSettings: meshCameraSettings,
-                  lights: meshLights,
-                  compositionWidth: doc.width.toDouble(),
-                  compositionHeight: doc.height.toDouble(),
-                  baseWidth: baseWidth,
-                ),
-                child: const SizedBox.expand(),
+              return Software3dMeshView(
+                mesh: mesh,
+                modelTransform: resolved,
+                cameraTransform: meshCamera,
+                cameraSettings: meshCameraSettings,
+                lights: meshLights,
+                compositionWidth: doc.width.toDouble(),
+                compositionHeight: doc.height.toDouble(),
               );
             },
           );
@@ -2584,14 +2581,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
           _animatedPropertyRow(layer, 'Orbit X', 'rotation.x', -180, 180),
           _animatedPropertyRow(layer, 'Orbit Y', 'rotation.y', -180, 180),
           _animatedPropertyRow(layer, 'Roll Z', 'rotation.z', -180, 180),
-          const SwitchListTile(
+          SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: Text(
-              'Depth of Field · renderer pending',
+            title: const Text(
+              'Depth of Field · CPU preview',
               style: TextStyle(fontSize: 11),
             ),
-            value: false,
-            onChanged: null,
+            value: camera.depthOfField,
+            onChanged: (value) => _controller.setCameraSettings(
+              camera.copyWith(depthOfField: value),
+            ),
           ),
         ],
       );
@@ -2603,7 +2602,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         children: [
           _panelHeader('LIGHT CONTROLS', Icons.lightbulb_outline),
           const Text(
-            'Ambient, directional, point and spot lights now shade OBJ mesh previews. Area-light sampling and cast shadow maps are still pending.',
+            'Ambient, directional, point, spot and area lights shade mesh previews. CPU shadow-map preview and depth-of-field blur are available for supported mesh frames.',
             style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
           ),
           const SizedBox(height: 8),
@@ -2623,6 +2622,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
               (value) => _controller.setLightSettings(light.copyWith(coneAngle: value))),
           _settingSlider('Shadow Softness', light.shadowSoftness, 0, 100,
               (value) => _controller.setLightSettings(light.copyWith(shadowSoftness: value))),
+          if (light.kind == LightKind.area)
+            _settingSlider('Area Size', light.areaSize, 1, 1000,
+                (value) => _controller.setLightSettings(light.copyWith(areaSize: value))),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Cast Shadows', style: TextStyle(fontSize: 11)),
@@ -2639,8 +2641,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         _panelHeader('3D MESH LAYER', Icons.view_in_ar),
         Text(
           layer.sourceUri == null
-              ? 'Import a Wavefront OBJ model from the Add Layer menu. OBJ geometry is projected with the active camera and shaded from the scene light rig.'
-              : 'Loaded source: ${layer.name}\nOBJ triangle mesh preview with perspective depth, MTL diffuse colours and scene-light shading. Export rendering, GLB, texture maps and shadow maps are still pending.',
+              ? 'Import OBJ, GLTF or GLB geometry from the Add Layer menu. Meshes use the active camera, depth buffer, focus blur and scene light rig.'
+              : 'Loaded source: ${layer.name}\nTriangle mesh preview with perspective, Z-buffer occlusion, diffuse/PBR base colour and scene-light shading. Frame export and texture images remain limited.',
           style: const TextStyle(fontSize: 11, color: Color(0xFF98A7C0)),
         ),
         const SizedBox(height: 10),

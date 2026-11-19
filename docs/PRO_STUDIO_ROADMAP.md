@@ -205,3 +205,22 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 - Perspective mode clips layers that cross behind the near plane and limits maximum projection magnification to 20×. The FFmpeg path applies the same visibility expression through layer opacity.
 - Regression coverage checks yaw, roll, near-plane culling and generated FFmpeg expressions.
 - **Still not true 3D:** 2.5D layers are still flat, camera-facing cards. There is no GLB/OBJ mesh rasterizer, mesh material/normal pipeline, real light/shadow rendering or depth-of-field blur. No claim of full 3D scene rendering is made.
+
+
+### CPU 3D mesh pipeline increment — 19 November 2026
+
+- **Per-pixel depth buffer:** mesh preview and frame rasterization now use a CPU Z-buffer rather than relying on triangle painter order. The legacy painter remains available as a low-level projected-triangle drawing helper; the workspace preview uses the raster output.
+- **GLB / glTF geometry import:** Add Layer accepts `.glb`, `.gltf` and `.obj`. The glTF importer reads GLB v2 JSON/BIN chunks and local/data-URI buffers, triangle primitives, POSITION accessors, unsigned indices and PBR base-colour factors.
+- **3D frame export:** the composition exporter rasterizes each 3D model layer frame to transparent RGBA PNG, encodes a temporary alpha-capable QTRLE MOV sequence, then feeds it to the regular FFmpeg composition path. Animated model/camera transforms and light transforms are sampled at each output frame.
+- **Depth of field:** CPU raster output has a bounded depth-aware blur pass driven by focus distance and aperture.
+- **Shadow maps:** directional lights can build a low-resolution CPU depth shadow map; softness controls neighbourhood filtering. This is not a GPU shadow pipeline and point/spot shadow maps are not yet supported.
+- **Area lights:** area sources use four spatial samples with an area-size control; this is a compact CPU approximation, not physically based area-light integration.
+
+### Explicit limits after this increment
+
+- **GPU renderer remains unimplemented.** There is no Vulkan, Metal, OpenGL or WebGPU backend yet. Preview and 3D frame export use CPU rasterization and are expected to be slower on larger meshes or compositions.
+- glTF import is geometry-only for triangle primitives with FLOAT VEC3 POSITION and supported index types. Node hierarchy/transforms, normals, UVs, skins, morphs, animations, sparse accessors, embedded/external texture images and full metallic-roughness lighting are not yet implemented. PBR `baseColorFactor` is read as a flat material colour only.
+- The Z-buffer currently rasterizes projected triangles with linear screen-space depth interpolation. Polygon clipping against near/far planes, perspective-correct attribute interpolation, back-face culling and multisample anti-aliasing remain future work.
+- Shadow mapping is directional-only and uses a compact CPU depth map; point/spot/cubemap shadows, cascades, physically soft penumbrae and shadow catcher are still outstanding.
+- The DOF pass is a bounded screen-space blur approximation, not a physically based circle-of-confusion/lens model. Area lighting is four-point sampling.
+- The transparent per-frame intermediate export is wired but still needs real-device performance/long-duration stress tests and full CI validation. No release APK or desktop package is implied by the source commit.
