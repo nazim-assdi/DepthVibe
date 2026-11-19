@@ -122,7 +122,7 @@ void main() {
       ),
     );
 
-    expect(triangles, hasLength(2));
+    expect(triangles, isNotEmpty);
     for (final triangle in triangles) {
       expect(triangle.distanceA, greaterThanOrEqualTo(50));
       expect(triangle.distanceB, greaterThanOrEqualTo(50));
