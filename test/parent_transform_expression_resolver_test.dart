@@ -86,6 +86,28 @@ void main() {
     expect(expression.positionX, contains('60.00000'));
   });
 
+  test('marks child export invisible when a parent group is hidden', () {
+    const group = CompositionLayer(
+      id: 'group',
+      name: 'Hidden Group',
+      kind: LayerKind.precomposition,
+      enabled: false,
+    );
+    const child = CompositionLayer(
+      id: 'child',
+      name: 'Child',
+      kind: LayerKind.image,
+      parentId: 'group',
+    );
+
+    final resolved = resolver.resolve(
+      layer: child,
+      layers: const [group, child],
+    );
+
+    expect(resolved.enabled, isFalse);
+  });
+
   test('rejects cyclic parent chains', () {
     const first = CompositionLayer(
       id: 'first',
