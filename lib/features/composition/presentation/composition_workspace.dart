@@ -1018,6 +1018,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         layer.effects.fold<int>(
           0,
           (count, effect) => count + effect.keyframeTracks.length,
+        ) +
+        layer.masks.fold<int>(
+          0,
+          (count, mask) => count + mask.keyframeTracks.length,
         );
     final cards = <Widget>[
       _panelHeader('UNIFIED GRAPH EDITOR', Icons.timeline),
@@ -1634,7 +1638,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                     _settingSlider(
                       'Makeup gain (dB)',
                       bus.makeupGainDb,
-                      -6,
+                      0,
                       18,
                       (value) => _controller.updateAudioBus(
                         bus.copyWith(makeupGainDb: value),
