@@ -11,6 +11,7 @@ import 'audio_equalizer_compiler.dart';
 import 'ffmpeg_animation_compiler.dart';
 import 'ffmpeg_filter_compiler.dart';
 import 'ffmpeg_compositing_effect_compiler.dart';
+import 'ffmpeg_blend_mode_compiler.dart';
 import 'parent_transform_expression_resolver.dart';
 import 'camera_projection_resolver.dart';
 
@@ -39,6 +40,7 @@ class CompositionExportService {
     this.parentTransformResolver = const ParentTransformExpressionResolver(),
     this.cameraProjectionResolver = const CameraProjectionResolver(),
     this.compositingEffectCompiler = const FfmpegCompositingEffectCompiler(),
+    this.blendModeCompiler = const FfmpegBlendModeCompiler(),
   });
 
   final FfmpegFilterCompiler filterCompiler;
@@ -48,6 +50,7 @@ class CompositionExportService {
   final ParentTransformExpressionResolver parentTransformResolver;
   final CameraProjectionResolver cameraProjectionResolver;
   final FfmpegCompositingEffectCompiler compositingEffectCompiler;
+  final FfmpegBlendModeCompiler blendModeCompiler;
 
   Future<CompositionExportResult> export(
     CompositionDocument document, {
@@ -441,7 +444,7 @@ class CompositionExportService {
     final blendRgb = 'blendRgb' + index.toString();
     final alphaMask = 'alphaMask' + index.toString();
     final blended = 'blended' + index.toString();
-    final mode = _blendFilterMode(layer.blendMode);
+    final mode = blendModeCompiler.filterMode(layer.blendMode);
 
     filters.add(
       'color=c=black@0:s=' + width.toString() + 'x' + height.toString() +
@@ -465,21 +468,6 @@ class CompositionExportService {
     filters.add('[' + blended + ']format=rgba[' + next + ']');
   }
 
-  String _blendFilterMode(LayerBlendMode mode) => switch (mode) {
-    LayerBlendMode.multiply => 'multiply',
-    LayerBlendMode.screen => 'screen',
-    LayerBlendMode.overlay => 'overlay',
-    LayerBlendMode.softLight => 'softlight',
-    LayerBlendMode.hardLight => 'hardlight',
-    LayerBlendMode.colorDodge => 'dodge',
-    LayerBlendMode.colorBurn => 'burn',
-    LayerBlendMode.difference => 'difference',
-    LayerBlendMode.exclusion => 'exclusion',
-    LayerBlendMode.add => 'addition',
-    LayerBlendMode.lighten => 'lighten',
-    LayerBlendMode.darken => 'darken',
-    LayerBlendMode.normal => 'normal',
-  };
 
   Future<bool> _hasAudioStream(String path) async {
     try {
