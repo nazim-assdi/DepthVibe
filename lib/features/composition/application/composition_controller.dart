@@ -435,8 +435,50 @@ class CompositionController extends ChangeNotifier {
         interpolation: interpolation,
         inTangent: old.inTangent,
         outTangent: old.outTangent,
+        bezier: old.bezier,
       );
       return KeyframeTrack(property: track.property, keyframes: frames);
+    }
+
+    final tracks = layer.keyframeTracks.map(update).toList();
+    final effects = layer.effects.map((effect) {
+      if (effectId != null && effect.id != effectId) return effect;
+      return effect.copyWith(
+        keyframeTracks: effect.keyframeTracks.map(update).toList(),
+      );
+    }).toList();
+    _replace(layer.copyWith(keyframeTracks: tracks, effects: effects));
+  }
+
+  void setBezierCurve(
+    String property,
+    BezierCurve curve, {
+    String? effectId,
+  }) {
+    final layer = selectedLayer;
+    if (layer == null) return;
+
+    KeyframeTrack update(KeyframeTrack track) {
+      if (track.property != property) return track;
+      final frameIndex = track.keyframes.indexWhere(
+        (item) => item.timeMs == _document.playheadMs,
+      );
+      if (frameIndex < 0) return track;
+      final frames = [...track.keyframes];
+      final old = frames[frameIndex];
+      frames[frameIndex] = ScalarKeyframe(
+        timeMs: old.timeMs,
+        value: old.value,
+        interpolation: Interpolation.cubicBezier,
+        inTangent: old.inTangent,
+        outTangent: old.outTangent,
+        bezier: curve,
+      );
+      return KeyframeTrack(
+        property: track.property,
+        keyframes: frames,
+        enabled: track.enabled,
+      );
     }
 
     final tracks = layer.keyframeTracks.map(update).toList();
