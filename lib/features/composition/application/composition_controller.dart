@@ -376,6 +376,48 @@ class CompositionController extends ChangeNotifier {
     ));
   }
 
+  void keyframeMaskPath(String maskId) {
+    final layer = selectedLayer;
+    if (layer == null) return;
+    _replace(layer.copyWith(
+      masks: layer.masks.map((mask) {
+        if (mask.id != maskId || mask.vertices.length < 3) return mask;
+        final tracks = [...mask.keyframeTracks];
+        for (var index = 0; index < mask.vertices.length; index++) {
+          final vertex = mask.vertices[index];
+          final values = <String, double>{
+            'anchor.x': vertex.anchor.x,
+            'anchor.y': vertex.anchor.y,
+            'inHandle.x': vertex.inHandle.x,
+            'inHandle.y': vertex.inHandle.y,
+            'outHandle.x': vertex.outHandle.x,
+            'outHandle.y': vertex.outHandle.y,
+          };
+          for (final entry in values.entries) {
+            final property = 'vertex.$index.${entry.key}';
+            final trackIndex = tracks.indexWhere(
+              (track) => track.property == property,
+            );
+            final track = trackIndex < 0
+                ? KeyframeTrack(property: property)
+                : tracks[trackIndex];
+            final updated = track.upsert(ScalarKeyframe(
+              timeMs: _document.playheadMs,
+              value: entry.value,
+              interpolation: Interpolation.easeInOut,
+            ));
+            if (trackIndex < 0) {
+              tracks.add(updated);
+            } else {
+              tracks[trackIndex] = updated;
+            }
+          }
+        }
+        return mask.copyWith(keyframeTracks: tracks);
+      }).toList(),
+    ));
+  }
+
   void setMaskVertexAnimatedValue(
     String maskId,
     int vertexIndex,
