@@ -14,6 +14,10 @@ class ObjMaterial {
     this.metallicFactor = 0,
     this.roughnessFactor = 1,
     this.baseColorTextureBytes,
+    this.baseColorTextureRgba,
+    this.baseColorTextureWidth = 0,
+    this.baseColorTextureHeight = 0,
+    this.alphaCutoff = 0.5,
     this.alphaMode = 'OPAQUE',
     this.doubleSided = false,
     this.emissiveRed = 0,
@@ -28,6 +32,11 @@ class ObjMaterial {
   final double metallicFactor;
   final double roughnessFactor;
   final Uint8List? baseColorTextureBytes;
+  /// Decoded row-major RGBA8 pixels used by the CPU renderer.
+  final Uint8List? baseColorTextureRgba;
+  final int baseColorTextureWidth;
+  final int baseColorTextureHeight;
+  final double alphaCutoff;
   final String alphaMode;
   final bool doubleSided;
   final double emissiveRed;
@@ -52,6 +61,7 @@ class ObjMesh {
     required this.boundsMin,
     required this.boundsMax,
     this.textureCoordinates = const [],
+    this.hasTextureCoordinates = false,
     this.vertexNormals = const [],
     this.sceneNodes = const [],
     this.animations = const [],
@@ -64,6 +74,8 @@ class ObjMesh {
   final Vector3 boundsMin;
   final Vector3 boundsMax;
   final List<Offset> textureCoordinates;
+  /// True when at least one complete TEXCOORD_0 stream was imported.
+  final bool hasTextureCoordinates;
   final List<Vector3> vertexNormals;
   final List<GltfMeshNodeMetadata> sceneNodes;
   final List<GltfMeshAnimationMetadata> animations;
@@ -209,6 +221,7 @@ class ObjMeshLoader {
           green: green.clamp(0.0, 1.0).toDouble(),
           blue: blue.clamp(0.0, 1.0).toDouble(),
           alpha: alpha.clamp(0.0, 1.0).toDouble(),
+          alphaMode: alpha < 1 ? 'BLEND' : 'OPAQUE',
         );
       }
 

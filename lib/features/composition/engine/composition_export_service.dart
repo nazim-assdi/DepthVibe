@@ -285,6 +285,7 @@ class CompositionExportService {
             lights: lights,
             centerOnModel: false,
             timeMs: localTimeMs,
+            animationIndex: layer.modelAnimationIndex,
           );
         } else {
           rgbaFrame = renderer.rasterizeFrame(

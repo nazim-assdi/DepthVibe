@@ -960,6 +960,12 @@ class CompositionController extends ChangeNotifier {
     _replace(layer.copyWith(light: settings));
   }
 
+  void setModelAnimationIndex(int index) {
+    final layer = selectedLayer;
+    if (layer == null || layer.kind != LayerKind.threeDModel) return;
+    _replace(layer.copyWith(modelAnimationIndex: index));
+  }
+
   void setAudioSettings(AudioSettings settings) {
     final layer = selectedLayer;
     if (layer == null ||

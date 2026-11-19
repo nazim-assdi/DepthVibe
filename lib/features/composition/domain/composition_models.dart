@@ -869,6 +869,7 @@ class CompositionLayer {
     this.photoshopAdjustmentKey,
     this.sourceWidth = 0,
     this.sourceHeight = 0,
+    this.modelAnimationIndex = 0,
     this.transform = const LayerTransform(),
     this.blendMode = LayerBlendMode.normal,
     this.masks = const [],
@@ -901,6 +902,8 @@ class CompositionLayer {
   final String? photoshopAdjustmentKey;
   final int sourceWidth;
   final int sourceHeight;
+  /// Selected embedded glTF clip; -1 keeps the model in its rest pose.
+  final int modelAnimationIndex;
   final LayerTransform transform;
   final LayerBlendMode blendMode;
   final List<MaskModel> masks;
@@ -947,6 +950,7 @@ class CompositionLayer {
     String? photoshopAdjustmentKey,
     int? sourceWidth,
     int? sourceHeight,
+    int? modelAnimationIndex,
     LayerTransform? transform,
     LayerBlendMode? blendMode,
     List<MaskModel>? masks,
@@ -986,6 +990,7 @@ class CompositionLayer {
             photoshopAdjustmentKey ?? this.photoshopAdjustmentKey,
         sourceWidth: sourceWidth ?? this.sourceWidth,
         sourceHeight: sourceHeight ?? this.sourceHeight,
+        modelAnimationIndex: modelAnimationIndex ?? this.modelAnimationIndex,
         transform: transform ?? this.transform,
         blendMode: blendMode ?? this.blendMode,
         masks: masks ?? this.masks,

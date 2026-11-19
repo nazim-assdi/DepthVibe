@@ -27,6 +27,7 @@ class Gpu3dMeshView extends StatefulWidget {
     required this.compositionWidth,
     required this.compositionHeight,
     this.timeMs = 0,
+    this.animationIndex = 0,
     this.baseWidth = 760,
     this.baseHeight = 760,
   });
@@ -39,6 +40,7 @@ class Gpu3dMeshView extends StatefulWidget {
   final double compositionWidth;
   final double compositionHeight;
   final int timeMs;
+  final int animationIndex;
   final double baseWidth;
   final double baseHeight;
 
@@ -105,6 +107,7 @@ class _Gpu3dMeshViewState extends State<Gpu3dMeshView> {
       lights: widget.lights,
       centerOnModel: true,
       timeMs: widget.timeMs,
+      animationIndex: widget.animationIndex,
     );
     _vertexData = const GpuMeshVertexPacker().pack(
       triangles: triangles,
@@ -125,6 +128,7 @@ class _Gpu3dMeshViewState extends State<Gpu3dMeshView> {
               compositionWidth: widget.compositionWidth,
               compositionHeight: widget.compositionHeight,
               timeMs: widget.timeMs,
+              animationIndex: widget.animationIndex,
             ),
           ),
           Positioned(
@@ -165,6 +169,12 @@ class _Gpu3dMeshViewState extends State<Gpu3dMeshView> {
     // the GPU post-process pass is integrated.
     if (widget.cameraSettings.depthOfField) {
       return _cpuFallback('CPU thin-lens depth of field');
+    }
+    if (widget.mesh.hasTextureCoordinates &&
+        widget.mesh.materials.values.any(
+          (material) => material.baseColorTextureRgba != null,
+        )) {
+      return _cpuFallback('GLTF base-colour UV textures');
     }
     return FutureBuilder<_GpuBoot>(
       future: _boot,

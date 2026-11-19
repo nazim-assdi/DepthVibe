@@ -29,6 +29,14 @@ class ProjectedMeshTriangle {
     required this.distanceB,
     required this.distanceC,
     this.perspective = true,
+    this.uvA = Offset.zero,
+    this.uvB = Offset.zero,
+    this.uvC = Offset.zero,
+    this.textureRgba,
+    this.textureWidth = 0,
+    this.textureHeight = 0,
+    this.alphaMode = 'OPAQUE',
+    this.alphaCutoff = 0.5,
   });
 
   final Offset a;
@@ -40,6 +48,14 @@ class ProjectedMeshTriangle {
   final double distanceB;
   final double distanceC;
   final bool perspective;
+  final Offset uvA;
+  final Offset uvB;
+  final Offset uvC;
+  final Uint8List? textureRgba;
+  final int textureWidth;
+  final int textureHeight;
+  final String alphaMode;
+  final double alphaCutoff;
 }
 
 /// Deterministic CPU mesh projector and flat-shading renderer shared by the
@@ -216,10 +232,15 @@ class Software3dRenderer {
           ? _multiply(shadingNormal, -1)
           : shadingNormal;
 
+      Offset uvAt(int vertexIndex) =>
+          mesh.hasTextureCoordinates &&
+                  mesh.textureCoordinates.length == mesh.vertices.length
+              ? mesh.textureCoordinates[vertexIndex]
+              : Offset.zero;
       var polygon = <_SceneVertex>[
-        _SceneVertex(worldA, cameraVertices[triangle.a], focus),
-        _SceneVertex(worldB, cameraVertices[triangle.b], focus),
-        _SceneVertex(worldC, cameraVertices[triangle.c], focus),
+        _SceneVertex(worldA, cameraVertices[triangle.a], focus, uvAt(triangle.a)),
+        _SceneVertex(worldB, cameraVertices[triangle.b], focus, uvAt(triangle.b)),
+        _SceneVertex(worldC, cameraVertices[triangle.c], focus, uvAt(triangle.c)),
       ];
       polygon = _clipPolygon(polygon, near, keepGreater: true);
       polygon = _clipPolygon(polygon, far, keepGreater: false);
@@ -256,6 +277,7 @@ class Software3dRenderer {
           ),
           distance: vertex.distance,
           visible: true,
+          uv: vertex.uv,
         );
       }
 
@@ -264,6 +286,16 @@ class Software3dRenderer {
         final a = clipped[0];
         final b = clipped[index];
         final c = clipped[index + 1];
+        final triangleHasUvs = [a.uv, b.uv, c.uv].every(
+          (uv) => uv.dx.isFinite && uv.dy.isFinite,
+        );
+        final textureIsUsable = triangleHasUvs &&
+            mesh.hasTextureCoordinates &&
+            material.baseColorTextureRgba != null &&
+            material.baseColorTextureWidth > 0 &&
+            material.baseColorTextureHeight > 0 &&
+            material.baseColorTextureRgba!.length ==
+                material.baseColorTextureWidth * material.baseColorTextureHeight * 4;
         faces.add(ProjectedMeshTriangle(
           a: a.point,
           b: b.point,
@@ -273,6 +305,14 @@ class Software3dRenderer {
           distanceA: a.distance,
           distanceB: b.distance,
           distanceC: c.distance,
+          uvA: a.uv,
+          uvB: b.uv,
+          uvC: c.uv,
+          textureRgba: textureIsUsable ? material.baseColorTextureRgba : null,
+          textureWidth: textureIsUsable ? material.baseColorTextureWidth : 0,
+          textureHeight: textureIsUsable ? material.baseColorTextureHeight : 0,
+          alphaMode: material.alphaMode,
+          alphaCutoff: material.alphaCutoff,
         ));
       }
     }
@@ -350,6 +390,7 @@ class Software3dRenderer {
           _lerpVector(previous.world, current.world, amount),
           _lerpVector(previous.camera, current.camera, amount),
           plane,
+          _lerpOffset(previous.uv, current.uv, amount),
         ));
       }
       if (currentInside) output.add(current);
@@ -361,6 +402,11 @@ class Software3dRenderer {
     a.x + (b.x - a.x) * amount,
     a.y + (b.y - a.y) * amount,
     a.z + (b.z - a.z) * amount,
+  );
+
+  Offset _lerpOffset(Offset a, Offset b, double amount) => Offset(
+    a.dx + (b.dx - a.dx) * amount,
+    a.dy + (b.dy - a.dy) * amount,
   );
 
   Color _shade(
@@ -486,9 +532,9 @@ class Software3dRenderer {
         (value * 255).round().clamp(0, 255).toInt();
     return Color.fromARGB(
       (material.alpha * 255).round().clamp(0, 255).toInt(),
-      channel(material.red * redLight),
-      channel(material.green * greenLight),
-      channel(material.blue * blueLight),
+      channel(material.red * redLight + material.emissiveRed),
+      channel(material.green * greenLight + material.emissiveGreen),
+      channel(material.blue * blueLight + material.emissiveBlue),
     );
   }
 
@@ -1258,23 +1304,44 @@ class Software3dRasterizer {
                   w2 * triangle.distanceC;
           final pixel = y * width + x;
           if (z >= depth[pixel]) continue;
-          final alpha =
-              (triangle.color.a * 255).round().clamp(0, 255).toInt();
+          final texel = triangle.textureRgba == null
+              ? 0xFFFFFFFF
+              : _sampleTexture(triangle, w0, w1, w2);
+          final texelAlpha = texel & 0xFF;
+          final materialAlpha = (triangle.color.a * 255)
+              .round()
+              .clamp(0, 255)
+              .toInt();
+          final combinedAlpha = (materialAlpha * texelAlpha / 255)
+              .round()
+              .clamp(0, 255)
+              .toInt();
+          if (triangle.alphaMode == 'MASK' &&
+              combinedAlpha / 255 < triangle.alphaCutoff.clamp(0.0, 1.0)) {
+            continue;
+          }
+          final alpha = triangle.alphaMode == 'OPAQUE' ||
+                  triangle.alphaMode == 'MASK'
+              ? 255
+              : combinedAlpha;
           if (alpha <= 0) continue;
           depth[pixel] = z;
           final offset = pixel * 4;
           final inverse = 255 - alpha;
-          rgba[offset] = (triangle.color.r * 255 +
+          final textureRed = (texel >> 24) & 0xFF;
+          final textureGreen = (texel >> 16) & 0xFF;
+          final textureBlue = (texel >> 8) & 0xFF;
+          rgba[offset] = (triangle.color.r * textureRed +
                   rgba[offset] * inverse / 255)
               .round()
               .clamp(0, 255)
               .toInt();
-          rgba[offset + 1] = (triangle.color.g * 255 +
+          rgba[offset + 1] = (triangle.color.g * textureGreen +
                   rgba[offset + 1] * inverse / 255)
               .round()
               .clamp(0, 255)
               .toInt();
-          rgba[offset + 2] = (triangle.color.b * 255 +
+          rgba[offset + 2] = (triangle.color.b * textureBlue +
                   rgba[offset + 2] * inverse / 255)
               .round()
               .clamp(0, 255)
@@ -1307,6 +1374,68 @@ class Software3dRasterizer {
       rgba: rgba,
       depth: depth,
     );
+  }
+
+  int _sampleTexture(
+    ProjectedMeshTriangle triangle,
+    double w0,
+    double w1,
+    double w2,
+  ) {
+    final texture = triangle.textureRgba;
+    final width = triangle.textureWidth;
+    final height = triangle.textureHeight;
+    if (texture == null || width <= 0 || height <= 0) return 0xFFFFFFFF;
+
+    double u;
+    double v;
+    if (triangle.perspective) {
+      final reciprocal = w0 / triangle.distanceA +
+          w1 / triangle.distanceB +
+          w2 / triangle.distanceC;
+      if (reciprocal.abs() < 1e-9) return 0xFFFFFFFF;
+      u = (w0 * triangle.uvA.dx / triangle.distanceA +
+              w1 * triangle.uvB.dx / triangle.distanceB +
+              w2 * triangle.uvC.dx / triangle.distanceC) /
+          reciprocal;
+      v = (w0 * triangle.uvA.dy / triangle.distanceA +
+              w1 * triangle.uvB.dy / triangle.distanceB +
+              w2 * triangle.uvC.dy / triangle.distanceC) /
+          reciprocal;
+    } else {
+      u = w0 * triangle.uvA.dx + w1 * triangle.uvB.dx + w2 * triangle.uvC.dx;
+      v = w0 * triangle.uvA.dy + w1 * triangle.uvB.dy + w2 * triangle.uvC.dy;
+    }
+
+    // Default glTF sampler behaviour is REPEAT with bilinear filtering.
+    u -= u.floorToDouble();
+    v -= v.floorToDouble();
+    final sampleX = u * width - 0.5;
+    final sampleY = v * height - 0.5;
+    final x0 = sampleX.floor();
+    final y0 = sampleY.floor();
+    final tx = sampleX - x0;
+    final ty = sampleY - y0;
+    int wrap(int value, int extent) => (value % extent + extent) % extent;
+    double channel(int component) {
+      final xA = wrap(x0, width);
+      final xB = wrap(x0 + 1, width);
+      final yA = wrap(y0, height);
+      final yB = wrap(y0 + 1, height);
+      final c00 = texture[(yA * width + xA) * 4 + component].toDouble();
+      final c10 = texture[(yA * width + xB) * 4 + component].toDouble();
+      final c01 = texture[(yB * width + xA) * 4 + component].toDouble();
+      final c11 = texture[(yB * width + xB) * 4 + component].toDouble();
+      final top = c00 + (c10 - c00) * tx;
+      final bottom = c01 + (c11 - c01) * tx;
+      return top + (bottom - top) * ty;
+    }
+
+    final red = channel(0).round().clamp(0, 255).toInt();
+    final green = channel(1).round().clamp(0, 255).toInt();
+    final blue = channel(2).round().clamp(0, 255).toInt();
+    final alpha = channel(3).round().clamp(0, 255).toInt();
+    return (red << 24) | (green << 16) | (blue << 8) | alpha;
   }
 
   void _applyDepthOfField(
@@ -1407,11 +1536,17 @@ class Software3dRasterizer {
 }
 
 class _SceneVertex {
-  const _SceneVertex(this.world, this.camera, this.distance);
+  const _SceneVertex(
+    this.world,
+    this.camera,
+    this.distance, [
+    this.uv = Offset.zero,
+  ]);
 
   final Vector3 world;
   final Vector3 camera;
   final double distance;
+  final Offset uv;
 }
 
 class _ProjectedVertex {
@@ -1419,9 +1554,11 @@ class _ProjectedVertex {
     required this.point,
     required this.distance,
     required this.visible,
+    this.uv = Offset.zero,
   });
 
   final Offset point;
   final double distance;
   final bool visible;
+  final Offset uv;
 }

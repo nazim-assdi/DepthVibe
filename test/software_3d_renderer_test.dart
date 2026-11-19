@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:depthvibe/features/composition/domain/composition_models.dart';
@@ -33,6 +34,35 @@ void main() {
     opacity: 100,
     enabled: true,
   );
+
+  test('samples a base-colour texture using interpolated UV coordinates', () {
+    final triangle = ProjectedMeshTriangle(
+      a: const Offset(0, 0),
+      b: const Offset(4, 0),
+      c: const Offset(0, 4),
+      color: const Color(0xFFFFFFFF),
+      distance: 1,
+      distanceA: 1,
+      distanceB: 1,
+      distanceC: 1,
+      uvA: Offset.zero,
+      uvB: const Offset(1, 0),
+      uvC: const Offset(0, 1),
+      textureRgba: Uint8List.fromList([80, 150, 220, 255]),
+      textureWidth: 1,
+      textureHeight: 1,
+    );
+    final frame = Software3dRasterizer().rasterize(
+      [triangle],
+      width: 4,
+      height: 4,
+    );
+    const pixel = 0;
+    expect(frame.rgba[pixel], 80);
+    expect(frame.rgba[pixel + 1], 150);
+    expect(frame.rgba[pixel + 2], 220);
+    expect(frame.rgba[pixel + 3], 255);
+  });
 
   test('projects OBJ triangles into camera space with a shaded surface', () {
     final triangles = renderer.projectTriangles(

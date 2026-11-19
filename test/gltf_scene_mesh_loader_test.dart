@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:image/image.dart' as img;
+
 import 'package:depthvibe/features/composition/domain/composition_models.dart';
 import 'package:depthvibe/features/composition/engine/gltf_scene_evaluator.dart';
 import 'package:depthvibe/features/composition/engine/gltf_scene_mesh_loader.dart';
@@ -150,6 +152,7 @@ void main() {
     expect(mesh.triangles, hasLength(1));
     expect(mesh.vertices, hasLength(3));
     expect(mesh.textureCoordinates, hasLength(3));
+    expect(mesh.hasTextureCoordinates, isTrue);
     expect(mesh.textureCoordinates[1].dx, 1);
     expect(mesh.vertexNormals, hasLength(3));
     expect(mesh.vertexNormals.first.z, 1);
@@ -165,6 +168,27 @@ void main() {
     expect(material.baseColorTextureBytes, [0]);
     expect(mesh.animations, hasLength(1));
     expect(mesh.animations.single.channels.single.path, 'translation');
+  });
+
+  test('decodes glTF base-colour PNG pixels into RGBA texture storage', () async {
+    final buffer = fixtureBuffer();
+    final sourceImage = img.Image(width: 1, height: 1);
+    sourceImage.setPixelRgba(0, 0, 30, 120, 240, 255);
+    final pngBytes = img.encodePng(sourceImage);
+    final documentJson = fixtureJson(buffer, base64Encode(buffer));
+    documentJson['images'] = [
+      {'uri': 'data:image/png;base64,${base64Encode(pngBytes)}'}
+    ];
+    final document = await gltf.Gltf.parse(
+      jsonEncode(documentJson),
+      loader: (_) async => buffer,
+    );
+
+    final mesh = loader.decodeDocument(document);
+    final material = mesh.materialFor(mesh.triangles.single);
+    expect(material.baseColorTextureWidth, 1);
+    expect(material.baseColorTextureHeight, 1);
+    expect(material.baseColorTextureRgba, [30, 120, 240, 255]);
   });
 
   test('evaluates nested node translation animation at the current playhead', () async {

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:gltfx/gltfx.dart' as gltf;
+import 'package:image/image.dart' as img;
 
 import '../domain/composition_models.dart';
 import 'obj_mesh_loader.dart';
@@ -69,6 +70,14 @@ class GltfSceneMeshLoader {
           textureBytes = document.imageData[gltf.ImageIdx(textureSource.value)];
         }
       }
+      final decodedTexture = textureBytes == null
+          ? null
+          : img.decodeImage(textureBytes);
+      final textureRgba = decodedTexture == null
+          ? null
+          : Uint8List.fromList(
+              decodedTexture.getBytes(order: img.ChannelOrder.rgba),
+            );
       double component(int componentIndex, double fallback) =>
           factor != null && componentIndex < factor.length
               ? factor[componentIndex].toDouble()
@@ -82,6 +91,10 @@ class GltfSceneMeshLoader {
         metallicFactor: pbr?.metallicFactor ?? 1,
         roughnessFactor: pbr?.roughnessFactor ?? 1,
         baseColorTextureBytes: textureBytes,
+        baseColorTextureRgba: textureRgba,
+        baseColorTextureWidth: decodedTexture?.width ?? 0,
+        baseColorTextureHeight: decodedTexture?.height ?? 0,
+        alphaCutoff: material.alphaCutoff,
         alphaMode: material.alphaMode.name,
         doubleSided: material.doubleSided,
         emissiveRed: emissive != null && emissive.isNotEmpty ? emissive[0] : 0,
@@ -131,6 +144,7 @@ class GltfSceneMeshLoader {
     final vertexNodeIndices = <int>[];
     final triangles = <ObjTriangle>[];
     final restBounds = <Vector3>[];
+    var hasTextureCoordinates = false;
     final visitedPath = <int>{};
 
     void visitNode(int nodeIndex, Float64List parentMatrix) {
@@ -191,8 +205,11 @@ class GltfSceneMeshLoader {
                 rawUvs[index * 2],
                 rawUvs[index * 2 + 1],
               ));
+              hasTextureCoordinates = true;
             } else {
-              textureCoordinates.add(Offset.zero);
+              // A sentinel keeps UV-less primitives independent of textured
+              // sibling primitives in the same active glTF scene.
+              textureCoordinates.add(const Offset(double.nan, double.nan));
             }
           }
 
@@ -311,6 +328,8 @@ class GltfSceneMeshLoader {
       boundsMin: Vector3(minX, minY, minZ),
       boundsMax: Vector3(maxX, maxY, maxZ),
       textureCoordinates: List.unmodifiable(textureCoordinates),
+      hasTextureCoordinates: hasTextureCoordinates &&
+          textureCoordinates.length == vertices.length,
       vertexNormals: List.unmodifiable(vertexNormals),
       sceneNodes: List.unmodifiable(nodes),
       animations: List.unmodifiable(animations),

@@ -795,6 +795,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
               return Gpu3dMeshView(
                 mesh: mesh,
                 timeMs: math.max(0, timeMs - layer.startMs).toInt(),
+                animationIndex: layer.modelAnimationIndex,
                 baseWidth: baseWidth,
                 baseHeight: baseHeight,
                 modelTransform: resolved,
@@ -2646,19 +2647,92 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       );
     }
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _panelHeader('3D MESH LAYER', Icons.view_in_ar),
         Text(
           layer.sourceUri == null
-              ? 'Import OBJ, GLTF or GLB geometry from the Add Layer menu. Meshes use the active camera, depth buffer, focus blur and scene light rig.'
-              : 'Loaded source: ${layer.name}\nTriangle mesh preview with perspective, Z-buffer occlusion, diffuse/PBR base colour and scene-light shading. Frame export and texture images remain limited.',
+              ? 'Import OBJ, GLTF or GLB. GLTF scenes retain UV0, base-colour images, vertex normals, nested node transforms and embedded animation clips.'
+              : 'Loaded source: ${layer.name}\nPreview and rendered frames use UV-mapped base-colour textures, transformed smooth normals, active-scene hierarchy and the selected animation clip.',
           style: const TextStyle(fontSize: 11, color: Color(0xFF98A7C0)),
         ),
+        if (layer.sourceUri != null) ...[
+          const SizedBox(height: 10),
+          FutureBuilder<ObjMesh>(
+            future: _meshFor(layer.sourceUri!),
+            builder: (context, snapshot) {
+              final mesh = snapshot.data;
+              if (snapshot.hasError) {
+                return Text(
+                  'Could not inspect scene metadata: ${snapshot.error}',
+                  style: const TextStyle(fontSize: 10, color: Color(0xFFFF9D9D)),
+                );
+              }
+              if (mesh == null) {
+                return const LinearProgressIndicator(minHeight: 2);
+              }
+              final texturedMaterials = mesh.materials.values
+                  .where((material) => material.baseColorTextureBytes != null)
+                  .length;
+              final inventory = '${mesh.sceneNodes.length} nodes · ${mesh.triangles.length} triangles · '
+                  '${mesh.materials.length} materials · $texturedMaterials base-colour maps · '
+                  '${mesh.hasTextureCoordinates ? 'UV0 available' : 'no UV0 stream'}';
+              if (mesh.animations.isEmpty) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(inventory, style: const TextStyle(fontSize: 9, color: Color(0xFF9BAAC1))),
+                    const SizedBox(height: 5),
+                    const Text(
+                      'No embedded animation clips found. The model stays in its rest pose.',
+                      style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
+                    ),
+                  ],
+                );
+              }
+              final selectedIndex = layer.modelAnimationIndex
+                  .clamp(-1, mesh.animations.length - 1)
+                  .toInt();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(inventory, style: const TextStyle(fontSize: 9, color: Color(0xFF9BAAC1))),
+                  const SizedBox(height: 7),
+                  DropdownButtonFormField<int>(
+                    key: ValueKey<String>(layer.id + ':gltf-animation'),
+                    initialValue: selectedIndex,
+                    decoration: const InputDecoration(labelText: 'Animation Clip'),
+                    items: [
+                      const DropdownMenuItem<int>(value: -1, child: Text('Rest Pose')),
+                      for (final entry in mesh.animations.indexed)
+                        DropdownMenuItem<int>(
+                          value: entry.$1,
+                          child: Text(
+                            entry.$2.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) _controller.setModelAnimationIndex(value);
+                    },
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    '${mesh.animations.length} clip(s) · translation / rotation / scale · follows the composition playhead',
+                    style: const TextStyle(fontSize: 9, color: Color(0xFF98A7C0)),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
         const SizedBox(height: 10),
         OutlinedButton.icon(
           onPressed: () => _addLayer(LayerKind.threeDModel),
           icon: const Icon(Icons.file_open),
-          label: const Text('IMPORT OBJ MODEL'),
+          label: const Text('IMPORT OBJ / GLTF / GLB'),
         ),
       ],
     );

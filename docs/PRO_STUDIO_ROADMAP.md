@@ -1,3 +1,9 @@
+### GLB / glTF scene import and rendering
+
+- Implemented: active-scene traversal, nested node transforms, POSITION / NORMAL / TEXCOORD_0, decoded base-colour raster textures, perspective-correct UV interpolation, repeat + bilinear sampling, alpha MASK / BLEND handling, and timeline-selected translation / rotation / scale clips.
+- Textured preview and frame export use the CPU raster path; the current flat-colour WGSL pipeline falls back for textured meshes rather than silently dropping their maps.
+- Remaining: GPU texture/sampler bindings, normal / occlusion / metallic-roughness maps, KHR_texture_transform, skinning / inverse bind matrices, morph-target deformation and complete PBR parity.
+
 # DepthVibe Professional Studio Roadmap
 
 DepthVibe is intended to combine a professional nonlinear video editor, motion-design compositor, colour-finishing workspace and 3D/VFX environment in one cross-platform application. This document defines the engineering sequence and the evidence required before a feature is called complete.
