@@ -72,6 +72,7 @@ Build commands:
 - legacy/android-native: preserved Kotlin/Compose Android implementation and prior AI/AR/3D/VFX experiments.
 - docs/ARCHITECTURE.md: renderer architecture and known export gaps.
 - docs/ROADMAP.md: staged implementation and release quality gates.
+- docs/PRO_STUDIO_ROADMAP.md: professional NLE, motion-design, audio, colour, GPU VFX and 3D engineering plan.
 
 ## Product goal
 
