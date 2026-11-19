@@ -775,6 +775,7 @@ class CompositionLayer {
     this.sourceLayerIndex,
     this.textContent,
     this.clippingBaseLayerId,
+    this.photoshopClipped = false,
     this.smartObjectSourceUri,
     this.smartObjectResourceId,
     this.photoshopAdjustmentKey,
@@ -806,6 +807,7 @@ class CompositionLayer {
   final int? sourceLayerIndex;
   final String? textContent;
   final String? clippingBaseLayerId;
+  final bool photoshopClipped;
   final String? smartObjectSourceUri;
   final String? smartObjectResourceId;
   final String? photoshopAdjustmentKey;
@@ -849,6 +851,7 @@ class CompositionLayer {
     String? textContent,
     String? clippingBaseLayerId,
     bool clearClippingBase = false,
+    bool? photoshopClipped,
     String? smartObjectSourceUri,
     bool clearSmartObjectSource = false,
     String? smartObjectResourceId,
@@ -884,6 +887,7 @@ class CompositionLayer {
         clippingBaseLayerId: clearClippingBase
             ? null
             : (clippingBaseLayerId ?? this.clippingBaseLayerId),
+        photoshopClipped: photoshopClipped ?? this.photoshopClipped,
         smartObjectSourceUri: clearSmartObjectSource
             ? null
             : (smartObjectSourceUri ?? this.smartObjectSourceUri),
