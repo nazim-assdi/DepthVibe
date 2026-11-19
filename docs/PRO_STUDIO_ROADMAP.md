@@ -175,7 +175,7 @@ Local FFmpeg 7.1.5 smoke tests succeeded for animated bus Gain/Pan, Bezier frame
 
 ### Camera preview/export increment — 19 November 2026
 
-A shared **2.5D perspective projection** now runs in both the compositor preview and FFmpeg export when an enabled Camera layer is present. The focus plane remains neutral by default; relative layer depth, Field of View and focal length influence projected position and scale. Orthographic projection bypasses depth scaling, and a near-plane guard limits extreme values. This is not a full 3D renderer: it does not render mesh geometry, camera orientation, materials, light interaction, shadow maps or depth-of-field blur. The Depth of Field UI control is visibly marked as pending rather than pretending to affect the render.
+A shared **2.5D camera projection** runs in compositor preview and FFmpeg export. Relative layer depth, Field of View and focal length affect projected position and scale. Camera Euler rotation (X/Y/Z) is now inverted into camera space before projection, so orbit and roll alter the view consistently in preview/export; camera roll also counter-rotates the 2.5D image cards. Perspective mode applies near-plane visibility culling and caps magnification at 20× to avoid unstable giant layers. Orthographic mode also respects camera orientation but does not depth-scale. This remains a 2.5D card renderer: mesh geometry, true per-vertex perspective, materials, light interaction, shadow maps and depth-of-field blur are not implemented. The Depth of Field UI control remains visibly marked as pending.
 
 ### Tracking geometry foundation — 19 November 2026
 
@@ -189,3 +189,12 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 
 - **Glow / Drop Shadow automation:** Glow threshold, intensity and radius; Drop Shadow opacity, blur and offset now compile from keyframe tracks. Animated blur radius is rendered through fixed-radius FFmpeg blur branches blended over frame time, keeping the export CPU-compatible. Static effects retain a single-blur path.
 - **Blend catalog:** the model now exposes 40 blend modes and uses a central exhaustive mapping to FFmpeg's blend filter names. Mapping tests cover each enum value. Advanced blend modes are export-backed; the canvas preview still uses normal source-over compositing and displays a warning for non-normal layer modes. Preview/export pixel parity remains outstanding.
+
+
+### Camera orientation and clipping increment — 19 November 2026
+
+- Camera X/Y/Z Euler rotation now transforms world-space layer offsets into camera-space coordinates in the shared preview/export projection.
+- Camera roll counter-rotates the camera-facing 2.5D cards. The Camera panel exposes Orbit X, Orbit Y and Roll Z controls using the existing animated transform tracks, so the camera move can be keyframed.
+- Perspective mode clips layers that cross behind the near plane and limits maximum projection magnification to 20×. The FFmpeg path applies the same visibility expression through layer opacity.
+- Regression coverage checks yaw, roll, near-plane culling and generated FFmpeg expressions.
+- **Still not true 3D:** 2.5D layers are still flat, camera-facing cards. There is no GLB/OBJ mesh rasterizer, mesh material/normal pipeline, real light/shadow rendering or depth-of-field blur. No claim of full 3D scene rendering is made.
