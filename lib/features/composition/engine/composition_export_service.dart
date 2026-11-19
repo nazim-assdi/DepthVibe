@@ -55,7 +55,9 @@ class CompositionExportService {
       LayerKind.photoshopLayer,
     };
     final anySolo = document.layers.any((layer) => layer.enabled && layer.solo);
-    final enabled = document.layers.where(
+    // The workspace paints the reversed layer list: the first item in the
+    // document stack is the top layer. Export composites bottom-to-top too.
+    final enabled = document.layers.reversed.where(
       (layer) => layer.enabled && (!anySolo || layer.solo),
     );
     final visualLayers = <CompositionLayer>[];
@@ -70,6 +72,8 @@ class CompositionExportService {
         } else {
           visualLayers.add(layer);
         }
+      } else if (layer.kind == LayerKind.adjustment) {
+        visualLayers.add(layer);
       } else if (layer.kind == LayerKind.audio) {
         if (layer.audioSettings.muted) continue;
         final path = layer.sourceUri;
@@ -84,8 +88,13 @@ class CompositionExportService {
       }
     }
 
-    if (visualLayers.isEmpty && audioLayers.isEmpty) {
-      throw StateError('Import at least one video, image, Photoshop raster or audio layer.');
+    final hasVisualMedia = visualLayers.any(
+      (layer) => visualKinds.contains(layer.kind),
+    );
+    if (!hasVisualMedia && audioLayers.isEmpty) {
+      throw StateError(
+        'Import at least one video, image, Photoshop raster or audio layer.',
+      );
     }
 
     final directory = await getApplicationDocumentsDirectory();
@@ -159,9 +168,18 @@ class CompositionExportService {
     final buffer = StringBuffer();
     final filters = <String>[];
     final audioSources = <_AudioSource>[];
+    final mediaLayers = visualLayers
+        .where((layer) =>
+            layer.kind == LayerKind.video ||
+            layer.kind == LayerKind.image ||
+            layer.kind == LayerKind.photoshopLayer)
+        .toList();
+    final mediaInputIndices = <String, int>{
+      for (var index = 0; index < mediaLayers.length; index++)
+        mediaLayers[index].id: index + 1,
+    };
 
-    for (var index = 0; index < visualLayers.length; index++) {
-      final layer = visualLayers[index];
+    for (final layer in mediaLayers) {
       if (layer.kind != LayerKind.video ||
           layer.audioSettings.muted ||
           !await _hasAudioStream(layer.sourceUri!)) {
@@ -169,14 +187,14 @@ class CompositionExportService {
       }
       audioSources.add(_AudioSource(
         layer: layer,
-        inputIndex: index + 1,
+        inputIndex: mediaInputIndices[layer.id]!,
         streamSpecifier: 'a:0',
       ));
     }
     for (var index = 0; index < audioLayers.length; index++) {
       audioSources.add(_AudioSource(
         layer: audioLayers[index],
-        inputIndex: visualLayers.length + index + 1,
+        inputIndex: mediaLayers.length + index + 1,
         streamSpecifier: 'a:0',
       ));
     }
@@ -188,14 +206,16 @@ class CompositionExportService {
     ));
     buffer.write(' ');
 
-    for (final layer in visualLayers) {
+    for (final layer in mediaLayers) {
       final duration = (layer.durationMs / 1000).toStringAsFixed(3);
       final source = _quote(layer.sourceUri!);
-      if (layer.kind == LayerKind.image || layer.kind == LayerKind.photoshopLayer) {
+      if (layer.kind == LayerKind.image ||
+          layer.kind == LayerKind.photoshopLayer) {
         buffer.write('-loop 1 -t ' + duration + ' -i ' + source + ' ');
       } else {
         final sourceIn = (layer.sourceInMs / 1000).toStringAsFixed(3);
-        buffer.write('-ss ' + sourceIn + ' -t ' + duration + ' -i ' + source + ' ');
+        buffer.write('-ss ' + sourceIn + ' -t ' + duration +
+            ' -i ' + source + ' ');
       }
     }
     for (final layer in audioLayers) {
@@ -210,7 +230,28 @@ class CompositionExportService {
 
     for (var index = 0; index < visualLayers.length; index++) {
       final layer = visualLayers[index];
-      final inputIndex = index + 1;
+      if (layer.kind == LayerKind.adjustment) {
+        final adjustmentEffects = filterCompiler.compileEffects(
+          layer,
+          timeMs: document.playheadMs,
+          animationCompiler: animationCompiler,
+        );
+        var adjusted = previous;
+        for (var effectIndex = 0;
+            effectIndex < adjustmentEffects.length;
+            effectIndex++) {
+          final outputLabel =
+              'adjustment' + index.toString() + '_' + effectIndex.toString();
+          filters.add(
+            '[' + adjusted + ']' + adjustmentEffects[effectIndex] +
+                ',format=rgba[' + outputLabel + ']',
+          );
+          adjusted = outputLabel;
+        }
+        previous = adjusted;
+        continue;
+      }
+      final inputIndex = mediaInputIndices[layer.id]!;
       final start = (layer.startMs / 1000).toStringAsFixed(3);
       final duration = (layer.durationMs / 1000).toStringAsFixed(3);
       final sxBase = animationCompiler.scalarExpression(
