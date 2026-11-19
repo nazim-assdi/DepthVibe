@@ -169,7 +169,7 @@ class AudioBus {
       _ => 0.0,
     };
     final matching = keyframeTracks.where(
-      (track) => track.property == property,
+      (track) => track.property == property && track.enabled,
     );
     return matching.isEmpty
         ? fallback
@@ -597,7 +597,9 @@ class MaskModel {
       };
 
   double valueAt(String property, int timeMs) {
-    final matching = keyframeTracks.where((track) => track.property == property);
+    final matching = keyframeTracks.where(
+      (track) => track.property == property && track.enabled,
+    );
     if (matching.isEmpty) return baseValue(property);
     return matching.first.sample(timeMs, fallback: baseValue(property));
   }
