@@ -469,6 +469,35 @@ void main() {
       controller.dispose();
     });
 
+    test('one click keys every anchor and tangent on the mask path', () {
+      final controller = CompositionController();
+      controller.addLayer(LayerKind.shape);
+      controller.addMask(shape: MaskShape.bezier);
+      final maskId = controller.selectedLayer!.masks.single.id;
+      controller.setPlayhead(640);
+
+      controller.keyframeMaskPath(maskId);
+
+      final mask = controller.selectedLayer!.masks.single;
+      expect(mask.keyframeTracks, hasLength(mask.vertices.length * 6));
+      for (var index = 0; index < mask.vertices.length; index++) {
+        for (final component in const [
+          'anchor.x',
+          'anchor.y',
+          'inHandle.x',
+          'inHandle.y',
+          'outHandle.x',
+          'outHandle.y',
+        ]) {
+          final track = mask.keyframeTracks.firstWhere(
+            (item) => item.property == 'vertex.$index.$component',
+          );
+          expect(track.keyframes.single.timeMs, 640);
+        }
+      }
+      controller.dispose();
+    });
+
     test('polygon and Bezier mask vertex components can be keyframed', () {
       final controller = CompositionController();
       controller.addLayer(LayerKind.shape);
