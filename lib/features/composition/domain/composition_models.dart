@@ -774,6 +774,10 @@ class CompositionLayer {
     this.sourceDocumentUri,
     this.sourceLayerIndex,
     this.textContent,
+    this.clippingBaseLayerId,
+    this.smartObjectSourceUri,
+    this.smartObjectResourceId,
+    this.photoshopAdjustmentKey,
     this.sourceWidth = 0,
     this.sourceHeight = 0,
     this.transform = const LayerTransform(),
@@ -801,6 +805,10 @@ class CompositionLayer {
   final String? sourceDocumentUri;
   final int? sourceLayerIndex;
   final String? textContent;
+  final String? clippingBaseLayerId;
+  final String? smartObjectSourceUri;
+  final String? smartObjectResourceId;
+  final String? photoshopAdjustmentKey;
   final int sourceWidth;
   final int sourceHeight;
   final LayerTransform transform;
@@ -839,6 +847,13 @@ class CompositionLayer {
     String? sourceDocumentUri,
     int? sourceLayerIndex,
     String? textContent,
+    String? clippingBaseLayerId,
+    bool clearClippingBase = false,
+    String? smartObjectSourceUri,
+    bool clearSmartObjectSource = false,
+    String? smartObjectResourceId,
+    bool clearSmartObjectResource = false,
+    String? photoshopAdjustmentKey,
     int? sourceWidth,
     int? sourceHeight,
     LayerTransform? transform,
@@ -866,6 +881,17 @@ class CompositionLayer {
         sourceDocumentUri: sourceDocumentUri ?? this.sourceDocumentUri,
         sourceLayerIndex: sourceLayerIndex ?? this.sourceLayerIndex,
         textContent: textContent ?? this.textContent,
+        clippingBaseLayerId: clearClippingBase
+            ? null
+            : (clippingBaseLayerId ?? this.clippingBaseLayerId),
+        smartObjectSourceUri: clearSmartObjectSource
+            ? null
+            : (smartObjectSourceUri ?? this.smartObjectSourceUri),
+        smartObjectResourceId: clearSmartObjectResource
+            ? null
+            : (smartObjectResourceId ?? this.smartObjectResourceId),
+        photoshopAdjustmentKey:
+            photoshopAdjustmentKey ?? this.photoshopAdjustmentKey,
         sourceWidth: sourceWidth ?? this.sourceWidth,
         sourceHeight: sourceHeight ?? this.sourceHeight,
         transform: transform ?? this.transform,
@@ -926,6 +952,12 @@ class PhotoshopLayerAsset {
     required this.isGroup,
     this.isAdjustment = false,
     this.textContent,
+    this.parentGroupSourceIndex,
+    this.clippingBaseSourceIndex,
+    this.clipping = 0,
+    this.smartObjectSourceUri,
+    this.smartObjectResourceId,
+    this.adjustmentKey,
   });
 
   final int sourceIndex;
@@ -938,9 +970,16 @@ class PhotoshopLayerAsset {
   final int opacity;
   final String blendMode;
   final bool visible;
+  /// True only for the folder-opening record, not its closing divider.
   final bool isGroup;
   final bool isAdjustment;
   final String? textContent;
+  final int? parentGroupSourceIndex;
+  final int? clippingBaseSourceIndex;
+  final int clipping;
+  final String? smartObjectSourceUri;
+  final String? smartObjectResourceId;
+  final String? adjustmentKey;
 }
 
 class CompositionDocument {
