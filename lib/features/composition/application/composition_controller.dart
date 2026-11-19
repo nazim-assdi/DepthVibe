@@ -376,6 +376,86 @@ class CompositionController extends ChangeNotifier {
     ));
   }
 
+  void setMaskVertexAnimatedValue(
+    String maskId,
+    int vertexIndex,
+    String component,
+    double value, {
+    bool keyframe = false,
+  }) {
+    const components = {
+      'anchor.x',
+      'anchor.y',
+      'inHandle.x',
+      'inHandle.y',
+      'outHandle.x',
+      'outHandle.y',
+    };
+    if (!components.contains(component)) return;
+    final layer = selectedLayer;
+    if (layer == null) return;
+
+    final property = 'vertex.$vertexIndex.$component';
+    _replace(layer.copyWith(
+      masks: layer.masks.map((mask) {
+        if (mask.id != maskId ||
+            vertexIndex < 0 ||
+            vertexIndex >= mask.vertices.length) {
+          return mask;
+        }
+        final bounded = component.startsWith('anchor.')
+            ? value.clamp(-2.0, 3.0).toDouble()
+            : value.clamp(-2.0, 2.0).toDouble();
+        if (!keyframe) {
+          final vertices = [...mask.vertices];
+          final old = vertices[vertexIndex];
+          final next = switch (component) {
+            'anchor.x' => old.copyWith(
+                anchor: Vector2(bounded, old.anchor.y),
+              ),
+            'anchor.y' => old.copyWith(
+                anchor: Vector2(old.anchor.x, bounded),
+              ),
+            'inHandle.x' => old.copyWith(
+                inHandle: Vector2(bounded, old.inHandle.y),
+              ),
+            'inHandle.y' => old.copyWith(
+                inHandle: Vector2(old.inHandle.x, bounded),
+              ),
+            'outHandle.x' => old.copyWith(
+                outHandle: Vector2(bounded, old.outHandle.y),
+              ),
+            'outHandle.y' => old.copyWith(
+                outHandle: Vector2(old.outHandle.x, bounded),
+              ),
+            _ => old,
+          };
+          vertices[vertexIndex] = next;
+          return mask.copyWith(vertices: vertices);
+        }
+
+        final index = mask.keyframeTracks.indexWhere(
+          (track) => track.property == property,
+        );
+        final track = index < 0
+            ? KeyframeTrack(property: property)
+            : mask.keyframeTracks[index];
+        final updated = track.upsert(ScalarKeyframe(
+          timeMs: _document.playheadMs,
+          value: bounded,
+          interpolation: Interpolation.easeInOut,
+        ));
+        final tracks = [...mask.keyframeTracks];
+        if (index < 0) {
+          tracks.add(updated);
+        } else {
+          tracks[index] = updated;
+        }
+        return mask.copyWith(keyframeTracks: tracks);
+      }).toList(),
+    ));
+  }
+
   void setMaskAnimatedValue(
     String maskId,
     String property,
