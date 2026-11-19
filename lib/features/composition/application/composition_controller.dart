@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 import '../data/effect_catalog.dart';
@@ -279,11 +281,31 @@ class CompositionController extends ChangeNotifier {
           return mask;
         }
         final vertices = [...mask.vertices];
-        vertices[vertexIndex] = vertices[vertexIndex].copyWith(
+        final old = vertices[vertexIndex];
+        final nextSmooth = smooth ?? old.smooth;
+        var nextIn = inHandle ?? old.inHandle;
+        var nextOut = outHandle ?? old.outHandle;
+
+        double length(Vector2 value) =>
+            math.sqrt(value.x * value.x + value.y * value.y);
+
+        if (nextSmooth && inHandle != null) {
+          final oppositeLength = length(old.outHandle);
+          final movedLength = length(inHandle);
+          final factor = movedLength == 0 ? 0 : oppositeLength / movedLength;
+          nextOut = Vector2(-inHandle.x * factor, -inHandle.y * factor);
+        } else if (nextSmooth && outHandle != null) {
+          final oppositeLength = length(old.inHandle);
+          final movedLength = length(outHandle);
+          final factor = movedLength == 0 ? 0 : oppositeLength / movedLength;
+          nextIn = Vector2(-outHandle.x * factor, -outHandle.y * factor);
+        }
+
+        vertices[vertexIndex] = old.copyWith(
           anchor: anchor,
-          inHandle: inHandle,
-          outHandle: outHandle,
-          smooth: smooth,
+          inHandle: nextIn,
+          outHandle: nextOut,
+          smooth: nextSmooth,
         );
         return mask.copyWith(vertices: vertices);
       }).toList(),
