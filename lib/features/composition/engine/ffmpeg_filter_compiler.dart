@@ -41,6 +41,57 @@ class FfmpegFilterCompiler {
     EffectDefinition definition,
     FfmpegAnimationCompiler animationCompiler,
   ) {
+    String parameterExpression(String parameterId) {
+      final definitionForParameter = definition.parameters.firstWhere(
+        (parameter) => parameter.id == parameterId,
+      );
+      final tracks = effect.keyframeTracks.where(
+        (track) => track.property == parameterId && track.enabled,
+      );
+      return animationCompiler.keyframeExpression(
+        tracks.isEmpty ? null : tracks.first,
+        fallback: effect.parameters[parameterId] ??
+            definitionForParameter.defaultValue,
+        timeVariable: 'T',
+      );
+    }
+
+    if (id == 'displacement') {
+      final amount = parameterExpression('amount');
+      final wavelength = parameterExpression('wavelength');
+      final speed = parameterExpression('speed');
+      final dx = '(' + amount +
+          ')*sin(Y/max(1,(' + wavelength + '))+T*(' + speed + '))';
+      final dy = '(' + amount +
+          ')*cos(X/max(1,(' + wavelength + '))+T*(' + speed + '))';
+      final sampleX = '(X+(' + dx + '))';
+      final sampleY = '(Y+(' + dy + '))';
+      return 'format=rgba,geq='
+          "r='r(" + sampleX + ',' + sampleY + ")':"
+          "g='g(" + sampleX + ',' + sampleY + ")':"
+          "b='b(" + sampleX + ',' + sampleY + ")':"
+          "a='alpha(X,Y)'";
+    }
+
+    if (id == 'particle_dust') {
+      final spacing = parameterExpression('spacing');
+      final size = parameterExpression('size');
+      final intensity = parameterExpression('intensity');
+      final speed = parameterExpression('speed');
+      final cellSize = 'max(16,(' + spacing + '))';
+      final cellX = 'mod(X+T*(' + speed + ')*17,' + cellSize + ')';
+      final cellY = 'mod(Y+T*(' + speed + ')*11,' + cellSize + ')';
+      final distance = 'hypot(' + cellX + ',' + cellY + ')';
+      final particle = 'if(lt(' + distance + ',(' + size + ')),(' +
+          intensity + ')*(1-(' + distance + ')/max(1,(' + size + '))),0)';
+      final lifted = '255*(' + particle + ')';
+      return 'format=rgba,geq='
+          "r='min(255,r(X,Y)+" + lifted + ")':"
+          "g='min(255,g(X,Y)+" + lifted + ")':"
+          "b='min(255,b(X,Y)+" + lifted + ")':"
+          "a='alpha(X,Y)'";
+    }
+
     const supported = {'brightness', 'contrast', 'saturation', 'gamma'};
     if (!supported.contains(id)) return null;
     final parameter = definition.parameters.first;
