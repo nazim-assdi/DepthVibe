@@ -213,6 +213,49 @@ void main() {
       controller.dispose();
     });
 
+    test('Bezier mask handles can be edited independently', () {
+      final controller = CompositionController();
+      controller.addLayer(LayerKind.shape);
+      controller.addMask(shape: MaskShape.bezier);
+      final mask = controller.selectedLayer!.masks.single;
+
+      controller.setMaskVertex(
+        mask.id,
+        0,
+        anchor: const Vector2(0.3, 0.4),
+        outHandle: const Vector2(0.2, 0.1),
+        smooth: true,
+      );
+
+      final edited = controller.selectedLayer!.masks.single.vertices.first;
+      expect(edited.anchor.x, 0.3);
+      expect(edited.anchor.y, 0.4);
+      expect(edited.outHandle.x, 0.2);
+      expect(edited.outHandle.y, 0.1);
+      expect(edited.smooth, isTrue);
+      controller.dispose();
+    });
+
+    test('Bezier graph edits are stored on the current keyframe', () {
+      final controller = CompositionController();
+      controller.addLayer(LayerKind.video);
+      controller.addKeyframe('position.x', value: 100);
+      const curve = BezierCurve(x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.95);
+
+      controller.setBezierCurve('position.x', curve);
+
+      final frame = controller.selectedLayer!.keyframeTracks
+          .single
+          .keyframes
+          .single;
+      expect(frame.interpolation, Interpolation.cubicBezier);
+      expect(frame.bezier.x1, 0.2);
+      expect(frame.bezier.y1, 0.1);
+      expect(frame.bezier.x2, 0.8);
+      expect(frame.bezier.y2, 0.95);
+      controller.dispose();
+    });
+
     test('masks and effects attach to the selected layer', () {
       final controller = CompositionController();
       final id = controller.addLayer(LayerKind.shape);
