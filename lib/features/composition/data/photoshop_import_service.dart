@@ -40,14 +40,29 @@ class PhotoshopImportService {
     final stamp = DateTime.now().microsecondsSinceEpoch;
     final assets = <PhotoshopLayerAsset>[];
 
+    final groupStack = <int>[];
     for (var index = 0; index < document.layers.length; index++) {
       final layer = document.layers[index];
+      final sectionType = layer.sectionType;
+
+      // PSD layer records are flat. A folder-opening record starts a group;
+      // its matching boundingDivider closes that group and is not a visual layer.
+      if (sectionType == PsdSectionType.boundingDivider) {
+        if (groupStack.isNotEmpty) groupStack.removeLast();
+        continue;
+      }
+
+      final isGroup = sectionType == PsdSectionType.openFolder ||
+          sectionType == PsdSectionType.closedFolder;
+      final parentGroup = groupStack.isEmpty ? null : groupStack.last;
       final rectangle = layer.rectangle;
-      final isGroup = layer.sectionType.name != 'other';
       final isVisible = layer.visible;
       final textContent = layer.typeTool?.content.text;
-      final isAdjustment = layer.adjustment != null;
+      final adjustment = layer.adjustment;
+      final isAdjustment = adjustment != null;
       String assetPath = '';
+      String? smartObjectSourceUri;
+      String? smartObjectResourceId;
 
       if (!isGroup && rectangle.width > 0 && rectangle.height > 0) {
         try {
@@ -72,8 +87,38 @@ class PhotoshopImportService {
           await output.writeAsBytes(pngBytes, flush: true);
           assetPath = output.path;
         } catch (_) {
-          // Keep non-raster text, fill and adjustment records editable without
-          // aborting the entire import when an individual channel is unsupported.
+          // A non-raster text, fill, adjustment or smart-object record remains
+          // editable metadata even when this decoder has no raster fallback.
+        }
+      }
+
+      final smartObject = layer.smartObject;
+      smartObjectResourceId = smartObject?.linkedResourceId;
+      if (smartObject != null) {
+        final linkedResource = document.linkedResourceFor(layer);
+        final embeddedBytes = linkedResource?.data;
+        if (linkedResource?.type == PsdLinkedResourceType.embedded &&
+            embeddedBytes != null &&
+            embeddedBytes.isNotEmpty) {
+          final extension = linkedResource!.name.toLowerCase().endsWith('.psb')
+              ? '.psb'
+              : '.psd';
+          final safeName = linkedResource.name
+              .replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_')
+              .replaceAll(RegExp(r'\.+$'), '');
+          final objectFile = File(
+            cache.path +
+                Platform.pathSeparator +
+                'smart_' +
+                stamp.toString() +
+                '_' +
+                index.toString() +
+                '_' +
+                (safeName.isEmpty ? 'embedded' : safeName) +
+                extension,
+          );
+          await objectFile.writeAsBytes(embeddedBytes, flush: true);
+          smartObjectSourceUri = objectFile.path;
         }
       }
 
@@ -91,8 +136,54 @@ class PhotoshopImportService {
         isGroup: isGroup,
         isAdjustment: isAdjustment,
         textContent: textContent,
+        parentGroupSourceIndex: parentGroup,
+        clipping: layer.clipping,
+        smartObjectSourceUri: smartObjectSourceUri,
+        smartObjectResourceId: smartObjectResourceId,
+        adjustmentKey: adjustment?.blockKey,
+      ));
+
+      if (isGroup) groupStack.add(index);
+    }
+
+    // In PSD order, a clipping chain sits above its base layer. Scan from the
+    // bottom of each group upward so every clipped layer points to that base.
+    final clippingBases = <int?, int>{};
+    final indexedAssets = <PhotoshopLayerAsset>[];
+    for (final asset in assets.reversed) {
+      int? baseIndex = asset.clippingBaseSourceIndex;
+      if (!asset.isGroup) {
+        if (asset.clipping != 0) {
+          baseIndex = clippingBases[asset.parentGroupSourceIndex];
+        } else {
+          clippingBases[asset.parentGroupSourceIndex] = asset.sourceIndex;
+        }
+      }
+      indexedAssets.add(PhotoshopLayerAsset(
+        sourceIndex: asset.sourceIndex,
+        name: asset.name,
+        assetPath: asset.assetPath,
+        left: asset.left,
+        top: asset.top,
+        width: asset.width,
+        height: asset.height,
+        opacity: asset.opacity,
+        blendMode: asset.blendMode,
+        visible: asset.visible,
+        isGroup: asset.isGroup,
+        isAdjustment: asset.isAdjustment,
+        textContent: asset.textContent,
+        parentGroupSourceIndex: asset.parentGroupSourceIndex,
+        clippingBaseSourceIndex: baseIndex,
+        clipping: asset.clipping,
+        smartObjectSourceUri: asset.smartObjectSourceUri,
+        smartObjectResourceId: asset.smartObjectResourceId,
+        adjustmentKey: asset.adjustmentKey,
       ));
     }
+    assets
+      ..clear()
+      ..addAll(indexedAssets.reversed);
 
     return PhotoshopImportResult(
       path: path,
