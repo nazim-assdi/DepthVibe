@@ -184,7 +184,7 @@ class PlanarHomographyEstimator {
       ));
     }
     final mean = errors.reduce((a, b) => a + b) / errors.length;
-    final maximum = errors.reduce(math.max);
+    final maximum = errors.reduce((a, b) => math.max(a, b).toDouble());
     return HomographyFit(
       transform: transform,
       meanReprojectionError: mean,
