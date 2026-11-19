@@ -261,6 +261,35 @@ class CompositionController extends ChangeNotifier {
     ));
   }
 
+  void setMaskVertex(
+    String maskId,
+    int vertexIndex, {
+    Vector2? anchor,
+    Vector2? inHandle,
+    Vector2? outHandle,
+    bool? smooth,
+  }) {
+    final layer = selectedLayer;
+    if (layer == null) return;
+    _replace(layer.copyWith(
+      masks: layer.masks.map((mask) {
+        if (mask.id != maskId ||
+            vertexIndex < 0 ||
+            vertexIndex >= mask.vertices.length) {
+          return mask;
+        }
+        final vertices = [...mask.vertices];
+        vertices[vertexIndex] = vertices[vertexIndex].copyWith(
+          anchor: anchor,
+          inHandle: inHandle,
+          outHandle: outHandle,
+          smooth: smooth,
+        );
+        return mask.copyWith(vertices: vertices);
+      }).toList(),
+    ));
+  }
+
   void addEffect(String effectId) {
     final layer = selectedLayer;
     final definition = EffectCatalog.find(effectId);
