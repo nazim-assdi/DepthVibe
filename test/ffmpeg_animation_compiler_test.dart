@@ -133,4 +133,75 @@ void main() {
     expect(position, contains('1920'));
     expect(position, contains('t'));
   });
+
+  test('samples custom cubic Bezier keyframe curves in timeline time', () {
+    const track = KeyframeTrack(
+      property: 'position.x',
+      keyframes: [
+        ScalarKeyframe(
+          timeMs: 0,
+          value: 0,
+          interpolation: Interpolation.cubicBezier,
+          bezier: BezierCurve(x1: 0.42, y1: 0, x2: 0.58, y2: 1),
+        ),
+        ScalarKeyframe(timeMs: 1000, value: 100),
+      ],
+    );
+
+    expect(track.sample(0), 0);
+    expect(track.sample(500), closeTo(50, 0.001));
+    expect(track.sample(1000), 100);
+  });
+
+  test('preserves Bezier control points when keyframes are serialized', () {
+    const keyframe = ScalarKeyframe(
+      timeMs: 420,
+      value: 75,
+      interpolation: Interpolation.cubicBezier,
+      bezier: BezierCurve(x1: 0.1, y1: 0.2, x2: 0.8, y2: 0.9),
+    );
+
+    final decoded = ScalarKeyframe.fromJson(
+      keyframe.toJson().cast<String, Object?>(),
+    );
+
+    expect(decoded.interpolation, Interpolation.cubicBezier);
+    expect(decoded.bezier.x1, 0.1);
+    expect(decoded.bezier.y1, 0.2);
+    expect(decoded.bezier.x2, 0.8);
+    expect(decoded.bezier.y2, 0.9);
+  });
+
+  test('compiles cubic Bezier handles to native FFmpeg frame expressions', () {
+    const layer = CompositionLayer(
+      id: 'bezier-layer',
+      name: 'Bezier Layer',
+      kind: LayerKind.video,
+      keyframeTracks: [
+        KeyframeTrack(
+          property: 'position.x',
+          keyframes: [
+            ScalarKeyframe(
+              timeMs: 0,
+              value: 100,
+              interpolation: Interpolation.cubicBezier,
+              bezier: BezierCurve(x1: 0.15, y1: 0.05, x2: 0.7, y2: 0.95),
+            ),
+            ScalarKeyframe(timeMs: 1000, value: 500),
+          ],
+        ),
+      ],
+    );
+
+    final expression = compiler.scalarExpression(
+      layer: layer,
+      property: 'position.x',
+      fallback: 100,
+    );
+
+    expect(expression, contains('root('));
+    expect(expression, contains('st(9,'));
+    expect(expression, contains('ld(9)'));
+    expect(expression, contains('500.00000'));
+  });
 }
