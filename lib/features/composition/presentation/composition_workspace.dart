@@ -251,6 +251,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     BezierCurve initialCurve, {
     String? effectId,
     String? maskId,
+    String? busId,
     int? timeMs,
   }) async {
     var draft = initialCurve;
@@ -299,6 +300,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     if (maskId != null) {
       _controller.setMaskBezierCurve(
         maskId,
+        property,
+        result,
+        timeMs: timeMs,
+      );
+    } else if (busId != null) {
+      _controller.setAudioBusBezierCurve(
+        busId,
         property,
         result,
         timeMs: timeMs,
@@ -1082,6 +1090,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         layer.masks.fold<int>(
           0,
           (count, mask) => count + mask.keyframeTracks.length,
+        ) +
+        _controller.document.audioBuses.fold<int>(
+          0,
+          (count, bus) => count + bus.keyframeTracks.length,
         );
     final cards = <Widget>[
       _panelHeader('UNIFIED GRAPH EDITOR', Icons.timeline),
@@ -1126,6 +1138,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         ));
       }
     }
+    for (final bus in _controller.document.audioBuses) {
+      for (final track in bus.keyframeTracks) {
+        cards.add(_buildUnifiedTrackCard(
+          title: 'Audio Bus · ${bus.name} · ${track.property}',
+          track: track,
+          busId: bus.id,
+        ));
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1138,6 +1159,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     required KeyframeTrack track,
     String? effectId,
     String? maskId,
+    String? busId,
   }) {
     final frames = [...track.keyframes]
       ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
@@ -1181,19 +1203,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   tooltip: 'Edit cubic Bezier graph',
-                  onPressed: maskId == null
-                      ? () => _editBezierCurve(
-                            track.property,
-                            active.bezier,
-                            effectId: effectId,
-                            timeMs: active.timeMs,
-                          )
-                      : () => _editBezierCurve(
-                            track.property,
-                            active.bezier,
-                            maskId: maskId,
-                            timeMs: active.timeMs,
-                          ),
+                  onPressed: () => _editBezierCurve(
+                    track.property,
+                    active.bezier,
+                    effectId: effectId,
+                    maskId: maskId,
+                    busId: busId,
+                    timeMs: active.timeMs,
+                  ),
                   icon: const Icon(Icons.timeline, size: 16),
                 ),
               ],
@@ -1224,6 +1241,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                       if (maskId != null) {
                         _controller.setMaskInterpolation(
                           maskId,
+                          track.property,
+                          value,
+                          timeMs: active.timeMs,
+                        );
+                      } else if (busId != null) {
+                        _controller.setAudioBusInterpolation(
+                          busId,
                           track.property,
                           value,
                           timeMs: active.timeMs,
@@ -1600,6 +1624,73 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     );
   }
 
+  Widget _audioBusAnimatedSlider(
+    AudioBus bus,
+    String property,
+    String label,
+    double min,
+    double max,
+  ) {
+    final timeMs = _controller.document.playheadMs;
+    final value = bus.valueAt(property, timeMs);
+    final tracks = bus.keyframeTracks.where(
+      (track) => track.property == property,
+    );
+    final animated = tracks.isNotEmpty && tracks.first.keyframes.isNotEmpty;
+    final hasKey = animated &&
+        tracks.first.keyframes.any((frame) => frame.timeMs == timeMs);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(label, style: const TextStyle(fontSize: 10)),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Add bus automation keyframe',
+              onPressed: () => _controller.setAudioBusValue(
+                bus.id,
+                property,
+                value,
+                keyframe: true,
+              ),
+              icon: Icon(
+                Icons.diamond,
+                size: 15,
+                color: hasKey
+                    ? const Color(0xFFB8A4FF)
+                    : animated
+                        ? const Color(0xFF8D9AB2)
+                        : const Color(0xFF65738A),
+              ),
+            ),
+            SizedBox(
+              width: 48,
+              child: Text(
+                value.toStringAsFixed(2),
+                textAlign: TextAlign.end,
+                style: const TextStyle(fontSize: 9),
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          min: min,
+          max: max,
+          value: value.clamp(min, max).toDouble(),
+          onChanged: (next) => _controller.setAudioBusValue(
+            bus.id,
+            property,
+            next,
+            keyframe: animated,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildAudioBusPanel(CompositionLayer? layer) {
     final buses = _controller.document.audioBuses;
     final master = buses.where((bus) => bus.isMaster).firstOrNull;
@@ -1685,23 +1776,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                         ),
                     ],
                   ),
-                  _settingSlider(
+                  _audioBusAnimatedSlider(
+                    bus,
+                    'gainDb',
                     'Bus gain (dB)',
-                    bus.gainDb,
                     -24,
                     12,
-                    (value) => _controller.updateAudioBus(
-                      bus.copyWith(gainDb: value),
-                    ),
                   ),
-                  _settingSlider(
+                  _audioBusAnimatedSlider(
+                    bus,
+                    'pan',
                     'Bus pan',
-                    bus.pan,
                     -1,
                     1,
-                    (value) => _controller.updateAudioBus(
-                      bus.copyWith(pan: value),
-                    ),
                   ),
                   const Divider(height: 16),
                   SwitchListTile(
