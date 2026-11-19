@@ -408,14 +408,10 @@ class CompositionExportService {
     } else {
       buffer.write('-map "[aout]" -c:a aac -b:a 192k ');
     }
-    buffer.write('-t ' + tot[' + bodyCanvas + ']overlay=x=' + pad +
-          ':y=' + pad + ':shortest=1:format=auto[' + output + ']',
-        );
-        current = output;
-      }
-      passIndex++;
-    }
-    return current;
+    buffer.write('-t ' + total + ' -r ' + document.frameRate.toString() + ' ');
+    buffer.write('-c:v mpeg4 -q:v 3 -pix_fmt yuv420p -movflags +faststart ');
+    buffer.write(_quote(outputPath));
+    return buffer.toString();
   }
 
 
