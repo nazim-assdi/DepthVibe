@@ -446,6 +446,18 @@ class MaskVertex {
   final Vector2 inHandle;
   final Vector2 outHandle;
   final bool smooth;
+
+  MaskVertex copyWith({
+    Vector2? anchor,
+    Vector2? inHandle,
+    Vector2? outHandle,
+    bool? smooth,
+  }) => MaskVertex(
+        anchor: anchor ?? this.anchor,
+        inHandle: inHandle ?? this.inHandle,
+        outHandle: outHandle ?? this.outHandle,
+        smooth: smooth ?? this.smooth,
+      );
 }
 
 class MaskModel {
