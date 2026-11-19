@@ -121,6 +121,7 @@ class FfmpegFilterCompiler {
       'film_grain' => 'noise=alls=${number(p['amount'] ?? 12)}:allf=t+u',
       'pixelate' => 'pixelize=width=${(p['size'] ?? 12).round()}:height=${(p['size'] ?? 12).round()}',
       'invert' => 'negate',
+      'threshold' => _compileThreshold(p['value'] ?? 128),
       'grayscale' => 'hue=s=0',
       'chromatic_aberration' => 'chromashift=cbh=${number(p['shift'] ?? 2)}:crh=-${number(p['shift'] ?? 2)}',
       'edge_detect' => 'edgedetect=mode=colormix',
@@ -136,6 +137,12 @@ class FfmpegFilterCompiler {
       'color_balance' => 'colorbalance=rs=${number(p['red'] ?? 0)}:gs=${number(p['green'] ?? 0)}:bs=${number(p['blue'] ?? 0)}',
       _ => null,
     };
+  }
+
+  String _compileThreshold(double value) {
+    final threshold = value.clamp(0.0, 255.0).toStringAsFixed(2);
+    final expression = "if(gte(val,$threshold),255,0)";
+    return "format=rgba,lutrgb=r='$expression':g='$expression':b='$expression'";
   }
 
   String? compileTransition(CompositionTransition transition) {
