@@ -41,6 +41,32 @@ void main() {
   });
 
 
+  test('compiles threshold adjustment to an alpha-preserving RGB LUT', () {
+    const layer = CompositionLayer(
+      id: 'threshold-layer',
+      name: 'Threshold',
+      kind: LayerKind.adjustment,
+      effects: [
+        EffectInstance(
+          id: 'psd-threshold',
+          effectId: 'threshold',
+          name: 'Photoshop Threshold',
+          parameters: {'value': 128},
+        ),
+      ],
+    );
+
+    final filters = const FfmpegFilterCompiler().compileEffects(
+      layer,
+      timeMs: 0,
+    );
+
+    expect(filters, hasLength(1));
+    expect(filters.single, contains('format=rgba,lutrgb='));
+    expect(filters.single, contains("r='if(gte(val,128.00),255,0)'"));
+    expect(filters.single, contains("a=alpha"));
+  });
+
   test('compiles an effect stack into FFmpeg filters', () {
     const layer = CompositionLayer(
       id: 'video-1',
