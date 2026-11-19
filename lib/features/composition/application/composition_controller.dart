@@ -468,14 +468,16 @@ class CompositionController extends ChangeNotifier {
     String property,
     Interpolation interpolation, {
     String? effectId,
+    int? timeMs,
   }) {
     final layer = selectedLayer;
     if (layer == null) return;
 
     KeyframeTrack update(KeyframeTrack track) {
       if (track.property != property) return track;
+      final targetTimeMs = timeMs ?? _document.playheadMs;
       final frameIndex = track.keyframes.indexWhere(
-        (item) => item.timeMs == _document.playheadMs,
+        (item) => item.timeMs == targetTimeMs,
       );
       if (frameIndex < 0) return track;
       final frames = [...track.keyframes];
