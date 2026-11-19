@@ -149,15 +149,33 @@ class FfmpegAnimationCompiler {
     } else if ((mask.shape == MaskShape.polygon || mask.shape == MaskShape.bezier) &&
         mask.vertices.length >= 3) {
       final outline = _maskOutline(mask);
+      final minX = outline.map((point) => point.x).reduce(
+            (a, b) => a < b ? a : b,
+          );
+      final maxX = outline.map((point) => point.x).reduce(
+            (a, b) => a > b ? a : b,
+          );
+      final minY = outline.map((point) => point.y).reduce(
+            (a, b) => a < b ? a : b,
+          );
+      final maxY = outline.map((point) => point.y).reduce(
+            (a, b) => a > b ? a : b,
+          );
+      final spanX = (maxX - minX).abs() < 0.0001 ? 1.0 : maxX - minX;
+      final spanY = (maxY - minY).abs() < 0.0001 ? 1.0 : maxY - minY;
       final crossings = <String>[];
       final edgeDistances = <String>[];
       for (var i = 0; i < outline.length; i++) {
         final a = outline[i];
         final bPoint = outline[(i + 1) % outline.length];
-        final ax = '(W*' + _n(a.x) + ')';
-        final ay = '(H*' + _n(a.y) + ')';
-        final bx = '(W*' + _n(bPoint.x) + ')';
-        final by = '(H*' + _n(bPoint.y) + ')';
+        final ax = '(W*(' + l + '+' +
+            _n((a.x - minX) / spanX) + '*' + w + '))';
+        final ay = '(H*(' + t + '+' +
+            _n((a.y - minY) / spanY) + '*' + h + '))';
+        final bx = '(W*(' + l + '+' +
+            _n((bPoint.x - minX) / spanX) + '*' + w + '))';
+        final by = '(H*(' + t + '+' +
+            _n((bPoint.y - minY) / spanY) + '*' + h + '))';
         final dx = '(' + bx + '-' + ax + ')';
         final dy = '(' + by + '-' + ay + ')';
         final lengthSquared = '(pow(' + dx + ',2)+pow(' + dy + ',2))';
