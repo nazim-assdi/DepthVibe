@@ -616,6 +616,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       timeMs: timeMs,
       layers: doc.layers,
     );
+    if (!resolved.enabled) return const SizedBox.shrink();
     final x = resolved.position.x;
     final y = resolved.position.y;
     final scaleX = resolved.scale.x / 100;
