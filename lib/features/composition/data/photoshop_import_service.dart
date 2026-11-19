@@ -174,6 +174,37 @@ class PhotoshopImportService {
           );
           await objectFile.writeAsBytes(embeddedBytes, flush: true);
           smartObjectSourceUri = objectFile.path;
+
+          // Decode the embedded document's own merged preview rather than
+          // relying on the small proxy thumbnail in the containing PSD layer.
+          try {
+            final embeddedDocument = PsdCodec.decode(embeddedBytes);
+            final merged = PsdPixels.decodeMerged(embeddedDocument);
+            final preview = img.Image.fromBytes(
+              width: merged.width,
+              height: merged.height,
+              bytes: merged.bytes.buffer,
+              bytesOffset: merged.bytes.offsetInBytes,
+              numChannels: 4,
+            );
+            final previewFile = File(
+              cache.path +
+                  Platform.pathSeparator +
+                  'smart_preview_' +
+                  stamp.toString() +
+                  '_' +
+                  index.toString() +
+                  '.png',
+            );
+            await previewFile.writeAsBytes(
+              img.encodePng(preview, level: 3),
+              flush: true,
+            );
+            assetPath = previewFile.path;
+          } catch (_) {
+            // Preserve the original Smart Object and its host-layer proxy
+            // whenever the embedded file cannot produce a merged preview.
+          }
         }
       }
 
