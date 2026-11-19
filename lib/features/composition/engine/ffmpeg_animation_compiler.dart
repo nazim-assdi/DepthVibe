@@ -120,11 +120,12 @@ class FfmpegAnimationCompiler {
           cy + ')/(' + ry + '),2)))*min((' + rx + '),(' + ry + '))';
     } else if ((mask.shape == MaskShape.polygon || mask.shape == MaskShape.bezier) &&
         mask.vertices.length >= 3) {
+      final outline = _maskOutline(mask);
       final crossings = <String>[];
       final edgeDistances = <String>[];
-      for (var i = 0; i < mask.vertices.length; i++) {
-        final a = mask.vertices[i].anchor;
-        final bPoint = mask.vertices[(i + 1) % mask.vertices.length].anchor;
+      for (var i = 0; i < outline.length; i++) {
+        final a = outline[i];
+        final bPoint = outline[(i + 1) % outline.length];
         final ax = '(W*' + _n(a.x) + ')';
         final ay = '(H*' + _n(a.y) + ')';
         final bx = '(W*' + _n(bPoint.x) + ')';
@@ -160,6 +161,46 @@ class FfmpegAnimationCompiler {
     }
     if (mask.feather <= 0) return 'if(gte(' + distance + ',0),1,0)';
     return 'min(1,max(0,0.5+(' + distance + ')/' + _n(mask.feather) + '))';
+  }
+
+  List<Vector2> _maskOutline(MaskModel mask) {
+    if (mask.shape != MaskShape.bezier) {
+      return mask.vertices.map((vertex) => vertex.anchor).toList();
+    }
+
+    // Handles are offsets from their anchor points. Eight subdivisions per
+    // cubic segment provide a smooth, deterministic outline for FFmpeg's
+    // per-pixel point-in-polygon and edge-distance calculations.
+    const subdivisions = 8;
+    final outline = <Vector2>[];
+    for (var index = 0; index < mask.vertices.length; index++) {
+      final start = mask.vertices[index];
+      final end = mask.vertices[(index + 1) % mask.vertices.length];
+      final p0 = start.anchor;
+      final p1 = Vector2(
+        p0.x + start.outHandle.x,
+        p0.y + start.outHandle.y,
+      );
+      final p3 = end.anchor;
+      final p2 = Vector2(
+        p3.x + end.inHandle.x,
+        p3.y + end.inHandle.y,
+      );
+
+      for (var step = 0; step < subdivisions; step++) {
+        final t = step / subdivisions;
+        final inverse = 1 - t;
+        final a = inverse * inverse * inverse;
+        final b = 3 * inverse * inverse * t;
+        final c = 3 * inverse * t * t;
+        final d = t * t * t;
+        outline.add(Vector2(
+          a * p0.x + b * p1.x + c * p2.x + d * p3.x,
+          a * p0.y + b * p1.y + c * p2.y + d * p3.y,
+        ));
+      }
+    }
+    return outline;
   }
 
   String transitionScaleExpression({
