@@ -68,6 +68,87 @@ void main() {
     );
   });
 
+  test('compiles animated displacement as a frame-evaluated multi-channel pass', () {
+    const layer = CompositionLayer(
+      id: 'displace-layer',
+      name: 'Displacement',
+      kind: LayerKind.video,
+      effects: [
+        EffectInstance(
+          id: 'displace-1',
+          effectId: 'displacement',
+          name: 'Displacement',
+          parameters: {
+            'amount': 12,
+            'wavelength': 80,
+            'speed': 1,
+          },
+          keyframeTracks: [
+            KeyframeTrack(
+              property: 'amount',
+              keyframes: [
+                ScalarKeyframe(timeMs: 0, value: 4),
+                ScalarKeyframe(timeMs: 1000, value: 24),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final filters = const FfmpegFilterCompiler().compileEffects(
+      layer,
+      timeMs: 0,
+    );
+
+    expect(filters, hasLength(1));
+    expect(filters.single, startsWith('format=rgba,geq='));
+    expect(filters.single, contains('T'));
+    expect(filters.single, contains('r(X+'));
+    expect(filters.single, contains('alpha(X,Y)'));
+  });
+
+  test('compiles animated particle dust into a transparent-safe VFX pass', () {
+    const layer = CompositionLayer(
+      id: 'particles-layer',
+      name: 'Particle Dust',
+      kind: LayerKind.video,
+      effects: [
+        EffectInstance(
+          id: 'particles-1',
+          effectId: 'particle_dust',
+          name: 'Particle Dust',
+          parameters: {
+            'spacing': 72,
+            'size': 2,
+            'intensity': 0.55,
+            'speed': 1,
+          },
+          keyframeTracks: [
+            KeyframeTrack(
+              property: 'intensity',
+              keyframes: [
+                ScalarKeyframe(timeMs: 0, value: 0.2),
+                ScalarKeyframe(timeMs: 1000, value: 0.8),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final filters = const FfmpegFilterCompiler().compileEffects(
+      layer,
+      timeMs: 0,
+    );
+
+    expect(filters, hasLength(1));
+    expect(filters.single, startsWith('format=rgba,geq='));
+    expect(filters.single, contains('mod('));
+    expect(filters.single, contains('T'));
+    expect(filters.single, contains("a='alpha(X,Y)'")); 
+  });
+
   test('skips disabled effects', () {
     const layer = CompositionLayer(
       id: 'video-1',
