@@ -156,6 +156,48 @@ void main() {
       controller.dispose();
     });
 
+    test('Photoshop adjustment layers keep mapped editable effects', () {
+      final controller = CompositionController();
+      controller.addPhotoshopLayers(
+        sourceDocumentUri: '/design/adjustments.psd',
+        documentWidth: 800,
+        documentHeight: 600,
+        assets: const [
+          PhotoshopLayerAsset(
+            sourceIndex: 0,
+            name: 'Black and White Threshold',
+            assetPath: '',
+            left: 0,
+            top: 0,
+            width: 800,
+            height: 600,
+            opacity: 255,
+            blendMode: 'norm',
+            visible: true,
+            isGroup: false,
+            isAdjustment: true,
+            adjustmentKey: 'thrs',
+            adjustmentEffects: [
+              EffectInstance(
+                id: 'psd_0_threshold',
+                effectId: 'threshold',
+                name: 'Photoshop Threshold',
+                parameters: {'value': 144},
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final layer = controller.document.layers.single;
+      expect(layer.kind, LayerKind.adjustment);
+      expect(layer.photoshopAdjustmentKey, 'thrs');
+      expect(layer.effects, hasLength(1));
+      expect(layer.effects.single.effectId, 'threshold');
+      expect(layer.effects.single.parameters['value'], 144);
+      controller.dispose();
+    });
+
     test('Photoshop groups preserve nesting, clipping bases and smart objects', () {
       final controller = CompositionController();
       controller.addPhotoshopLayers(
