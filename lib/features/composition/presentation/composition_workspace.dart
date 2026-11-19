@@ -2456,7 +2456,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         children: [
           _panelHeader('CAMERA CONTROLS', Icons.videocam),
           const Text(
-            '2.5D perspective projection affects layer position and scale in preview/export. Mesh rendering, camera orientation, depth-of-field blur and shadow maps are not integrated yet.',
+            'Camera X/Y/Z rotation now orbits and rolls the 2.5D view in preview/export; perspective also clips layers behind the near plane. Layers remain camera-facing 2.5D cards—mesh rendering, depth-of-field blur and shadow maps are still pending.',
             style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
           ),
           const SizedBox(height: 8),
@@ -2479,6 +2479,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
               (value) => _controller.setCameraSettings(camera.copyWith(focusDistance: value))),
           _settingSlider('Aperture', camera.aperture, 0.7, 22,
               (value) => _controller.setCameraSettings(camera.copyWith(aperture: value))),
+          const SizedBox(height: 8),
+          const Text(
+            'CAMERA ORIENTATION',
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+          ),
+          _animatedPropertyRow(layer, 'Orbit X', 'rotation.x', -180, 180),
+          _animatedPropertyRow(layer, 'Orbit Y', 'rotation.y', -180, 180),
+          _animatedPropertyRow(layer, 'Roll Z', 'rotation.z', -180, 180),
           const SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(
