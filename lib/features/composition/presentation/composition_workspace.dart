@@ -1531,8 +1531,61 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             keyframe: animated,
           ),
         ),
-        _settingSlider('Pan', audio.pan, -1, 1,
-            (value) => _controller.setAudioSettings(audio.copyWith(pan: value))),
+        Builder(
+          builder: (context) {
+            final panTrack = layer.keyframeTracks.where(
+              (track) => track.property == 'audio.pan',
+            );
+            final panAnimated = panTrack.isNotEmpty &&
+                panTrack.first.keyframes.isNotEmpty;
+            final pan = panAnimated
+                ? panTrack.first.sample(
+                    _controller.document.playheadMs,
+                    fallback: audio.pan,
+                  )
+                : audio.pan;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text('Pan', style: TextStyle(fontSize: 11)),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Add pan automation keyframe',
+                      onPressed: () => _controller.setAudioPan(
+                        pan,
+                        keyframe: true,
+                      ),
+                      icon: Icon(
+                        Icons.diamond,
+                        size: 16,
+                        color: panAnimated
+                            ? const Color(0xFFB8A4FF)
+                            : const Color(0xFF8290A8),
+                      ),
+                    ),
+                    Text(
+                      pan.toStringAsFixed(2),
+                      style: const TextStyle(fontSize: 10),
+                    ),
+                  ],
+                ),
+                Slider(
+                  min: -1,
+                  max: 1,
+                  value: pan.clamp(-1, 1).toDouble(),
+                  onChanged: (value) => _controller.setAudioPan(
+                    value,
+                    keyframe: panAnimated,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
         const Divider(height: 18),
         const Text(
           '3-BAND PARAMETRIC EQ',
