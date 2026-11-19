@@ -476,6 +476,7 @@ class MaskModel {
     this.width = 0.9,
     this.height = 0.9,
     this.vertices = const [],
+    this.keyframeTracks = const [],
   });
 
   final String id;
@@ -492,6 +493,24 @@ class MaskModel {
   final double width;
   final double height;
   final List<MaskVertex> vertices;
+  final List<KeyframeTrack> keyframeTracks;
+
+  double baseValue(String property) => switch (property) {
+        'feather' => feather,
+        'expansion' => expansion,
+        'opacity' => opacity,
+        'left' => left,
+        'top' => top,
+        'width' => width,
+        'height' => height,
+        _ => 0,
+      };
+
+  double valueAt(String property, int timeMs) {
+    final matching = keyframeTracks.where((track) => track.property == property);
+    if (matching.isEmpty) return baseValue(property);
+    return matching.first.sample(timeMs, fallback: baseValue(property));
+  }
 
   MaskModel copyWith({
     MaskShape? shape,
@@ -506,6 +525,7 @@ class MaskModel {
     double? width,
     double? height,
     List<MaskVertex>? vertices,
+    List<KeyframeTrack>? keyframeTracks,
   }) =>
       MaskModel(
         id: id,
@@ -522,6 +542,7 @@ class MaskModel {
         width: width ?? this.width,
         height: height ?? this.height,
         vertices: vertices ?? this.vertices,
+        keyframeTracks: keyframeTracks ?? this.keyframeTracks,
       );
 }
 
