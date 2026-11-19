@@ -261,6 +261,7 @@ class CompositionExportService {
         layer: layer,
         layers: document.layers,
       );
+      if (!resolvedTransform.enabled) continue;
       final sxBase = resolvedTransform.scaleX;
       final syBase = resolvedTransform.scaleY;
       final sx = animationCompiler.transitionScaleExpression(
