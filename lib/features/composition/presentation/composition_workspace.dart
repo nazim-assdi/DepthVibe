@@ -13,6 +13,7 @@ import '../data/photoshop_import_service.dart';
 import '../domain/composition_models.dart';
 import '../engine/parent_transform_resolver.dart';
 import '../engine/composition_export_service.dart';
+import '../engine/audio_waveform_service.dart';
 import '../engine/motion_tracking_service.dart';
 
 class CompositionWorkspace extends StatefulWidget {
@@ -27,6 +28,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
   final PhotoshopImportService _photoshop = const PhotoshopImportService();
   final CompositionExportService _exporter = const CompositionExportService();
   final MotionTrackingService _tracker = const MotionTrackingService();
+  final AudioWaveformService _waveformService = const AudioWaveformService();
+  final Map<String, Future<File?>> _waveformJobs = {};
+
+  Future<File?> _waveformFor(String path) =>
+      _waveformJobs.putIfAbsent(path, () => _waveformService.generate(path));
   bool _tracking = false;
   double _trackingLeft = 100;
   double _trackingTop = 100;
@@ -1870,6 +1876,30 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                       ),
                       child: Stack(
                         children: [
+                          if (layer.kind == LayerKind.audio &&
+                              layer.sourceUri != null)
+                            Positioned.fill(
+                              child: FutureBuilder<File?>(
+                                future: _waveformFor(layer.sourceUri!),
+                                builder: (context, snapshot) {
+                                  final waveform = snapshot.data;
+                                  if (waveform == null) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return IgnorePointer(
+                                    child: Opacity(
+                                      opacity: 0.82,
+                                      child: Image.file(
+                                        waveform,
+                                        fit: BoxFit.fill,
+                                        errorBuilder: (_, __, ___) =>
+                                            const SizedBox.shrink(),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
                           Positioned(
                             left: 5,
                             right: 12,
