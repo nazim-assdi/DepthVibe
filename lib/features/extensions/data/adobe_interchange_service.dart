@@ -164,8 +164,25 @@ class AdobeInterchangeService {
       final ms = item['timeMs'] is num ? _i(item['timeMs']) : _ms(item['timeSeconds']);
       final mapped = mapValue == null ? value : mapValue(value);
       if (!mapped.isFinite) continue;
-      result.add(ScalarKeyframe(timeMs: ms, value: mapped,
-        interpolation: _interpolation(item['interpolation'])));
+      final metadata = <String, Object>{};
+      const metadataKeys = {
+        'inInterpolation', 'outInterpolation',
+        'inTemporalEase', 'outTemporalEase',
+        'inSpatialTangent', 'outSpatialTangent',
+        'roving', 'spatialAutoBezier', 'spatialContinuous',
+        'temporalAutoBezier', 'temporalContinuous',
+      };
+      for (final entry in item.entries) {
+        if (metadataKeys.contains(entry.key) && entry.value != null) {
+          metadata[entry.key] = entry.value as Object;
+        }
+      }
+      result.add(ScalarKeyframe(
+        timeMs: ms,
+        value: mapped,
+        interpolation: _interpolation(item['interpolation']),
+        metadata: metadata,
+      ));
     }
     result.sort((a,b) => a.timeMs.compareTo(b.timeMs));
     return result;
@@ -252,16 +269,32 @@ class AdobeInterchangeService {
   }
 
   static Map<String,Object?> buildInterchangeBundle(CompositionDocument doc){
-    final ae=<Map<String,Object?>>[],unknown=<Map<String,Object?>>[],premiereUnsupported=<Map<String,Object?>>[];
+    final ae=<Map<String,Object?>>[],unknown=<Map<String,Object?>>[];
+    final premiereMapped=<Map<String,Object?>>[],premiereUnsupported=<Map<String,Object?>>[];
     for(final l in doc.layers){for(final e in l.effects){
-      final name=afterEffectsMatchNames[e.effectId],entry=<String,Object?>{'layerId':l.id,'effectId':e.effectId,'effectName':e.name,
-        'afterEffectsMatchName':name,'premiereFcpXmlEffectMapping':null,'parameters':e.parameters};
+      final name=afterEffectsMatchNames[e.effectId];
+      final entry=<String,Object?>{'layerId':l.id,'effectId':e.effectId,'effectName':e.name,
+        'afterEffectsMatchName':name,'parameters':e.parameters};
       if(name==null||EffectCatalog.findBuiltin(e.effectId)==null)unknown.add(entry);else ae.add(entry);
-      premiereUnsupported.add(entry);
+      final filterEntry=<String,Object?>{
+        'layerId':l.id,'layerName':l.name,'effectId':e.effectId,'effectName':e.name,
+        'enabled':e.enabled,'parameters':e.parameters,
+      };
+      // Only the documented static Gaussian Blur XMEML mapping is emitted.
+      if(e.effectId=='gaussian_blur' && l.kind!=LayerKind.audio &&
+          e.keyframeTracks.every((track)=>track.keyframes.isEmpty)){
+        premiereMapped.add(filterEntry);
+      }else{
+        premiereUnsupported.add({...filterEntry,
+          'reason':e.effectId=='gaussian_blur'
+            ? 'Animated Gaussian Blur curves are not yet emitted in XMEML.'
+            : 'No verified portable XMEML effect identifier/parameter schema.'});
+      }
     }}
     return{'format':'DepthVibe.AdobeInterchange','schemaVersion':1,'document':CompositionProjectCodec.encodeDocument(doc),
       'effectMapping':{'afterEffects':{'mapped':ae,'unsupported':unknown},
-        'premiereFcpXml':{'mapped':const [],'unsupported':premiereUnsupported,'note':'Premiere FCP XML export includes clip timing/media only; effect nodes not encoded.'}},
+        'premiereFcpXml':{'mapped':premiereMapped,'unsupported':premiereUnsupported,
+          'note':'Premiere XML emits the verified static Gaussian Blur mapping. Other effects remain unsupported rather than using guessed plugin IDs.'}},
       'media':{'embedded':false,'note':'Only local media references are exported. Relink missing media on the target machine.'}};
   }
 
@@ -283,6 +316,29 @@ class AdobeInterchangeService {
       });
     }
     return groups.values.toList();
+  }
+
+  static String _premiereFiltersXml(CompositionLayer layer) {
+    if (layer.kind == LayerKind.audio || layer.effects.isEmpty) return '';
+    String number(double value) => value.toStringAsFixed(4)
+        .replaceFirst(RegExp(r'\\.?0+$'), '');
+    final filters = <String>[];
+    for (final effect in layer.effects) {
+      if (effect.effectId != 'gaussian_blur' ||
+          effect.keyframeTracks.any((track) => track.keyframes.isNotEmpty)) continue;
+      final radius = (effect.parameters['sigma'] ?? 2).clamp(0, 100).toDouble();
+      filters.add('<filter><enabled>' + (effect.enabled ? 'TRUE' : 'FALSE') +
+        '</enabled><start>-1</start><end>-1</end><effect>' +
+        '<name>Gaussian Blur</name><effectid>Gaussian Blur</effectid>' +
+        '<effectcategory>Blur</effectcategory><effecttype>filter</effecttype>' +
+        '<mediatype>video</mediatype>' +
+        '<parameter><parameterid>channel</parameterid><name>Channel</name>' +
+        '<valuemin>1</valuemin><valuemax>7</valuemax><value>1</value></parameter>' +
+        '<parameter><parameterid>radius</parameterid><name>Radius</name>' +
+        '<valuemin>0</valuemin><valuemax>100</valuemax><value>' + number(radius) +
+        '</value></parameter></effect></filter>');
+    }
+    return filters.join();
   }
 
   static String buildPremiereXml(CompositionDocument doc){
@@ -311,7 +367,8 @@ class AdobeInterchangeService {
               '</pathurl></file>';
       return '<clipitem id="clip-'+index.toString()+'"><name>'+esc(layer.name)+'</name>'+
           rate+'<start>'+st.toString()+'</start><end>'+en.toString()+'</end><in>'+
-          ins.toString()+'</in><out>'+outs.toString()+'</out>'+file+'</clipitem>';
+          ins.toString()+'</in><out>'+outs.toString()+'</out>'+file+
+          _premiereFiltersXml(layer)+'</clipitem>';
     }
     String trackXml(List<CompositionLayer> track) => '<track>'+track.map(clip).join()+'</track>';
     final v=videoTracks.map(trackXml).join(),a=audioTracks.map(trackXml).join();
@@ -322,7 +379,7 @@ class AdobeInterchangeService {
       rate+'<width>'+doc.width.toString()+'</width><height>'+
       doc.height.toString()+'</height></samplecharacteristics></format>'+
       v+'</video><audio>'+a+'</audio></media></sequence>'+
-      '<!-- Premiere track grouping and clip timing are preserved. effect filters are not encoded. -->'+
+      '<!-- Premiere track grouping and clip timing are preserved. Only verified static Gaussian Blur filters are emitted. -->'+
       '</xmeml>';
   }
 
@@ -345,6 +402,39 @@ class AdobeInterchangeService {
   if(mode==="cubicBezier" || mode==="bezier") return KeyframeInterpolationType.BEZIER;
   return KeyframeInterpolationType.LINEAR;
  }
+ function easeObjects(raw) {
+  if(!raw || !raw.length) return null;
+  var result=[];
+  for(var i=0;i<raw.length;i++) {
+   var speed=Number(raw[i].speed),influence=Number(raw[i].influence);
+   if(!isFinite(speed)||!isFinite(influence)) return null;
+   result.push(new KeyframeEase(speed,Math.max(0.1,Math.min(100,influence))));
+  }
+  return result;
+ }
+ function applyKeyMetadata(property,keyIndex,key,dimensions) {
+  if(!property || !key) return;
+  var meta=key.metadata||{};
+  var inMode=meta.inInterpolation||key.interpolation;
+  var outMode=meta.outInterpolation||key.interpolation;
+  try { property.setInterpolationTypeAtKey(keyIndex,interpolation(inMode),interpolation(outMode)); }
+  catch(err) { warnings.push("Interpolation metadata skipped: "+String(err)); }
+  try {
+   var incoming=easeObjects(meta.inTemporalEase),outgoing=easeObjects(meta.outTemporalEase);
+   if(incoming && outgoing) property.setTemporalEaseAtKey(keyIndex,incoming,outgoing);
+  } catch(err) { warnings.push("Temporal ease skipped: "+String(err)); }
+  try {
+   var spatialIn=meta.inSpatialTangent,spatialOut=meta.outSpatialTangent;
+   if(spatialIn && spatialOut && spatialIn.length===dimensions && spatialOut.length===dimensions &&
+      typeof property.setSpatialTangentsAtKey==="function")
+    property.setSpatialTangentsAtKey(keyIndex,spatialIn,spatialOut);
+  } catch(err) { warnings.push("Spatial tangent skipped: "+String(err)); }
+  try { if(typeof meta.temporalAutoBezier==="boolean") property.setTemporalAutoBezierAtKey(keyIndex,meta.temporalAutoBezier); } catch(_) {}
+  try { if(typeof meta.temporalContinuous==="boolean") property.setTemporalContinuousAtKey(keyIndex,meta.temporalContinuous); } catch(_) {}
+  try { if(typeof meta.spatialAutoBezier==="boolean") property.setSpatialAutoBezierAtKey(keyIndex,meta.spatialAutoBezier); } catch(_) {}
+  try { if(typeof meta.spatialContinuous==="boolean") property.setSpatialContinuousAtKey(keyIndex,meta.spatialContinuous); } catch(_) {}
+  try { if(typeof meta.roving==="boolean") property.setRovingAtKey(keyIndex,meta.roving); } catch(_) {}
+ }
  function applyScalarTrack(property,track) {
   if(!property || !track || !track.keyframes) return;
   for(var k=0;k<track.keyframes.length;k++) {
@@ -353,7 +443,7 @@ class AdobeInterchangeService {
    try {
     property.setValueAtTime(time,Number(key.value));
     var keyIndex=property.nearestKeyIndex(time);
-    property.setInterpolationTypeAtKey(keyIndex,interpolation(key.interpolation),interpolation(key.interpolation));
+    applyKeyMetadata(property,keyIndex,key,1);
    } catch(err) { warnings.push("Keyframe "+track.property+" skipped: "+String(err)); }
   }
  }
@@ -391,11 +481,15 @@ class AdobeInterchangeService {
    var time=ms/1000;
    try {
     property.setValueAtTime(time,value);
-    var index=property.nearestKeyIndex(time),mode="linear";
+    var index=property.nearestKeyIndex(time),curveKey=null,mode="linear";
     for(var dim2=0;dim2<dimensions;dim2++) if(axisTracks[dim2] && axisTracks[dim2].keyframes)
      for(var q=0;q<axisTracks[dim2].keyframes.length;q++)
-      if(Number(axisTracks[dim2].keyframes[q].timeMs)===ms) mode=axisTracks[dim2].keyframes[q].interpolation;
-    property.setInterpolationTypeAtKey(index,interpolation(mode),interpolation(mode));
+      if(Number(axisTracks[dim2].keyframes[q].timeMs)===ms) {
+       curveKey=axisTracks[dim2].keyframes[q];
+       mode=curveKey.interpolation||mode;
+      }
+    if(curveKey) applyKeyMetadata(property,index,curveKey,dimensions);
+    else property.setInterpolationTypeAtKey(index,interpolation(mode),interpolation(mode));
    } catch(err) { warnings.push("Keyframe "+prefix+" skipped: "+String(err)); }
   }
  }

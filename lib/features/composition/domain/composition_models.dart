@@ -444,6 +444,7 @@ class ScalarKeyframe {
     this.inTangent = 0,
     this.outTangent = 0,
     this.bezier = const BezierCurve(),
+    this.metadata = const {},
   });
 
   final int timeMs;
@@ -452,6 +453,8 @@ class ScalarKeyframe {
   final double inTangent;
   final double outTangent;
   final BezierCurve bezier;
+  /// Host-specific keyframe curve metadata retained for interchange.
+  final Map<String, Object> metadata;
 
   Map<String, Object> toJson() => {
         'timeMs': timeMs,
@@ -460,10 +463,20 @@ class ScalarKeyframe {
         'inTangent': inTangent,
         'outTangent': outTangent,
         'bezier': bezier.toJson(),
+        if (metadata.isNotEmpty) 'metadata': metadata,
       };
 
   factory ScalarKeyframe.fromJson(Map<String, Object?> json) {
     final rawBezier = json['bezier'];
+    final rawMetadata = json['metadata'];
+    final metadata = <String, Object>{};
+    if (rawMetadata is Map) {
+      for (final entry in rawMetadata.entries) {
+        if (entry.key is String && entry.value != null) {
+          metadata[entry.key as String] = entry.value as Object;
+        }
+      }
+    }
     return ScalarKeyframe(
       timeMs: (json['timeMs'] as num?)?.toInt() ?? 0,
       value: (json['value'] as num?)?.toDouble() ?? 0,
@@ -476,6 +489,7 @@ class ScalarKeyframe {
       bezier: rawBezier is Map
           ? BezierCurve.fromJson(rawBezier.cast<String, Object?>())
           : const BezierCurve(),
+      metadata: metadata,
     );
   }
 }

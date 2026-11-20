@@ -22,15 +22,47 @@ function captureTransform(layer) {
     opacity: safePropertyValue(group, "ADBE Opacity")
   };
 }
-function keyInterpolation(property, keyIndex) {
+function keyInterpolation(property, keyIndex, side) {
   try {
-    const value = property.keyOutInterpolationType(keyIndex);
+    const method = side === "in" ? property.keyInInterpolationType : property.keyOutInterpolationType;
+    const value = typeof method === "function" ? method.call(property, keyIndex) : property.keyOutInterpolationType(keyIndex);
     const types = afterEffects.KeyframeInterpolationType || {};
     if (value === types.HOLD || String(value).toLowerCase().indexOf("hold") >= 0) return "hold";
     if (value === types.BEZIER || String(value).toLowerCase().indexOf("bezier") >= 0) return "cubicBezier";
     if (value === types.LINEAR || String(value).toLowerCase().indexOf("linear") >= 0) return "linear";
   } catch (_) {}
   return "linear";
+}
+function captureEase(property, keyIndex, side) {
+  try {
+    const method = side === "in" ? property.keyInTemporalEase : property.keyOutTemporalEase;
+    if (typeof method !== "function") return null;
+    const values = method.call(property, keyIndex);
+    if (!Array.isArray(values)) return null;
+    return values.map(function (ease) {
+      return { speed: Number(ease.speed), influence: Number(ease.influence) };
+    }).filter(function (ease) {
+      return Number.isFinite(ease.speed) && Number.isFinite(ease.influence);
+    });
+  } catch (_) { return null; }
+}
+function captureKeyframeMetadata(property, keyIndex) {
+  const metadata = {
+    inInterpolation: keyInterpolation(property, keyIndex, "in"),
+    outInterpolation: keyInterpolation(property, keyIndex, "out"),
+    inTemporalEase: captureEase(property, keyIndex, "in"),
+    outTemporalEase: captureEase(property, keyIndex, "out")
+  };
+  if (property && property.isSpatial === true) {
+    try { metadata.inSpatialTangent = property.keyInSpatialTangent(keyIndex); } catch (_) {}
+    try { metadata.outSpatialTangent = property.keyOutSpatialTangent(keyIndex); } catch (_) {}
+    try { metadata.roving = property.keyRoving(keyIndex) === true; } catch (_) {}
+    try { metadata.spatialAutoBezier = property.keySpatialAutoBezier(keyIndex) === true; } catch (_) {}
+    try { metadata.spatialContinuous = property.keySpatialContinuous(keyIndex) === true; } catch (_) {}
+  }
+  try { metadata.temporalAutoBezier = property.keyTemporalAutoBezier(keyIndex) === true; } catch (_) {}
+  try { metadata.temporalContinuous = property.keyTemporalContinuous(keyIndex) === true; } catch (_) {}
+  return metadata;
 }
 function capturePropertyKeyframes(property, propertyPath) {
   try {
@@ -53,11 +85,11 @@ function capturePropertyKeyframes(property, propertyPath) {
           const value = isVector ? raw[axis] : raw;
           if (typeof value !== "number" || !Number.isFinite(value) ||
               typeof time !== "number" || !Number.isFinite(time)) continue;
-          keyframes.push({
+          keyframes.push(Object.assign({
             timeMs: Math.round(time * 1000),
             value: value,
-            interpolation: keyInterpolation(property, index)
-          });
+            interpolation: keyInterpolation(property, index, "out")
+          }, captureKeyframeMetadata(property, index)));
         } catch (_) {}
       }
       return { property: path, keyframes: keyframes };
@@ -68,11 +100,8 @@ function capturePropertyKeyframes(property, propertyPath) {
 function captureLayerAnimation(layer) {
   const group = layer.property("ADBE Transform Group");
   const properties = [
-    ["ADBE Position", "position"],
-    ["ADBE Anchor Point", "anchor"],
-    ["ADBE Scale", "scale"],
-    ["ADBE Rotate Z", "rotation.z"],
-    ["ADBE Opacity", "opacity"]
+    ["ADBE Position", "position"], ["ADBE Anchor Point", "anchor"],
+    ["ADBE Scale", "scale"], ["ADBE Rotate Z", "rotation.z"], ["ADBE Opacity", "opacity"]
   ];
   const keyframeTracks = [], expressions = [];
   for (let i = 0; i < properties.length; i += 1) {
@@ -87,7 +116,6 @@ function captureLayerAnimation(layer) {
   }
   return { keyframeTracks: keyframeTracks, expressions: expressions };
 }
-
 function captureScalarPropertyKeyframes(property) {
   try {
     if (!property || typeof property.numKeys !== "number" ||
@@ -98,8 +126,10 @@ function captureScalarPropertyKeyframes(property) {
         const value = property.keyValue(index), time = property.keyTime(index);
         if (typeof value !== "number" || !Number.isFinite(value) ||
             typeof time !== "number" || !Number.isFinite(time)) continue;
-        frames.push({ timeMs: Math.round(time * 1000), value: value,
-          interpolation: keyInterpolation(property, index) });
+        frames.push(Object.assign({
+          timeMs: Math.round(time * 1000), value: value,
+          interpolation: keyInterpolation(property, index, "out")
+        }, captureKeyframeMetadata(property, index)));
       } catch (_) {}
     }
     return frames;

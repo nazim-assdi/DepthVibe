@@ -90,3 +90,11 @@ The Premiere UXP manifest requests the UXP local file-system save permission. Th
 - Supported effect parameter keyframes are imported for Gaussian Blur, Brightness, Contrast, Sharpen and Saturation.
 - The After Effects JSX exporter recreates supported scalar/vector keys and their HOLD / LINEAR / Bezier interpolation category. Spatial tangents, temporal ease curves, roving and separated-dimension controls are not yet lossless.
 - Expressions are recorded as inert source metadata; they are never executed by DepthVibe or automatically re-enabled by the generated import script.
+
+
+### Spatial/temporal keyframe and effect-filter increment
+
+- After Effects UXP Beta 27.0+ and CEP snapshots now attempt to capture per-key incoming/outgoing interpolation, temporal ease speed/influence arrays, spatial in/out tangents, roving, spatial/temporal auto-Bezier and continuity flags. Each keyframe carries the raw supported values into the DVPROJ project data.
+- The generated After Effects script restores separate in/out interpolation, temporal ease, spatial tangents, auto-Bezier/continuity flags and roving where the destination property supports the relevant API. Host API failures are reported as warnings rather than silently converted.
+- Premiere FCP7 XML now writes the documented static Gaussian Blur filter schema (channel and radius). Effects without a verified portable XMEML effect ID/parameter contract, and animated Gaussian Blur curves, remain listed as unsupported rather than being emitted using guessed identifiers.
+- Real host validation is still required in supported After Effects and Premiere versions. This richer interchange is not a guarantee of lossless conversion for all projects or third-party plugins.

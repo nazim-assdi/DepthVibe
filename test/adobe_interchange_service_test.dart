@@ -204,7 +204,10 @@ void main() {
       expect(xml, contains('<xmeml version="5">'));
       expect(xml, contains('<clipitem id="clip-1">'));
       expect(xml, contains('file://'));
-      expect(xml, contains('effect filters are not encoded'));
+      expect(xml, contains('<filter>'));
+      expect(xml, contains('<effectid>Gaussian Blur</effectid>'));
+      expect(xml, contains('<parameterid>radius</parameterid>'));
+      expect(xml, contains('<value>4</value>'));
 
       final jsx = AdobeInterchangeService.buildAfterEffectsScript(doc);
       expect(jsx, contains('app.project.items.addComp'));
@@ -217,8 +220,45 @@ void main() {
       final ae = mapping['afterEffects']! as Map<String, Object?>;
       expect((ae['mapped']! as List), hasLength(1));
       final pr = mapping['premiereFcpXml']! as Map<String, Object?>;
-      expect((pr['mapped']! as List), isEmpty);
-      expect((pr['unsupported']! as List), hasLength(1));
+      expect((pr['mapped']! as List), hasLength(1));
+      expect((pr['unsupported']! as List), isEmpty);
+    });
+
+
+    test('Premiere XMEML reports effects without a verified portable mapping', () {
+      final doc = CompositionDocument(
+        layers: [
+          CompositionLayer(
+            id: 'effect-clip',
+            name: 'Effect Clip',
+            kind: LayerKind.video,
+            effects: [
+              EffectInstance(
+                id: 'blur',
+                effectId: 'gaussian_blur',
+                name: 'Gaussian Blur',
+                parameters: const {'sigma': 9},
+              ),
+              EffectInstance(
+                id: 'sharpen',
+                effectId: 'sharpen',
+                name: 'Sharpen',
+                parameters: const {'amount': 2},
+              ),
+            ],
+          ),
+        ],
+      );
+      final xml = AdobeInterchangeService.buildPremiereXml(doc);
+      expect(xml, contains('<effectid>Gaussian Blur</effectid>'));
+      expect(xml, isNot(contains('<effectid>Sharpen</effectid>')));
+      final mapping = AdobeInterchangeService.buildInterchangeBundle(doc)['effectMapping']!
+          as Map<String, Object?>;
+      final premiere = mapping['premiereFcpXml']! as Map<String, Object?>;
+      expect(premiere['mapped'], hasLength(1));
+      expect(premiere['unsupported'], hasLength(1));
+      expect((premiere['unsupported']! as List).first['reason'],
+          contains('No verified portable'));
     });
 
     test('After Effects transform and effect keyframes import and survive .dvproj', () {
@@ -258,7 +298,22 @@ void main() {
                   'property': 'position.x',
                   'keyframes': [
                     {'timeMs': 0, 'value': 200, 'interpolation': 'linear'},
-                    {'timeMs': 2000, 'value': 600, 'interpolation': 'cubicBezier'},
+                    {
+                      'timeMs': 2000,
+                      'value': 600,
+                      'interpolation': 'cubicBezier',
+                      'inInterpolation': 'cubicBezier',
+                      'outInterpolation': 'cubicBezier',
+                      'inTemporalEase': [{'speed': 12, 'influence': 35}],
+                      'outTemporalEase': [{'speed': 18, 'influence': 62}],
+                      'inSpatialTangent': [-8, 4],
+                      'outSpatialTangent': [12, 6],
+                      'roving': true,
+                      'spatialAutoBezier': false,
+                      'spatialContinuous': true,
+                      'temporalAutoBezier': false,
+                      'temporalContinuous': true,
+                    },
                   ],
                 },
                 {
@@ -301,6 +356,12 @@ void main() {
       );
       expect(position.keyframes, hasLength(2));
       expect(position.keyframes.last.interpolation, Interpolation.cubicBezier);
+      expect(position.keyframes.last.metadata['roving'], true);
+      expect(position.keyframes.last.metadata['spatialContinuous'], true);
+      expect(position.keyframes.last.metadata['inSpatialTangent'], [-8, 4]);
+      expect(position.keyframes.last.metadata['outTemporalEase'], [
+        {'speed': 18, 'influence': 62},
+      ]);
       expect(position.sample(1000), closeTo(400, 0.001));
       final opacity = layer.keyframeTracks.singleWhere(
         (track) => track.property == 'opacity',
@@ -321,6 +382,11 @@ void main() {
         ).keyframes.last.interpolation,
         Interpolation.cubicBezier,
       );
+      final restoredPosition = restored.layers.single.keyframeTracks.singleWhere(
+        (track) => track.property == 'position.x',
+      );
+      expect(restoredPosition.keyframes.last.metadata['roving'], true);
+      expect(restoredPosition.keyframes.last.metadata['inTemporalEase'], isA<List>());
       expect(restored.layers.single.effects.single.keyframeTracks, hasLength(1));
       expect(restored.layers.single.interchangeMetadata['expressions'], isA<List>());
     });
@@ -424,6 +490,10 @@ void main() {
       expect(script, contains('applyScalarTrack'));
       expect(script, contains('setValueAtTime'));
       expect(script, contains('setInterpolationTypeAtKey'));
+      expect(script, contains('setSpatialTangentsAtKey'));
+      expect(script, contains('setTemporalEaseAtKey'));
+      expect(script, contains('setRovingAtKey'));
+      expect(script, contains('new KeyframeEase'));
       expect(script, contains('ADBE Gaussian Blur 2-0001'));
     });
 

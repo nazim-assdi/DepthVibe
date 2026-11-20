@@ -21,66 +21,108 @@ function depthVibeTransform(layer) {
     opacity: depthVibeSafeValue(group, "ADBE Opacity")
   };
 }
-function depthVibeKeyInterpolation(property, keyIndex) {
+function depthVibeKeyInterpolation(property, keyIndex, side) {
   try {
-    var value = property.keyOutInterpolationType(keyIndex);
+    var value = side === "in" && typeof property.keyInInterpolationType === "function"
+      ? property.keyInInterpolationType(keyIndex) : property.keyOutInterpolationType(keyIndex);
     if (value === KeyframeInterpolationType.HOLD) return "hold";
     if (value === KeyframeInterpolationType.BEZIER) return "cubicBezier";
     if (value === KeyframeInterpolationType.LINEAR) return "linear";
   } catch (_) {}
   return "linear";
 }
+function depthVibeCaptureEase(property, keyIndex, side) {
+  try {
+    var values = side === "in" ? property.keyInTemporalEase(keyIndex) : property.keyOutTemporalEase(keyIndex);
+    if (!values || typeof values.length !== "number") return null;
+    var result = [];
+    for (var i = 0; i < values.length; i++) {
+      var speed = Number(values[i].speed), influence = Number(values[i].influence);
+      if (isFinite(speed) && isFinite(influence)) result.push({speed:speed,influence:influence});
+    }
+    return result;
+  } catch (_) { return null; }
+}
+function depthVibeKeyframeMetadata(property, keyIndex) {
+  var metadata = {
+    inInterpolation: depthVibeKeyInterpolation(property, keyIndex, "in"),
+    outInterpolation: depthVibeKeyInterpolation(property, keyIndex, "out"),
+    inTemporalEase: depthVibeCaptureEase(property, keyIndex, "in"),
+    outTemporalEase: depthVibeCaptureEase(property, keyIndex, "out")
+  };
+  try {
+    if (property.isSpatial === true) {
+      metadata.inSpatialTangent = property.keyInSpatialTangent(keyIndex);
+      metadata.outSpatialTangent = property.keyOutSpatialTangent(keyIndex);
+      metadata.roving = property.keyRoving(keyIndex) === true;
+      metadata.spatialAutoBezier = property.keySpatialAutoBezier(keyIndex) === true;
+      metadata.spatialContinuous = property.keySpatialContinuous(keyIndex) === true;
+    }
+  } catch (_) {}
+  try { metadata.temporalAutoBezier = property.keyTemporalAutoBezier(keyIndex) === true; } catch (_) {}
+  try { metadata.temporalContinuous = property.keyTemporalContinuous(keyIndex) === true; } catch (_) {}
+  return metadata;
+}
 function depthVibePropertyKeyframes(property, propertyPath) {
   try {
     if (!property || typeof property.numKeys !== "number" ||
         typeof property.keyTime !== "function" || typeof property.keyValue !== "function") return [];
-    var count=Math.min(property.numKeys,10000);
-    if(count<1)return [];
-    var first=property.keyValue(1),vector=first instanceof Array && first.length>0;
-    if(vector) for(var v=0;v<first.length;v++) if(typeof first[v]!=="number") vector=false;
-    var axisNames=["x","y","z","w"],paths=vector?axisNames.slice(0,Math.min(first.length,4)):[""];
-    var result=[];
-    for(var axis=0;axis<paths.length;axis++) {
-      var frames=[];
-      for(var index=1;index<=count;index++) {
+    var count = Math.min(property.numKeys, 10000);
+    if (count < 1) return [];
+    var first = property.keyValue(1), vector = first instanceof Array && first.length > 0;
+    if (vector) for (var v = 0; v < first.length; v++) if (typeof first[v] !== "number") vector = false;
+    var axisNames = ["x", "y", "z", "w"];
+    var paths = vector ? axisNames.slice(0, Math.min(first.length, 4)) : [""];
+    var result = [];
+    for (var axis = 0; axis < paths.length; axis++) {
+      var frames = [];
+      for (var index = 1; index <= count; index++) {
         try {
-          var raw=property.keyValue(index),time=property.keyTime(index),value=vector?raw[axis]:raw;
-          if(typeof value!=="number"||!isFinite(value)||typeof time!=="number"||!isFinite(time))continue;
-          frames.push({timeMs:Math.round(time*1000),value:value,interpolation:depthVibeKeyInterpolation(property,index)});
+          var raw = property.keyValue(index), time = property.keyTime(index);
+          var value = vector ? raw[axis] : raw;
+          if (typeof value !== "number" || !isFinite(value) || typeof time !== "number" || !isFinite(time)) continue;
+          var frame = {timeMs:Math.round(time * 1000),value:value,
+            interpolation:depthVibeKeyInterpolation(property,index,"out")};
+          var metadata = depthVibeKeyframeMetadata(property,index);
+          for (var key in metadata) if (metadata.hasOwnProperty(key) && metadata[key] !== null) frame[key] = metadata[key];
+          frames.push(frame);
         } catch (_) {}
       }
-      if(frames.length)result.push({property:propertyPath+(vector?"."+paths[axis]:""),keyframes:frames});
+      if (frames.length) result.push({property:propertyPath + (vector ? "." + paths[axis] : ""),keyframes:frames});
     }
     return result;
   } catch (_) { return []; }
 }
 function depthVibeLayerAnimation(layer) {
-  var group=layer.property("ADBE Transform Group");
-  var properties=[["ADBE Position","position"],["ADBE Anchor Point","anchor"],["ADBE Scale","scale"],["ADBE Rotate Z","rotation.z"],["ADBE Opacity","opacity"]];
-  var tracks=[],expressions=[];
-  for(var i=0;i<properties.length;i++) {
-    var property=group?group.property(properties[i][0]):null;
-    if(!property)continue;
-    var found=depthVibePropertyKeyframes(property,properties[i][1]);
-    for(var j=0;j<found.length;j++)tracks.push(found[j]);
+  var group = layer.property("ADBE Transform Group");
+  var properties = [["ADBE Position","position"],["ADBE Anchor Point","anchor"],["ADBE Scale","scale"],["ADBE Rotate Z","rotation.z"],["ADBE Opacity","opacity"]];
+  var tracks = [], expressions = [];
+  for (var i = 0; i < properties.length; i++) {
+    var property = group ? group.property(properties[i][0]) : null;
+    if (!property) continue;
+    var found = depthVibePropertyKeyframes(property, properties[i][1]);
+    for (var j = 0; j < found.length; j++) tracks.push(found[j]);
     try {
-      if(typeof property.expression==="string"&&property.expression.length)
-        expressions.push({property:properties[i][1],source:property.expression,enabled:property.expressionEnabled===true});
+      if (typeof property.expression === "string" && property.expression.length)
+        expressions.push({property:properties[i][1],source:property.expression,enabled:property.expressionEnabled === true});
     } catch (_) {}
   }
   return {keyframeTracks:tracks,expressions:expressions};
 }
-
 function depthVibeScalarKeyframes(property) {
   try {
     if (!property || typeof property.numKeys !== "number" ||
         typeof property.keyTime !== "function" || typeof property.keyValue !== "function") return [];
-    var count=Math.min(property.numKeys,10000),frames=[];
-    for(var i=1;i<=count;i++) {
+    var count = Math.min(property.numKeys,10000), frames = [];
+    for (var i = 1; i <= count; i++) {
       try {
-        var value=property.keyValue(i),time=property.keyTime(i);
-        if(typeof value!=="number"||!isFinite(value)||typeof time!=="number"||!isFinite(time))continue;
-        frames.push({timeMs:Math.round(time*1000),value:value,interpolation:depthVibeKeyInterpolation(property,i)});
+        var value = property.keyValue(i), time = property.keyTime(i);
+        if (typeof value !== "number" || !isFinite(value) || typeof time !== "number" || !isFinite(time)) continue;
+        var frame = {timeMs:Math.round(time * 1000),value:value,
+          interpolation:depthVibeKeyInterpolation(property,i,"out")};
+        var metadata = depthVibeKeyframeMetadata(property,i);
+        for (var key in metadata) if (metadata.hasOwnProperty(key) && metadata[key] !== null) frame[key] = metadata[key];
+        frames.push(frame);
       } catch (_) {}
     }
     return frames;
