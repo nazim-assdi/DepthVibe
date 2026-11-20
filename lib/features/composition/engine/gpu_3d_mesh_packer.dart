@@ -141,13 +141,11 @@ class GpuMeshVertexData {
     this.baseColorTextureHeight = 0,
   });
 
-  static const empty = GpuMeshVertexData(
-    bytes: _emptyBytes,
+  static final empty = GpuMeshVertexData(
+    bytes: Uint8List(0),
     vertexCount: 0,
     canRenderBaseColorTextures: true,
   );
-
-  static final Uint8List _emptyBytes = Uint8List(0);
 
   final Uint8List bytes;
   final int vertexCount;
