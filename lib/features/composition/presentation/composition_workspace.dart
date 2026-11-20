@@ -1293,7 +1293,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         final estimatedLines = content.split('\n').fold<int>(
           0,
           (count, line) => count +
-              math.max(1, (line.length / approximateCharactersPerLine).ceil()),
+              math.max(1, (line.length / approximateCharactersPerLine).ceil()).toInt(),
         );
         baseHeight = math.max(
           180.0,
