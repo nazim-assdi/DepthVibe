@@ -11,6 +11,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../app/depthvibe_brand_mark.dart';
+import '../../../app/depthvibe_settings.dart';
+import '../../../app/depthvibe_settings_dialog.dart';
 import '../application/composition_controller.dart';
 import '../../fonts/data/font_manager_service.dart';
 import '../../fonts/presentation/font_manager_dialog.dart';
@@ -218,6 +221,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   void _onExtensionsChanged() {
     if (mounted) setState(() {});
   }
+
+  Future<void> _openSettings() => DepthVibeSettingsDialog.show(context);
 
   Future<void> _openFontManager() async {
     await showDialog<void>(
@@ -855,14 +860,27 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         final layer = _selected;
         return Scaffold(
           appBar: AppBar(
-            title: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            title: const Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text('DEPTHVIBE COMPOSITOR', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
-                Text('Layers • Masks • Parent • Keyframes • 3D', style: TextStyle(fontSize: 10)),
+                DepthVibeBrandMark(size: 34),
+                SizedBox(width: 14),
+                Text(
+                  'COMPOSITOR',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.15,
+                  ),
+                ),
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: 'Settings · View and appearance',
+                onPressed: _openSettings,
+                icon: const Icon(Icons.settings_outlined),
+              ),
               IconButton(
                 tooltip: 'Undo',
                 onPressed: _controller.canUndo ? _controller.undo : null,
@@ -977,8 +995,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                  color: const Color(0xFF101722),
-                  child: Text(_notice!, style: const TextStyle(fontSize: 11, color: Color(0xFF9DABC2))),
+                  color: palette.toolbar,
+                  child: Text(_notice!, style: TextStyle(fontSize: 11, color: palette.secondaryText)),
                 ),
             ],
           ),
@@ -1017,10 +1035,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
   Widget _buildLayerPanel(List<CompositionLayer> layers) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF101722),
-        border: Border(right: BorderSide(color: Color(0xFF29354A))),
+      decoration: BoxDecoration(
+        color: palette.panel,
+        border: Border(right: BorderSide(color: palette.border)),
       ),
       child: Column(
         children: [
@@ -1058,7 +1077,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     right: 8,
                   ),
                   selected: selected,
-                  selectedTileColor: const Color(0xFF263553),
+                  selectedTileColor: palette.accentSoft,
                   leading: Icon(
                     layer.kind == LayerKind.precomposition
                         ? Icons.folder_open
@@ -1095,8 +1114,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
   Widget _buildCanvas(CompositionDocument doc, CompositionLayer? selected) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
-      color: const Color(0xFF080C13),
+      color: palette.appBackground,
       padding: const EdgeInsets.all(18),
       child: Column(
         children: [
@@ -1500,19 +1520,23 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
   Widget _toolChip(String label, IconData icon, bool active, {VoidCallback? onTap}) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return ActionChip(
       avatar: Icon(icon, size: 14),
       label: Text(label),
       onPressed: onTap ?? () => setState(() => _notice = '$label tool selected'),
-      backgroundColor: active ? const Color(0xFF394A7B) : const Color(0xFF1B2638),
+      backgroundColor: active ? palette.accentSoft : palette.panelRaised,
+      side: BorderSide(color: active ? palette.accent : palette.border),
+      labelStyle: TextStyle(color: palette.primaryText, fontWeight: FontWeight.w700),
     );
   }
 
   Widget _buildActivePanel(CompositionLayer? layer) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF101722),
-        border: Border(left: BorderSide(color: Color(0xFF29354A))),
+      decoration: BoxDecoration(
+        color: palette.panel,
+        border: Border(left: BorderSide(color: palette.border)),
       ),
       child: Column(
         children: [
@@ -1529,7 +1553,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ],
             ),
           ),
-          const Divider(height: 1, color: Color(0xFF29354A)),
+          Divider(height: 1, color: palette.border),
           Expanded(
             child: layer == null
                 ? _panel == 'Bus Mixer'
@@ -4494,12 +4518,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
   Widget _buildTimeline(List<CompositionLayer> layers, int playhead, int duration) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
       height: 212,
       padding: const EdgeInsets.all(10),
-      decoration: const BoxDecoration(
-        color: Color(0xFF101722),
-        border: Border(top: BorderSide(color: Color(0xFF29354A))),
+      decoration: BoxDecoration(
+        color: palette.toolbar,
+        border: Border(top: BorderSide(color: palette.border)),
       ),
       child: Column(
         children: [
@@ -4750,13 +4775,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
   Widget _panelHeader(String label, IconData icon) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          Icon(icon, size: 15, color: const Color(0xFFA9B5FF)),
+          Icon(icon, size: 15, color: palette.accent),
           const SizedBox(width: 7),
-          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
+          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.1, color: palette.secondaryText)),
         ],
       ),
     );
