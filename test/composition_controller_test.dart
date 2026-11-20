@@ -654,6 +654,13 @@ void main() {
       expect(layer.textAlign, 'center');
       expect(layer.textBoxWidth, 1440);
 
+      controller.updateTextLayer(
+        textFontFamily: 'Arial',
+        clearTextFontAsset: true,
+      );
+      expect(controller.selectedLayer!.textFontFamily, 'Arial');
+      expect(controller.selectedLayer!.textFontAssetUri, isNull);
+
       controller.updateTextLayer(clearTextFont: true);
       expect(controller.selectedLayer!.textFontFamily, isNull);
       expect(controller.selectedLayer!.textFontAssetUri, isNull);
