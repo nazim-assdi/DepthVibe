@@ -7,6 +7,9 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../app/depthvibe_brand_mark.dart';
+import '../../../app/depthvibe_settings.dart';
+import '../../../app/depthvibe_settings_dialog.dart';
 import '../../../features/composition/presentation/composition_workspace.dart';
 import '../../../features/extensions/presentation/extension_manager_screen.dart';
 import '../../fonts/presentation/font_manager_dialog.dart';
@@ -77,6 +80,8 @@ class _EditorScreenState extends State<EditorScreen> {
       _status = 'Media loaded';
     });
   }
+
+  Future<void> _openSettings() => DepthVibeSettingsDialog.show(context);
 
   Future<void> _openFontManager() async {
     await showDialog<void>(
@@ -208,15 +213,16 @@ class _EditorScreenState extends State<EditorScreen> {
     required VoidCallback? onPressed,
     bool primary = false,
   }) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return OutlinedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: 18),
       label: Text(label),
       style: OutlinedButton.styleFrom(
-        foregroundColor: primary ? Colors.white : const Color(0xFFD8DEEA),
-        backgroundColor: primary ? const Color(0xFF6F7DFF) : const Color(0xFF151D2B),
+        foregroundColor: primary ? Colors.white : palette.primaryText,
+        backgroundColor: primary ? palette.accent : palette.panelRaised,
         side: BorderSide(
-          color: primary ? const Color(0xFF6F7DFF) : const Color(0xFF2A3549),
+          color: primary ? palette.accent : palette.border,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       ),
@@ -275,16 +281,21 @@ class _EditorScreenState extends State<EditorScreen> {
             ),
             if (_exporting) _buildExportProgress(),
             if (_status != null)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                color: const Color(0xFF0E1520),
+              Builder(
+                builder: (context) {
+                  final palette = Theme.of(context).extension<DepthVibePalette>()!;
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                    color: palette.toolbar,
                 child: Text(
                   _status!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF9BA9C0), fontSize: 11),
-                ),
+                    style: TextStyle(color: palette.secondaryText, fontSize: 11),
+                  ),
+                );
+                },
               ),
             _buildFooter(),
           ],
@@ -294,33 +305,16 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   Widget _buildTopBar() {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      decoration: const BoxDecoration(
-        color: Color(0xFF101722),
-        border: Border(bottom: BorderSide(color: Color(0xFF273247))),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      decoration: BoxDecoration(
+        color: palette.toolbar,
+        border: Border(bottom: BorderSide(color: palette.border)),
       ),
       child: Row(
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(11),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF7183FF), Color(0xFF9C68E8)],
-              ),
-            ),
-            child: const Icon(Icons.view_in_ar, color: Colors.white),
-          ),
-          const SizedBox(width: 11),
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('DEPTHVIBE', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
-              Text('N TECH CREATIVE STUDIO', style: TextStyle(fontSize: 9, color: Color(0xFF8F9CB2), letterSpacing: 1)),
-            ],
-          ),
+          const DepthVibeBrandMark(size: 40),
           const Spacer(),
           if (MediaQuery.sizeOf(context).width > 700)
             const Text('VIDEO STUDIO  /  PRO WORKSPACE', style: TextStyle(color: Color(0xFF8795AD), fontSize: 10, letterSpacing: 1)),
@@ -373,6 +367,11 @@ class _EditorScreenState extends State<EditorScreen> {
                     ),
           ),
           const SizedBox(width: 8),
+          IconButton(
+            tooltip: 'Settings · View and appearance',
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings_outlined),
+          ),
           _toolButton(
             icon: Icons.ios_share,
             label: 'Export MP4',
@@ -611,22 +610,24 @@ class _EditorScreenState extends State<EditorScreen> {
       ],
     );
 
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: const BoxDecoration(
-        color: Color(0xFF101722),
-        border: Border(left: BorderSide(color: Color(0xFF273247))),
+      decoration: BoxDecoration(
+        color: palette.panel,
+        border: Border(left: BorderSide(color: palette.border)),
       ),
       child: scrollable ? SingleChildScrollView(child: content) : content,
     );
   }
 
   Widget _sectionTitle(String title, IconData icon) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Row(
       children: [
-        Icon(icon, size: 15, color: const Color(0xFF8998B2)),
+        Icon(icon, size: 15, color: palette.secondaryText),
         const SizedBox(width: 7),
-        Text(title, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.1, color: Color(0xFF8998B2))),
+        Text(title, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.1, color: palette.secondaryText)),
       ],
     );
   }
