@@ -1645,7 +1645,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final selectedFamily = layer.textFontFamily ?? '';
     final colorText = layer.textColor;
     final normalizedWeight = (layer.textFontWeight / 100).round()
-        .clamp(1, 9) * 100;
+        .clamp(1, 9).toInt() * 100;
 
     Widget numericField(
       String label,
