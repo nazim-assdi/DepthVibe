@@ -111,7 +111,7 @@ class FfmpegFilterCompiler {
       String number(double value) => value.toStringAsFixed(3);
       if (animatedWheels) {
         String expression(String key) =>
-            parameterExpression(key, timeVariable: 't');
+            parameterExpression(key, timeVariable: 'T');
         String channelExpression(String channel) {
           final luma =
               '((0.2126*r(X,Y)+0.7152*g(X,Y)+0.0722*b(X,Y))/255)';
