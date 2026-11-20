@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image/image.dart' as img;
+import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -19,9 +21,13 @@ import '../engine/scene_mesh_loader.dart';
 import '../engine/software_3d_renderer.dart';
 import '../engine/gpu_3d_mesh_view.dart';
 import '../engine/audio_waveform_service.dart';
+import '../engine/color_grade_preview.dart';
+import '../engine/cube_lut_validator.dart';
 import '../engine/motion_tracking_service.dart';
 import '../engine/transition_frame_validator.dart';
 import 'color_wheel_control.dart';
+import 'color_curve_editor.dart';
+import 'color_scopes_view.dart';
 
 class CompositionWorkspace extends StatefulWidget {
   const CompositionWorkspace({super.key});
@@ -37,13 +43,89 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
   final MotionTrackingService _tracker = const MotionTrackingService();
   final AudioWaveformService _waveformService = const AudioWaveformService();
   final Map<String, Future<File?>> _waveformJobs = {};
+  final Map<String, Future<File?>> _videoFrameJobs = {};
+  final Map<String, Future<img.Image?>> _scopeImageJobs = {};
   final Map<String, Future<ObjMesh>> _meshJobs = {};
+  String _curveChannel = 'master';
 
   Future<File?> _waveformFor(String path) =>
       _waveformJobs.putIfAbsent(path, () => _waveformService.generate(path));
 
   Future<ObjMesh> _meshFor(String path) =>
       _meshJobs.putIfAbsent(path, () => const SceneMeshLoader().load(path));
+
+  String _quoteFfmpeg(String value) =>
+      "'" + value.replaceAll("'", "'\\''") + "'";
+
+  Future<File?> _videoFrameFor(
+    CompositionLayer layer,
+    int timelineTimeMs,
+    double frameRate,
+  ) {
+    final path = layer.sourceUri;
+    if (path == null || path.isEmpty || frameRate <= 0) {
+      return Future<File?>.value(null);
+    }
+    final sourceTimeMs = math.max(
+      0,
+      layer.sourceInMs + timelineTimeMs - layer.startMs,
+    );
+    final frameIndex = (sourceTimeMs * frameRate / 1000).floor();
+    final seekMs = (frameIndex * 1000 / frameRate).round();
+    final key = '${path}_${frameIndex}_${frameRate.toStringAsFixed(3)}';
+    return _videoFrameJobs.putIfAbsent(key, () async {
+      if (!await File(path).exists()) return null;
+      final temporary = await getTemporaryDirectory();
+      final frame = File(
+        temporary.path + Platform.pathSeparator +
+            'depthvibe_preview_${key.hashCode.toUnsigned(32).toRadixString(16)}.png',
+      );
+      if (await frame.exists() && await frame.length() > 0) return frame;
+      final command = '-hide_banner -loglevel error -y -ss ' +
+          (seekMs / 1000).toStringAsFixed(3) +
+          ' -i ' + _quoteFfmpeg(path) +
+          ' -frames:v 1 -vf scale=960:540:force_original_aspect_ratio=decrease,'
+          'pad=960:540:(ow-iw)/2:(oh-ih)/2 -an ' +
+          _quoteFfmpeg(frame.path);
+      final session = await FFmpegKit.execute(command);
+      if (!ReturnCode.isSuccess(session.getReturnCode()) ||
+          !await frame.exists() ||
+          await frame.length() == 0) {
+        return null;
+      }
+      return frame;
+    });
+  }
+
+  Future<img.Image?> _scopeImageFor(
+    CompositionLayer layer,
+    int timelineTimeMs,
+    double frameRate,
+  ) {
+    final path = layer.sourceUri;
+    if (path == null || path.isEmpty) return Future<img.Image?>.value(null);
+    final frame = layer.kind == LayerKind.video
+        ? (timelineTimeMs < layer.startMs || timelineTimeMs >= layer.endMs
+            ? -1
+            : ((layer.sourceInMs + timelineTimeMs - layer.startMs) *
+                    frameRate /
+                    1000)
+                .floor())
+        : 0;
+    final key = '${path}_scope_${frame}_${frameRate.toStringAsFixed(3)}';
+    return _scopeImageJobs.putIfAbsent(key, () async {
+      File? source;
+      if (layer.kind == LayerKind.video) {
+        if (frame < 0) return null;
+        source = await _videoFrameFor(layer, timelineTimeMs, frameRate);
+      } else {
+        source = File(path);
+      }
+      if (source == null || !await source.exists()) return null;
+      return img.decodeImage(await source.readAsBytes());
+    });
+  }
+
   bool _tracking = false;
   double _trackingLeft = 100;
   double _trackingTop = 100;
