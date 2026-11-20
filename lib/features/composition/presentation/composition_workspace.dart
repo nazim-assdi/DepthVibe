@@ -73,7 +73,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     final frameIndex = (sourceTimeMs * frameRate / 1000).floor();
     final seekMs = (frameIndex * 1000 / frameRate).round();
     final key = '${path}_${frameIndex}_${frameRate.toStringAsFixed(3)}';
-    return _videoFrameJobs.putIfAbsent(key, () async {
+    final frameJob = _videoFrameJobs.putIfAbsent(key, () async {
       if (!await File(path).exists()) return null;
       final temporary = await getTemporaryDirectory();
       final frame = File(
@@ -108,6 +108,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       }
       return frame;
     });
+    return frameJob.then(
+      (frame) {
+        if (frame == null) _videoFrameJobs.remove(key);
+        return frame;
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        _videoFrameJobs.remove(key);
+        Error.throwWithStackTrace(error, stackTrace);
+      },
+    );
   }
 
   Future<img.Image?> _scopeImageFor(
