@@ -130,8 +130,11 @@ class CompositionExportService {
     await outputDirectory.create(recursive: true);
     final name = 'Composition_' +
         DateTime.now().toIso8601String().replaceAll(':', '-');
+    final outputExtension = document.colorOutputProfile == ColorOutputProfile.rec709
+        ? '.mp4'
+        : '.mov';
     final output = File(
-      outputDirectory.path + Platform.pathSeparator + name + '.mp4',
+      outputDirectory.path + Platform.pathSeparator + name + outputExtension,
     );
     final meshTempDirectory = Directory(
       outputDirectory.path + Platform.pathSeparator + '.mesh-render-' +
@@ -178,7 +181,7 @@ class CompositionExportService {
       ));
       await completion.future.timeout(const Duration(hours: 3));
       if (!await output.exists() || await output.length() == 0) {
-        throw StateError('FFmpeg completed without producing an MP4 file.');
+        throw StateError('FFmpeg completed without producing an output file.');
       }
       if (await meshTempDirectory.exists()) {
         await meshTempDirectory.delete(recursive: true);
@@ -609,7 +612,21 @@ class CompositionExportService {
       }
     }
 
-    filters.add('[' + previous + ']format=yuv420p[vout]');
+    final outputProfile = document.colorOutputProfile;
+    if (outputProfile == ColorOutputProfile.rec709) {
+      filters.add('[' + previous + ']format=yuv420p[vout]');
+    } else {
+      final transfer = outputProfile == ColorOutputProfile.hdr10Pq
+          ? 'smpte2084'
+          : 'arib-std-b67';
+      filters.add(
+        '[' + previous + ']zscale='
+        'primariesin=bt709:transferin=bt709:matrixin=bt709:'
+        'primaries=bt2020:transfer=' + transfer +
+        ':matrix=bt2020nc:range=limited:npl=1000,'
+        'format=yuv422p10le[vout]',
+      );
+    }
     if (audioSources.isNotEmpty) {
       _appendAudioMix(
         filters: filters,
@@ -627,7 +644,18 @@ class CompositionExportService {
       buffer.write('-map "[aout]" -c:a aac -b:a 192k ');
     }
     buffer.write('-t ' + total + ' -r ' + document.frameRate.toString() + ' ');
-    buffer.write('-c:v mpeg4 -q:v 3 -pix_fmt yuv420p -movflags +faststart ');
+    if (outputProfile == ColorOutputProfile.rec709) {
+      buffer.write('-c:v mpeg4 -q:v 3 -pix_fmt yuv420p -movflags +faststart ');
+    } else {
+      final transfer = outputProfile == ColorOutputProfile.hdr10Pq
+          ? 'smpte2084'
+          : 'arib-std-b67';
+      buffer.write(
+        '-c:v prores_ks -profile:v 3 -vendor apl0 -pix_fmt yuv422p10le '
+        '-color_primaries bt2020 -color_trc ' + transfer +
+        ' -colorspace bt2020nc ',
+      );
+    }
     buffer.write(_quote(outputPath));
     return buffer.toString();
   }
