@@ -1,4 +1,5 @@
 import '../domain/composition_models.dart';
+import '../data/transition_catalog.dart';
 
 /// Translates native timeline curves into per-frame FFmpeg expressions.
 class FfmpegAnimationCompiler {
@@ -406,6 +407,20 @@ class FfmpegAnimationCompiler {
                 : '(' + magnitude.toString() + '*' + progress + ')';
           }
           break;
+        case TransitionKind.slideUp:
+          if (axis == 'y') {
+            offset = incoming
+                ? '(' + magnitude.toString() + '*(1-' + progress + '))'
+                : '(-' + magnitude.toString() + '*' + progress + ')';
+          }
+          break;
+        case TransitionKind.slideDown:
+          if (axis == 'y') {
+            offset = incoming
+                ? '(-' + magnitude.toString() + '*(1-' + progress + '))'
+                : '(' + magnitude.toString() + '*' + progress + ')';
+          }
+          break;
         default:
           break;
       }
@@ -442,6 +457,7 @@ class FfmpegAnimationCompiler {
     }
     return switch (item.kind) {
       TransitionKind.slideLeft || TransitionKind.slideRight ||
+      TransitionKind.slideUp || TransitionKind.slideDown ||
       TransitionKind.zoomIn || TransitionKind.zoomOut => '1',
       TransitionKind.wipeLeft =>
         'if(lt(T,' + _n(start) + '),0,if(gt(T,' + _n(end) + '),1,if(lt(X,W*' + p + '),1,0)))',
@@ -468,6 +484,7 @@ class FfmpegAnimationCompiler {
     }
     return switch (item.kind) {
       TransitionKind.slideLeft || TransitionKind.slideRight ||
+      TransitionKind.slideUp || TransitionKind.slideDown ||
       TransitionKind.zoomIn || TransitionKind.zoomOut => '1',
       TransitionKind.wipeLeft =>
         'if(lt(T,' + _n(start) + '),1,if(gt(T,' + _n(end) + '),0,if(lt(X,W*' + p + '),0,1)))',

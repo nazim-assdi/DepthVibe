@@ -70,18 +70,22 @@ enum LightKind { ambient, directional, point, spot, area }
 enum Interpolation { hold, linear, easeIn, easeOut, easeInOut, cubicBezier }
 
 enum TransitionKind {
-  dissolve,
-  fadeThroughColor,
-  wipeLeft,
-  wipeRight,
-  wipeUp,
-  wipeDown,
-  slideLeft,
-  slideRight,
-  zoomIn,
-  zoomOut,
-  blur,
-  luma,
+  dissolve, fadeThroughColor,
+  wipeLeft, wipeRight, wipeUp, wipeDown,
+  slideLeft, slideRight, slideUp, slideDown,
+  zoomIn, zoomOut, blur, luma,
+  circleCrop, rectangleCrop, distance, fadeBlack, fadeWhite, radial,
+  smoothLeft, smoothRight, smoothUp, smoothDown,
+  circleOpen, circleClose, verticalOpen, verticalClose,
+  horizontalOpen, horizontalClose, pixelize,
+  diagonalTopLeft, diagonalTopRight, diagonalBottomLeft, diagonalBottomRight,
+  horizontalLeftSlice, horizontalRightSlice, verticalUpSlice, verticalDownSlice,
+  horizontalBlur, fadeGrays,
+  wipeTopLeft, wipeTopRight, wipeBottomLeft, wipeBottomRight,
+  squeezeHorizontal, squeezeVertical, fadeFast, fadeSlow,
+  horizontalLeftWind, horizontalRightWind, verticalUpWind, verticalDownWind,
+  coverLeft, coverRight, coverUp, coverDown,
+  revealLeft, revealRight, revealUp, revealDown,
 }
 
 enum AudioDuckingRole { none, background, trigger }
@@ -1106,6 +1110,8 @@ class CompositionTransition {
     this.kind = TransitionKind.dissolve,
     this.durationMs = 500,
     this.startMs = 0,
+    this.externalMatchName,
+    this.metadata = const {},
   });
 
   final String id;
@@ -1114,11 +1120,17 @@ class CompositionTransition {
   final TransitionKind kind;
   final int durationMs;
   final int startMs;
+  /// Native Premiere/After Effects transition identifier, when imported.
+  final String? externalMatchName;
+  /// Original host transition descriptor retained for future round-trips.
+  final Map<String, Object?> metadata;
 
   CompositionTransition copyWith({
     TransitionKind? kind,
     int? durationMs,
     int? startMs,
+    String? externalMatchName,
+    Map<String, Object?>? metadata,
   }) => CompositionTransition(
     id: id,
     fromLayerId: fromLayerId,
@@ -1126,6 +1138,8 @@ class CompositionTransition {
     kind: kind ?? this.kind,
     durationMs: durationMs ?? this.durationMs,
     startMs: startMs ?? this.startMs,
+    externalMatchName: externalMatchName ?? this.externalMatchName,
+    metadata: metadata ?? this.metadata,
   );
 }
 

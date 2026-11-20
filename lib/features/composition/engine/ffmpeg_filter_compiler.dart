@@ -1,5 +1,6 @@
 import '../data/effect_catalog.dart';
 import '../domain/composition_models.dart';
+import '../data/transition_catalog.dart';
 import 'ffmpeg_animation_compiler.dart';
 
 class FfmpegFilterCompiler {
@@ -272,6 +273,36 @@ class FfmpegFilterCompiler {
       'stabilize' => 'deshake',
       'posterize' => _compilePosterize(p['levels'] ?? 6),
       'color_balance' => 'colorbalance=rs=${number(p['red'] ?? 0)}:gs=${number(p['green'] ?? 0)}:bs=${number(p['blue'] ?? 0)}',
+      'exposure' => 'exposure=exposure=' + number(p['value'] ?? 0) + ':black=' + number(p['black'] ?? 0),
+      'hue_rotate' => 'hue=h=' + number((p['degrees'] ?? 0) * 0.017453292519943295),
+      'colorize' => 'colorize=hue=' + number(p['hue'] ?? 210) +
+          ':saturation=' + number(p['saturation'] ?? 0.65) +
+          ':lightness=' + number(p['lightness'] ?? 0) + ':mix=' + number(p['mix'] ?? 0.5),
+      'directional_blur' || 'radial_blur' =>
+          'dblur=angle=' + number(p['angle'] ?? 0) + ':radius=' + number(p['radius'] ?? 8),
+      'average_blur' => 'avgblur=sizeX=' + (p['size'] ?? 5).round().toString() +
+          ':sizeY=' + (p['size'] ?? 5).round().toString(),
+      'chroma_denoise' => 'chromanr=thres=' + number(p['threshold'] ?? 0.08) +
+          ':sizew=' + (p['window'] ?? 3).round().toString() +
+          ':sizeh=' + (p['window'] ?? 3).round().toString(),
+      'deband' => 'deband=1thr=' + number(p['threshold'] ?? 0.02) +
+          ':2thr=' + number(p['threshold'] ?? 0.02) +
+          ':3thr=' + number(p['threshold'] ?? 0.02) +
+          ':4thr=' + number(p['threshold'] ?? 0.02) +
+          ':range=' + (p['range'] ?? 16).round().toString(),
+      'deflicker' => 'deflicker=mode=am:size=' + (p['size'] ?? 10).round().toString(),
+      'scanlines' => 'drawgrid=w=iw:h=' + (p['spacing'] ?? 4).round().toString() +
+          ':t=' + (p['thickness'] ?? 1).round().toString() + ':c=black@' + number(p['opacity'] ?? 0.25),
+      'rgb_split' => 'chromashift=cbh=' + number(p['shift'] ?? 4) + ':crh=-' + number(p['shift'] ?? 4),
+      'posterize_time' => 'fps=fps=' + number(p['fps'] ?? 12),
+      'echo_trails' => 'tmix=frames=' + (p['frames'] ?? 4).round().toString(),
+      'vhs_warp' => 'chromashift=cbh=' + number(p['shift'] ?? 3) +
+          ':crh=-' + number(p['shift'] ?? 3) +
+          ',noise=alls=' + number(p['noise'] ?? 18) + ':allf=t',
+      'fisheye' => 'lenscorrection=k1=' + number(p['strength'] ?? 0.35) + ':k2=0',
+      'noise_reduction' => 'hqdn3d=' + number(p['luma'] ?? 1.5) +
+          ':' + number(p['chroma'] ?? 2) + ':' + number(p['temporal'] ?? 3) +
+          ':' + number((p['temporal'] ?? 3) * 0.5),
       _ => null,
     };
   }
@@ -293,20 +324,7 @@ class FfmpegFilterCompiler {
   String? compileTransition(CompositionTransition transition) {
     final duration = (transition.durationMs / 1000).toStringAsFixed(3);
     final offset = (transition.startMs / 1000).toStringAsFixed(3);
-    final name = switch (transition.kind) {
-      TransitionKind.dissolve => 'fade',
-      TransitionKind.fadeThroughColor => 'fade',
-      TransitionKind.wipeLeft => 'wipeleft',
-      TransitionKind.wipeRight => 'wiperight',
-      TransitionKind.wipeUp => 'wipeup',
-      TransitionKind.wipeDown => 'wipedown',
-      TransitionKind.slideLeft => 'slideleft',
-      TransitionKind.slideRight => 'slideright',
-      TransitionKind.zoomIn => 'zoomin',
-      TransitionKind.zoomOut => 'smoothleft',
-      TransitionKind.blur => 'fadeblack',
-      TransitionKind.luma => 'circleopen',
-    };
+    final name = TransitionCatalog.xfadeName(transition.kind);
     return 'xfade=transition=$name:duration=$duration:offset=$offset';
   }
 }

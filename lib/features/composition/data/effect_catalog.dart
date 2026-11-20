@@ -349,6 +349,134 @@ class EffectCatalog {
       ],
       ffmpegFilter: 'colorbalance,eq',
     ),
+
+    EffectDefinition(
+      id: 'exposure', name: 'Exposure', category: 'Color',
+      description: 'Adjust exposure in photographic EV stops.',
+      parameters: [
+        EffectParameterDefinition(id: 'value', label: 'Exposure', min: -3, max: 3, defaultValue: 0, unit: ' EV'),
+        EffectParameterDefinition(id: 'black', label: 'Black level', min: -0.1, max: 0.1, defaultValue: 0),
+      ],
+      ffmpegFilter: 'exposure',
+    ),
+    EffectDefinition(
+      id: 'hue_rotate', name: 'Hue Rotate', category: 'Color',
+      description: 'Rotate all hues around the colour wheel.',
+      parameters: [EffectParameterDefinition(id: 'degrees', label: 'Hue', min: -180, max: 180, defaultValue: 0, unit: '°')],
+      ffmpegFilter: 'hue',
+    ),
+    EffectDefinition(
+      id: 'colorize', name: 'Colorize', category: 'Color',
+      description: 'Tint footage with a selectable hue.',
+      parameters: [
+        EffectParameterDefinition(id: 'hue', label: 'Hue', min: 0, max: 360, defaultValue: 210, unit: '°'),
+        EffectParameterDefinition(id: 'saturation', label: 'Saturation', min: 0, max: 1, defaultValue: 0.65),
+        EffectParameterDefinition(id: 'lightness', label: 'Lightness', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'mix', label: 'Mix', min: 0, max: 1, defaultValue: 0.5),
+      ],
+      ffmpegFilter: 'colorize',
+    ),
+    EffectDefinition(
+      id: 'directional_blur', name: 'Directional Blur', category: 'Blur & Sharpen',
+      description: 'Create streaking blur along a chosen direction.',
+      parameters: [
+        EffectParameterDefinition(id: 'angle', label: 'Angle', min: -180, max: 180, defaultValue: 0, unit: '°'),
+        EffectParameterDefinition(id: 'radius', label: 'Radius', min: 0, max: 50, defaultValue: 8, unit: 'px'),
+      ],
+      ffmpegFilter: 'dblur',
+    ),
+    EffectDefinition(
+      id: 'average_blur', name: 'Average Blur', category: 'Blur & Sharpen',
+      description: 'Apply a fast averaging blur.',
+      parameters: [EffectParameterDefinition(id: 'size', label: 'Kernel size', min: 1, max: 30, defaultValue: 5, unit: 'px')],
+      ffmpegFilter: 'avgblur',
+    ),
+    EffectDefinition(
+      id: 'chroma_denoise', name: 'Chroma Denoise', category: 'Noise Reduction',
+      description: 'Reduce chroma noise while retaining luminance detail.',
+      parameters: [
+        EffectParameterDefinition(id: 'threshold', label: 'Threshold', min: 0.01, max: 2, defaultValue: 0.08),
+        EffectParameterDefinition(id: 'window', label: 'Window', min: 1, max: 10, defaultValue: 3),
+      ],
+      ffmpegFilter: 'chromanr',
+    ),
+    EffectDefinition(
+      id: 'deband', name: 'Deband', category: 'Noise Reduction',
+      description: 'Reduce visible colour banding in gradients.',
+      parameters: [
+        EffectParameterDefinition(id: 'threshold', label: 'Threshold', min: 0.00003, max: 0.2, defaultValue: 0.02),
+        EffectParameterDefinition(id: 'range', label: 'Range', min: 1, max: 32, defaultValue: 16),
+      ],
+      ffmpegFilter: 'deband',
+    ),
+    EffectDefinition(
+      id: 'deflicker', name: 'Deflicker', category: 'Cleanup',
+      description: 'Smooth unwanted frame-to-frame brightness flicker.',
+      parameters: [EffectParameterDefinition(id: 'size', label: 'Window size', min: 2, max: 129, defaultValue: 10)],
+      ffmpegFilter: 'deflicker',
+    ),
+    EffectDefinition(
+      id: 'scanlines', name: 'Scanlines', category: 'Stylize',
+      description: 'Overlay horizontal CRT-style scanlines.',
+      parameters: [
+        EffectParameterDefinition(id: 'spacing', label: 'Line spacing', min: 2, max: 32, defaultValue: 4, unit: 'px'),
+        EffectParameterDefinition(id: 'thickness', label: 'Thickness', min: 1, max: 8, defaultValue: 1, unit: 'px'),
+        EffectParameterDefinition(id: 'opacity', label: 'Opacity', min: 0, max: 1, defaultValue: 0.25),
+      ],
+      ffmpegFilter: 'drawgrid',
+    ),
+    EffectDefinition(
+      id: 'rgb_split', name: 'RGB Split', category: 'Stylize',
+      description: 'Separate colour channels for a chromatic-fringe effect.',
+      parameters: [EffectParameterDefinition(id: 'shift', label: 'Channel offset', min: 0, max: 24, defaultValue: 4, unit: 'px')],
+      ffmpegFilter: 'chromashift',
+    ),
+    EffectDefinition(
+      id: 'posterize_time', name: 'Posterize Time', category: 'Motion',
+      description: 'Reduce the effective frame rate for stepped motion.',
+      parameters: [EffectParameterDefinition(id: 'fps', label: 'Posterized FPS', min: 2, max: 60, defaultValue: 12)],
+      ffmpegFilter: 'fps',
+    ),
+    EffectDefinition(
+      id: 'echo_trails', name: 'Echo Trails', category: 'Motion',
+      description: 'Blend recent frames to create motion trails.',
+      parameters: [EffectParameterDefinition(id: 'frames', label: 'Trail samples', min: 2, max: 12, defaultValue: 4)],
+      ffmpegFilter: 'tmix',
+    ),
+    EffectDefinition(
+      id: 'vhs_warp', name: 'VHS Warp', category: 'Stylize',
+      description: 'Combine chroma separation and analogue noise.',
+      parameters: [
+        EffectParameterDefinition(id: 'shift', label: 'Chroma shift', min: 0, max: 16, defaultValue: 3, unit: 'px'),
+        EffectParameterDefinition(id: 'noise', label: 'Tape noise', min: 0, max: 100, defaultValue: 18),
+      ],
+      ffmpegFilter: 'chromashift,noise',
+    ),
+    EffectDefinition(
+      id: 'fisheye', name: 'Fisheye', category: 'Lens',
+      description: 'Apply radial lens distortion.',
+      parameters: [EffectParameterDefinition(id: 'strength', label: 'Distortion', min: -1, max: 1, defaultValue: 0.35)],
+      ffmpegFilter: 'lenscorrection',
+    ),
+    EffectDefinition(
+      id: 'radial_blur', name: 'Radial Blur', category: 'Blur & Sharpen',
+      description: 'Create radial directional streaking.',
+      parameters: [
+        EffectParameterDefinition(id: 'angle', label: 'Angle', min: -180, max: 180, defaultValue: 0, unit: '°'),
+        EffectParameterDefinition(id: 'radius', label: 'Radius', min: 0, max: 50, defaultValue: 12, unit: 'px'),
+      ],
+      ffmpegFilter: 'dblur',
+    ),
+    EffectDefinition(
+      id: 'noise_reduction', name: 'Spatial Noise Reduction', category: 'Noise Reduction',
+      description: 'Reduce luma and chroma noise using a spatial/temporal denoiser.',
+      parameters: [
+        EffectParameterDefinition(id: 'luma', label: 'Luma strength', min: 0, max: 12, defaultValue: 1.5),
+        EffectParameterDefinition(id: 'chroma', label: 'Chroma strength', min: 0, max: 12, defaultValue: 2),
+        EffectParameterDefinition(id: 'temporal', label: 'Temporal strength', min: 0, max: 12, defaultValue: 3),
+      ],
+      ffmpegFilter: 'hqdn3d',
+    ),
   ];
 
   static final Map<String, EffectDefinition> _extensionEffects = {};
@@ -363,6 +491,10 @@ class EffectCatalog {
     'motion_blur', 'lens_distortion', 'chroma_key', 'luma_key',
     'stabilize', 'posterize', 'color_balance', 'color_curves',
     'color_lut', 'color_grade',
+    'exposure', 'hue_rotate', 'colorize', 'directional_blur',
+    'average_blur', 'chroma_denoise', 'deband', 'deflicker',
+    'scanlines', 'rgb_split', 'posterize_time', 'echo_trails',
+    'vhs_warp', 'fisheye', 'radial_blur', 'noise_reduction',
   };
 
   static List<EffectDefinition> get allEffects =>
