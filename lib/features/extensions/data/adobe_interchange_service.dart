@@ -119,6 +119,7 @@ class AdobeInterchangeService {
         enabled:_b(raw['enabled'],true),solo:_b(raw['solo']),locked:_b(raw['locked']),sourceUri:path,
         sourceWidth:_i(raw['sourceWidth']??source['width']),sourceHeight:_i(raw['sourceHeight']??source['height']),
         textContent:text.isEmpty?null:text,transform:_readTransform(_map(raw['transform'])),
+        keyframeTracks:_readKeyframeTracks(raw['keyframeTracks']),
         effects:mappedResult.effects,camera:kind==LayerKind.camera?const CameraSettings():null,
         light:kind==LayerKind.light?const LightSettings():null,
         externalSourceId:extId,externalSourceName:_s(source['name'],name),externalHostApp:_s(snap['hostApp']),
@@ -126,7 +127,8 @@ class AdobeInterchangeService {
         interchangeMetadata:{'hostApp':_s(snap['hostApp']),'matchName':match,'layerIndex':_i(raw['index'],index+1),
           'startTimeSeconds':startTime,'inPointSeconds':inPoint,'outPointSeconds':outPoint,
           'threeDLayer':_b(raw['threeDLayer']),'adjustmentLayer':_b(raw['adjustmentLayer']),
-          'nullLayer':_b(raw['nullLayer']),'sourcePath':path,'unsupportedEffects':mappedResult.rawUnsupported},
+          'nullLayer':_b(raw['nullLayer']),'sourcePath':path,'unsupportedEffects':mappedResult.rawUnsupported,
+          'expressions':_maps(raw['expressions'])},
       ));
       if(path==null&&[LayerKind.video,LayerKind.audio,LayerKind.image].contains(kind))warnings.add('Missing footage: '+name+' (use Relink).');
     }
@@ -140,6 +142,55 @@ class AdobeInterchangeService {
       width:_dim(comp['width'],1920),height:_dim(comp['height'],1080),frameRate:fps,
       durationMs:(compDuration>0?compDuration:maxEnd).clamp(1,86400000).toInt(),layers:linked),
       mappedEffects:mapped,unsupportedEffects:unsupported,warnings:warnings);
+  }
+
+  static Interpolation _interpolation(Object? raw) {
+    switch (_s(raw).toLowerCase()) {
+      case 'hold': return Interpolation.hold;
+      case 'cubicbezier':
+      case 'bezier': return Interpolation.cubicBezier;
+      case 'easein': return Interpolation.easeIn;
+      case 'easeout': return Interpolation.easeOut;
+      case 'easeinout': return Interpolation.easeInOut;
+      case 'linear':
+      default: return Interpolation.linear;
+    }
+  }
+  static List<ScalarKeyframe> _scalarKeyframes(Object? raw, {double Function(double)? mapValue}) {
+    final result = <ScalarKeyframe>[];
+    for (final item in _maps(raw).take(10000)) {
+      final value = _n(item['value']);
+      if (value == null) continue;
+      final ms = item['timeMs'] is num ? _i(item['timeMs']) : _ms(item['timeSeconds']);
+      final mapped = mapValue == null ? value : mapValue(value);
+      if (!mapped.isFinite) continue;
+      result.add(ScalarKeyframe(timeMs: ms, value: mapped,
+        interpolation: _interpolation(item['interpolation'])));
+    }
+    result.sort((a,b) => a.timeMs.compareTo(b.timeMs));
+    return result;
+  }
+  static List<KeyframeTrack> _readKeyframeTracks(Object? raw) {
+    final result = <KeyframeTrack>[];
+    for (final item in _maps(raw).take(256)) {
+      final property = _s(item['property']);
+      if (property.isEmpty) continue;
+      final frames = _scalarKeyframes(item['keyframes']);
+      if (frames.isNotEmpty) result.add(KeyframeTrack(property: property, keyframes: frames));
+    }
+    return result;
+  }
+  static List<KeyframeTrack> _effectKeyframeTracks(
+    List<Map<String,Object?>> properties, List<String> tokens, String targetProperty, {
+    double Function(double)? mapValue,
+  }) {
+    for (final property in properties) {
+      final label = (_s(property['matchName']) + ' ' + _s(property['name'])).toLowerCase();
+      if (!tokens.any(label.contains)) continue;
+      final frames = _scalarKeyframes(property['keyframes'], mapValue: mapValue);
+      if (frames.isNotEmpty) return [KeyframeTrack(property: targetProperty, keyframes: frames)];
+    }
+    return const [];
   }
 
   static LayerKind _aeKind(Map<String,Object?> raw,bool audioOnly){
@@ -173,20 +224,25 @@ class AdobeInterchangeService {
       final additions=<EffectInstance>[];
       if(lower.contains('gaussian blur')||lower.contains('fast blur')){
         additions.add(EffectInstance(id:'adobe_'+layerIndex.toString()+'_'+id.toString(),effectId:'gaussian_blur',name:'Gaussian Blur',
-          parameters:{'sigma':param(['blurriness','blur amount','radius'],2).clamp(0,30).toDouble()}));id++;
+          parameters:{'sigma':param(['blurriness','blur amount','radius'],2).clamp(0,30).toDouble()},
+          keyframeTracks:_effectKeyframeTracks(props,['blurriness','blur amount','radius'],'sigma',mapValue:(v)=>v.clamp(0,30).toDouble()),enabled:_b(raw['enabled'],true)));id++;
       }else if(lower.contains('brightness')&&lower.contains('contrast')){
         additions.add(EffectInstance(id:'adobe_'+layerIndex.toString()+'_'+id.toString(),effectId:'brightness',name:'Brightness',
-          parameters:{'value':(param(['brightness'],0)/100).clamp(-1,1).toDouble()}));id++;
+          parameters:{'value':(param(['brightness'],0)/100).clamp(-1,1).toDouble()},
+          keyframeTracks:_effectKeyframeTracks(props,['brightness'],'value',mapValue:(v)=>(v/100).clamp(-1,1).toDouble()),enabled:_b(raw['enabled'],true)));id++;
         additions.add(EffectInstance(id:'adobe_'+layerIndex.toString()+'_'+id.toString(),effectId:'contrast',name:'Contrast',
-          parameters:{'value':(1+param(['contrast'],0)/100).clamp(0,3).toDouble()}));id++;
+          parameters:{'value':(1+param(['contrast'],0)/100).clamp(0,3).toDouble()},
+          keyframeTracks:_effectKeyframeTracks(props,['contrast'],'value',mapValue:(v)=>(1+v/100).clamp(0,3).toDouble()),enabled:_b(raw['enabled'],true)));id++;
       }else if(lower.contains('sharpen')){
         additions.add(EffectInstance(id:'adobe_'+layerIndex.toString()+'_'+id.toString(),effectId:'sharpen',name:'Sharpen',
-          parameters:{'amount':param(['amount','sharpness'],1).clamp(0,5).toDouble()}));id++;
+          parameters:{'amount':param(['amount','sharpness'],1).clamp(0,5).toDouble()},
+          keyframeTracks:_effectKeyframeTracks(props,['amount','sharpness'],'amount',mapValue:(v)=>v.clamp(0,5).toDouble()),enabled:_b(raw['enabled'],true)));id++;
       }else if(lower.contains('invert')){
-        additions.add(EffectInstance(id:'adobe_'+layerIndex.toString()+'_'+id.toString(),effectId:'invert',name:'Invert'));id++;
+        additions.add(EffectInstance(id:'adobe_'+layerIndex.toString()+'_'+id.toString(),effectId:'invert',name:'Invert',enabled:_b(raw['enabled'],true)));id++;
       }else if(lower.contains('hue/saturation')||lower.contains('hue saturation')){
         additions.add(EffectInstance(id:'adobe_'+layerIndex.toString()+'_'+id.toString(),effectId:'saturation',name:'Saturation',
-          parameters:{'value':(1+param(['master saturation','saturation'],0)/100).clamp(0,3).toDouble()}));id++;
+          parameters:{'value':(1+param(['master saturation','saturation'],0)/100).clamp(0,3).toDouble()},
+          keyframeTracks:_effectKeyframeTracks(props,['master saturation','saturation'],'value',mapValue:(v)=>(1+v/100).clamp(0,3).toDouble()),enabled:_b(raw['enabled'],true)));id++;
       }
       if(additions.isEmpty||additions.any((e)=>EffectCatalog.findBuiltin(e.effectId)==null)){
         unsupported.add(host+': '+match);rawUnsupported.add(raw);
@@ -209,25 +265,65 @@ class AdobeInterchangeService {
       'media':{'embedded':false,'note':'Only local media references are exported. Relink missing media on the target machine.'}};
   }
 
+  static List<List<CompositionLayer>> _groupPremiereTracks(List<CompositionLayer> layers) {
+    final groups = <String, List<CompositionLayer>>{};
+    for (final layer in layers) {
+      final meta = layer.interchangeMetadata;
+      final host = _s(meta['hostApp'], _s(layer.externalHostApp));
+      final index = meta['trackIndex'];
+      final key = host == 'premierepro' && index is num
+          ? 'premiere:' + index.toInt().toString()
+          : 'layer:' + layer.id;
+      groups.putIfAbsent(key, () => <CompositionLayer>[]).add(layer);
+    }
+    for (final track in groups.values) {
+      track.sort((a,b) {
+        final byTime = a.startMs.compareTo(b.startMs);
+        return byTime == 0 ? a.name.compareTo(b.name) : byTime;
+      });
+    }
+    return groups.values.toList();
+  }
+
   static String buildPremiereXml(CompositionDocument doc){
-    String esc(String s)=>s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+    String esc(String value) => value.replaceAll('&','&amp;')
+        .replaceAll('<','&lt;').replaceAll('>','&gt;')
+        .replaceAll('"','&quot;').replaceAll("'","&apos;");
     final fps=doc.frameRate.clamp(1,240),base=fps.round(),ntsc=(fps-base).abs()>0.001;
     int frame(int ms)=>(ms*fps/1000).round();
-    final rate='<rate><timebase>'+base.toString()+'</timebase><ntsc>'+(ntsc?'TRUE':'FALSE')+'</ntsc></rate>';
-    final video=doc.layers.where((l)=>l.kind!=LayerKind.audio).toList(),audio=doc.layers.where((l)=>l.kind==LayerKind.audio).toList();
-    String clip(CompositionLayer l,int i){
-      final st=frame(l.startMs),en=st+frame(l.durationMs),ins=frame(l.sourceInMs),outs=ins+frame(l.durationMs),path=l.sourceUri;
-      final nm=l.externalSourceName??(path==null?l.name:path.split(RegExp(r'[/\\]')).last);
-      final file=path==null?'<file id="file-$i"><name>'+esc(nm)+'</name><offline>true</offline></file>':
-        '<file id="file-$i"><name>'+esc(nm)+'</name><pathurl>'+esc(path.startsWith('file://')?path:Uri.file(path).toString())+'</pathurl></file>';
-      return '<clipitem id="clip-$i"><name>'+esc(l.name)+'</name>'+rate+'<start>$st</start><end>$en</end><in>$ins</in><out>$outs</out>'+file+'</clipitem>';
+    final rate='<rate><timebase>'+base.toString()+'</timebase><ntsc>'+
+        (ntsc?'TRUE':'FALSE')+'</ntsc></rate>';
+    final video=doc.layers.where((l)=>l.kind!=LayerKind.audio).toList();
+    final audio=doc.layers.where((l)=>l.kind==LayerKind.audio).toList();
+    final videoTracks=_groupPremiereTracks(video),audioTracks=_groupPremiereTracks(audio);
+    var clipOrdinal=0;
+    String clip(CompositionLayer layer){
+      final index=++clipOrdinal;
+      final st=frame(layer.startMs),en=st+frame(layer.durationMs);
+      final ins=frame(layer.sourceInMs),outs=ins+frame(layer.durationMs);
+      final path=layer.sourceUri;
+      final name=layer.externalSourceName ??
+          (path==null?layer.name:path.split(RegExp(r'[/\\]')).last);
+      final file=path==null
+          ? '<file id="file-'+index.toString()+'"><name>'+esc(name)+'</name><offline>true</offline></file>'
+          : '<file id="file-'+index.toString()+'"><name>'+esc(name)+'</name><pathurl>'+
+              esc(path.startsWith('file://')?path:Uri.file(path).toString())+
+              '</pathurl></file>';
+      return '<clipitem id="clip-'+index.toString()+'"><name>'+esc(layer.name)+'</name>'+
+          rate+'<start>'+st.toString()+'</start><end>'+en.toString()+'</end><in>'+
+          ins.toString()+'</in><out>'+outs.toString()+'</out>'+file+'</clipitem>';
     }
-    final v=video.asMap().entries.map((e)=>'<track>'+clip(e.value,e.key+1)+'</track>').join();
-    final a=audio.asMap().entries.map((e)=>'<track>'+clip(e.value,video.length+e.key+1)+'</track>').join();
-    return '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE xmeml><xmeml version="5"><sequence id="depthvibe"><name>'+
-      esc(doc.name)+'</name><duration>'+frame(doc.durationMs).toString()+'</duration>'+rate+'<media><video><format><samplecharacteristics>'+
-      rate+'<width>'+doc.width.toString()+'</width><height>'+doc.height.toString()+'</height></samplecharacteristics></format>'+v+
-      '</video><audio>'+a+'</audio></media></sequence><!-- Clip timing/media only; FCP XML effect nodes are not mapped. --></xmeml>';
+    String trackXml(List<CompositionLayer> track) => '<track>'+track.map(clip).join()+'</track>';
+    final v=videoTracks.map(trackXml).join(),a=audioTracks.map(trackXml).join();
+    return '<?xml version="1.0" encoding="UTF-8"?>'+
+      '<!DOCTYPE xmeml><xmeml version="5"><sequence id="depthvibe"><name>'+
+      esc(doc.name)+'</name><duration>'+frame(doc.durationMs).toString()+
+      '</duration>'+rate+'<media><video><format><samplecharacteristics>'+
+      rate+'<width>'+doc.width.toString()+'</width><height>'+
+      doc.height.toString()+'</height></samplecharacteristics></format>'+
+      v+'</video><audio>'+a+'</audio></media></sequence>'+
+      '<!-- Premiere track grouping and clip timing are preserved. effect filters are not encoded. -->'+
+      '</xmeml>';
   }
 
   static String buildAfterEffectsScript(CompositionDocument doc){
@@ -240,6 +336,65 @@ class AdobeInterchangeService {
   Number(d.height)||1080,1,Math.max(1,Number(d.durationMs)/1000),Number(d.frameRate)||30);
  var made={},warnings=[];
  function put(g,n,v){try{var p=g.property(n);if(p&&v!==undefined)p.setValue(v);}catch(_){}}
+ function interpolation(mode) {
+  if(mode==="hold") return KeyframeInterpolationType.HOLD;
+  if(mode==="cubicBezier" || mode==="bezier") return KeyframeInterpolationType.BEZIER;
+  return KeyframeInterpolationType.LINEAR;
+ }
+ function applyScalarTrack(property,track) {
+  if(!property || !track || !track.keyframes) return;
+  for(var k=0;k<track.keyframes.length;k++) {
+   var key=track.keyframes[k],time=Number(key.timeMs)/1000;
+   if(!isFinite(time) || !isFinite(Number(key.value))) continue;
+   try {
+    property.setValueAtTime(time,Number(key.value));
+    var keyIndex=property.nearestKeyIndex(time);
+    property.setInterpolationTypeAtKey(keyIndex,interpolation(key.interpolation),interpolation(key.interpolation));
+   } catch(err) { warnings.push("Keyframe "+track.property+" skipped: "+String(err)); }
+  }
+ }
+ function trackByName(tracks,name) {
+  for(var i=0;i<tracks.length;i++) if(tracks[i].property===name) return tracks[i];
+  return null;
+ }
+ function sampleTrack(track,timeMs,fallback) {
+  if(!track || !track.keyframes || !track.keyframes.length) return fallback;
+  var keys=track.keyframes;
+  if(timeMs<=Number(keys[0].timeMs)) return Number(keys[0].value);
+  if(timeMs>=Number(keys[keys.length-1].timeMs)) return Number(keys[keys.length-1].value);
+  for(var i=0;i<keys.length-1;i++) {
+   var left=keys[i],right=keys[i+1],t0=Number(left.timeMs),t1=Number(right.timeMs);
+   if(timeMs<t0 || timeMs>t1) continue;
+   if(left.interpolation==="hold" || t1<=t0) return Number(left.value);
+   var f=(timeMs-t0)/(t1-t0);
+   return Number(left.value)+(Number(right.value)-Number(left.value))*f;
+  }
+  return fallback;
+ }
+ function applyVectorTracks(property,tracks,prefix,base,dimensions) {
+  if(!property) return;
+  var axes=["x","y","z"],axisTracks=[],times={};
+  for(var axis=0;axis<dimensions;axis++) {
+   var found=trackByName(tracks,prefix+"."+axes[axis]);
+   axisTracks.push(found);
+   if(found && found.keyframes) for(var k=0;k<found.keyframes.length;k++)
+    times[String(found.keyframes[k].timeMs)]=Number(found.keyframes[k].timeMs);
+  }
+  var ordered=Object.keys(times).map(function(key){return times[key];}).sort(function(a,b){return a-b;});
+  for(var t=0;t<ordered.length;t++) {
+   var ms=ordered[t],value=[];
+   for(var dim=0;dim<dimensions;dim++) value.push(sampleTrack(axisTracks[dim],ms,base[dim]));
+   var time=ms/1000;
+   try {
+    property.setValueAtTime(time,value);
+    var index=property.nearestKeyIndex(time),mode="linear";
+    for(var dim2=0;dim2<dimensions;dim2++) if(axisTracks[dim2] && axisTracks[dim2].keyframes)
+     for(var q=0;q<axisTracks[dim2].keyframes.length;q++)
+      if(Number(axisTracks[dim2].keyframes[q].timeMs)===ms) mode=axisTracks[dim2].keyframes[q].interpolation;
+    property.setInterpolationTypeAtKey(index,interpolation(mode),interpolation(mode));
+   } catch(err) { warnings.push("Keyframe "+prefix+" skipped: "+String(err)); }
+  }
+ }
  function fx(id){var m={brightness:"ADBE Brightness & Contrast 2",contrast:"ADBE Brightness & Contrast 2",
   gaussian_blur:"ADBE Gaussian Blur 2",sharpen:"ADBE Sharpen",invert:"ADBE Invert",saturation:"ADBE Hue/Saturation"};return m[id]||null;}
  for(var i=0;i<d.layers.length;i++){
@@ -261,6 +416,15 @@ class AdobeInterchangeService {
    if(tr.anchor)put(t,"ADBE Anchor Point",[tr.anchor.x,tr.anchor.y,tr.anchor.z]);
    if(tr.scale)put(t,"ADBE Scale",[tr.scale.x,tr.scale.y,tr.scale.z]);
    if(tr.rotation)put(t,"ADBE Rotate Z",tr.rotation.z);put(t,"ADBE Opacity",tr.opacity);}
+  try { if(x.interchangeMetadata && typeof x.interchangeMetadata.threeDLayer==="boolean") l.threeDLayer=x.interchangeMetadata.threeDLayer; } catch(_){}
+  var layerTracks=x.keyframeTracks||[],dimensions=(x.interchangeMetadata&&x.interchangeMetadata.threeDLayer)?3:2;
+  if(t){
+   applyVectorTracks(t.property("ADBE Position"),layerTracks,"position",tr.position?[tr.position.x,tr.position.y,tr.position.z]:[d.width/2,d.height/2,0],dimensions);
+   applyVectorTracks(t.property("ADBE Anchor Point"),layerTracks,"anchor",tr.anchor?[tr.anchor.x,tr.anchor.y,tr.anchor.z]:[0,0,0],dimensions);
+   applyVectorTracks(t.property("ADBE Scale"),layerTracks,"scale",tr.scale?[tr.scale.x,tr.scale.y,tr.scale.z]:[100,100,100],dimensions);
+   applyScalarTrack(t.property("ADBE Rotate Z"),trackByName(layerTracks,"rotation.z"));
+   applyScalarTrack(t.property("ADBE Opacity"),trackByName(layerTracks,"opacity"));
+  }
   made[x.id]=l;var parade=l.property("ADBE Effect Parade");
   if(parade&&x.effects)for(var e=0;e<x.effects.length;e++){
    var ef=x.effects[e],mn=fx(ef.effectId);
@@ -271,6 +435,12 @@ class AdobeInterchangeService {
     if(ef.effectId==="contrast")put(added,"ADBE Brightness & Contrast 2-0002",(p.value-1)*100);
     if(ef.effectId==="sharpen")put(added,"ADBE Sharpen-0001",p.amount);
     if(ef.effectId==="saturation")put(added,"ADBE Hue/Saturation-0004",(p.value-1)*100);
+    var parameterNames={gaussian_blur:{sigma:"ADBE Gaussian Blur 2-0001"},brightness:{value:"ADBE Brightness & Contrast 2-0001"},contrast:{value:"ADBE Brightness & Contrast 2-0002"},sharpen:{amount:"ADBE Sharpen-0001"},saturation:{value:"ADBE Hue/Saturation-0004"}};
+    var parameterMap=parameterNames[ef.effectId]||{};
+    if(ef.keyframeTracks) for(var kt=0;kt<ef.keyframeTracks.length;kt++) {
+     var track=ef.keyframeTracks[kt],propertyName=parameterMap[track.property];
+     if(propertyName) applyScalarTrack(added.property(propertyName),track);
+    }
    }catch(err){warnings.push(x.name+": effect skipped "+String(err));}
   }
  }

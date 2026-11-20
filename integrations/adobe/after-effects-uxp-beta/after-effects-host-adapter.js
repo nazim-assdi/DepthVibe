@@ -22,6 +22,23 @@ function captureTransform(layer) {
     opacity: safePropertyValue(group, "ADBE Opacity")
   };
 }
+function captureScalarPropertyKeyframes(property) {
+  try {
+    if (!property || typeof property.numKeys !== "number" ||
+        typeof property.keyTime !== "function" || typeof property.keyValue !== "function") return [];
+    const count = Math.min(property.numKeys, 10000), frames = [];
+    for (let index = 1; index <= count; index += 1) {
+      try {
+        const value = property.keyValue(index), time = property.keyTime(index);
+        if (typeof value !== "number" || !Number.isFinite(value) ||
+            typeof time !== "number" || !Number.isFinite(time)) continue;
+        frames.push({ timeMs: Math.round(time * 1000), value: value,
+          interpolation: keyInterpolation(property, index) });
+      } catch (_) {}
+    }
+    return frames;
+  } catch (_) { return []; }
+}
 function captureEffects(layer) {
   const group = layer.property("ADBE Effect Parade"), effects = [];
   if (!group) return effects;
@@ -32,7 +49,15 @@ function captureEffects(layer) {
       const property = effect.property(p);
       if (!property) continue;
       const value = safePropertyValue(effect, property.matchName);
-      if (value !== null) properties.push({ matchName: property.matchName, name: property.name, value: value });
+      if (value !== null) properties.push({
+        matchName: property.matchName,
+        name: property.name,
+        value: value,
+        keyframes: captureScalarPropertyKeyframes(property),
+        expression: typeof property.expression === "string" && property.expression.length
+          ? { source: property.expression, enabled: property.expressionEnabled === true }
+          : null
+      });
     }
     effects.push({ matchName: effect.matchName, name: effect.name, enabled: effect.enabled !== false, properties: properties });
   }

@@ -21,6 +21,21 @@ function depthVibeTransform(layer) {
     opacity: depthVibeSafeValue(group, "ADBE Opacity")
   };
 }
+function depthVibeScalarKeyframes(property) {
+  try {
+    if (!property || typeof property.numKeys !== "number" ||
+        typeof property.keyTime !== "function" || typeof property.keyValue !== "function") return [];
+    var count=Math.min(property.numKeys,10000),frames=[];
+    for(var i=1;i<=count;i++) {
+      try {
+        var value=property.keyValue(i),time=property.keyTime(i);
+        if(typeof value!=="number"||!isFinite(value)||typeof time!=="number"||!isFinite(time))continue;
+        frames.push({timeMs:Math.round(time*1000),value:value,interpolation:depthVibeKeyInterpolation(property,i)});
+      } catch (_) {}
+    }
+    return frames;
+  } catch (_) { return []; }
+}
 function depthVibeEffects(layer) {
   var group = layer.property("ADBE Effect Parade"), effects = [];
   if (!group) return effects;
@@ -29,7 +44,12 @@ function depthVibeEffects(layer) {
     if (!effect) continue;
     for (var p=1; p<=Math.min(effect.numProperties || 0,128); p++) {
       var prop=effect.property(p), value=prop?depthVibeSafeValue(effect,prop.matchName):null;
-      if (prop && value!==null) properties.push({matchName:prop.matchName,name:prop.name,value:value});
+      if (prop && value!==null) properties.push({
+        matchName:prop.matchName,name:prop.name,value:value,
+        keyframes:depthVibeScalarKeyframes(prop),
+        expression:(typeof prop.expression==="string"&&prop.expression.length)
+          ? {source:prop.expression,enabled:prop.expressionEnabled===true} : null
+      });
     }
     effects.push({matchName:effect.matchName,name:effect.name,enabled:effect.enabled!==false,properties:properties});
   }

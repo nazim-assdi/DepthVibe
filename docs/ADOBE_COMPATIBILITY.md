@@ -62,7 +62,7 @@ Install After Effects Beta and UXP Developer Tool v2.4+. Create an After Effects
 
 The first bridge supports one-time localhost pairing, effect descriptor listing, reading the open DepthVibe Compositor document as DepthVibe JSON and sending a DepthVibe-compatible JSON document back after an explicit user action.
 
-This is not yet a Premiere sequence importer or After Effects comp/project importer. It does not translate arbitrary Adobe tracks, comps, third-party effects, keyframes, expressions or proprietary project files. These require dedicated host translators using Adobe DOM APIs and round-trip tests.
+The current adapters capture active Premiere sequences and After Effects compositions as editable DepthVibe layers. Import preserves Premiere track indices, clip timing and source references; After Effects import preserves layer timing, parent links, transform values and a bounded scalar-keyframe subset. The supported effect map and export limitations below are explicit; this is not a lossless converter for arbitrary Adobe projects.
 
 Premiere .prm and After Effects .aex plugins are native binaries built against Adobe C++ SDKs and platform ABIs. They cannot run inside Flutter/Dart or be loaded from .dvext. Native Adobe effect support requires a separate plugin built and signed for its host and operating system. DepthVibe does not bundle Adobe SDKs or claim compatibility with arbitrary native Adobe plugins.
 
@@ -81,3 +81,12 @@ Media bytes are not copied. Only genuine local footage paths are linked; missing
 
 
 The Premiere UXP manifest requests the UXP local file-system save permission. The After Effects UXP Beta adapter is source for Adobe's generated starter project; retain its generated host manifest and add both the loopback network permission and local file-system request permission there.
+
+
+### Track and animation interchange (current increment)
+
+- Premiere XML groups clips by the original Premiere video/audio track index instead of creating one export track per clip. Clips on a track remain sorted by sequence start time.
+- After Effects UXP and CEP capture scalar transform keyframes for Position, Anchor Point, Scale, Rotation and Opacity. Two- and three-dimensional values are split into scalar DepthVibe tracks.
+- Supported effect parameter keyframes are imported for Gaussian Blur, Brightness, Contrast, Sharpen and Saturation.
+- The After Effects JSX exporter recreates supported scalar/vector keys and their HOLD / LINEAR / Bezier interpolation category. Spatial tangents, temporal ease curves, roving and separated-dimension controls are not yet lossless.
+- Expressions are recorded as inert source metadata; they are never executed by DepthVibe or automatically re-enabled by the generated import script.

@@ -221,6 +221,212 @@ void main() {
       expect((pr['unsupported']! as List), hasLength(1));
     });
 
+    test('After Effects transform and effect keyframes import and survive .dvproj', () {
+      final report = AdobeInterchangeService.importSnapshot({
+        'schemaVersion': 1,
+        'hostApp': 'aftereffects-beta',
+        'payload': {
+          'composition': {
+            'name': 'Animated Shape',
+            'width': 1920,
+            'height': 1080,
+            'durationSeconds': 4,
+            'frameRate': 30,
+          },
+          'layers': [
+            {
+              'id': 'animated-layer',
+              'index': 1,
+              'name': 'Animated Logo',
+              'matchName': 'ADBE AV Layer',
+              'startTimeSeconds': 0,
+              'inPointSeconds': 0,
+              'outPointSeconds': 4,
+              'enabled': true,
+              'hasVideo': true,
+              'hasAudio': false,
+              'sourcePath': r'C:\\Assets\\logo.png',
+              'transform': {
+                'position': [200, 100, 0],
+                'anchorPoint': [50, 50, 0],
+                'scale': [100, 100, 100],
+                'rotation': 0,
+                'opacity': 100,
+              },
+              'keyframeTracks': [
+                {
+                  'property': 'position.x',
+                  'keyframes': [
+                    {'timeMs': 0, 'value': 200, 'interpolation': 'linear'},
+                    {'timeMs': 2000, 'value': 600, 'interpolation': 'cubicBezier'},
+                  ],
+                },
+                {
+                  'property': 'opacity',
+                  'keyframes': [
+                    {'timeMs': 0, 'value': 40, 'interpolation': 'hold'},
+                    {'timeMs': 2000, 'value': 100, 'interpolation': 'linear'},
+                  ],
+                },
+              ],
+              'expressions': [
+                {'property': 'opacity', 'source': 'time * 20', 'enabled': true},
+              ],
+              'effects': [
+                {
+                  'matchName': 'ADBE Gaussian Blur 2',
+                  'name': 'Gaussian Blur',
+                  'enabled': true,
+                  'properties': [
+                    {
+                      'matchName': 'ADBE Gaussian Blur 2-0001',
+                      'name': 'Blurriness',
+                      'value': 8,
+                      'keyframes': [
+                        {'timeMs': 0, 'value': 2, 'interpolation': 'hold'},
+                        {'timeMs': 2000, 'value': 12, 'interpolation': 'linear'},
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      final layer = report.document.layers.single;
+      final position = layer.keyframeTracks.singleWhere(
+        (track) => track.property == 'position.x',
+      );
+      expect(position.keyframes, hasLength(2));
+      expect(position.keyframes.last.interpolation, Interpolation.cubicBezier);
+      expect(position.sample(1000), closeTo(400, 0.001));
+      final opacity = layer.keyframeTracks.singleWhere(
+        (track) => track.property == 'opacity',
+      );
+      expect(opacity.sample(1000), 40);
+      final blur = layer.effects.single;
+      expect(blur.effectId, 'gaussian_blur');
+      expect(blur.keyframeTracks.single.property, 'sigma');
+      expect(blur.parameterAt('sigma', 1000), 2);
+      expect(layer.interchangeMetadata['expressions'], isA<List>());
+
+      final restored = CompositionProjectCodec.decodeDocument(
+        CompositionProjectCodec.encodeDocument(report.document),
+      );
+      expect(
+        restored.layers.single.keyframeTracks.singleWhere(
+          (track) => track.property == 'position.x',
+        ).keyframes.last.interpolation,
+        Interpolation.cubicBezier,
+      );
+      expect(restored.layers.single.effects.single.keyframeTracks, hasLength(1));
+      expect(restored.layers.single.interchangeMetadata['expressions'], isA<List>());
+    });
+
+    test('Premiere XML keeps clips from the same imported track together', () {
+      CompositionLayer makeVideo(String id, int trackIndex, int startMs) =>
+          CompositionLayer(
+            id: id,
+            name: id,
+            kind: LayerKind.video,
+            startMs: startMs,
+            durationMs: 1000,
+            sourceUri: '/media/$id.mp4',
+            externalHostApp: 'premierepro',
+            externalLayerIndex: trackIndex,
+            interchangeMetadata: {
+              'hostApp': 'premierepro',
+              'trackIndex': trackIndex,
+              'trackName': 'V' + (trackIndex + 1).toString(),
+            },
+          );
+      final doc = CompositionDocument(
+        name: 'Multi Track',
+        durationMs: 5000,
+        frameRate: 25,
+        layers: [
+          makeVideo('v1-a', 0, 0),
+          makeVideo('v1-b', 0, 2000),
+          makeVideo('v2-a', 1, 500),
+          CompositionLayer(
+            id: 'a1',
+            name: 'Music',
+            kind: LayerKind.audio,
+            durationMs: 5000,
+            externalHostApp: 'premierepro',
+            externalLayerIndex: 0,
+            interchangeMetadata: {
+              'hostApp': 'premierepro',
+              'trackIndex': 0,
+              'trackName': 'A1',
+            },
+          ),
+        ],
+      );
+
+      final xml = AdobeInterchangeService.buildPremiereXml(doc);
+      expect('<track>'.allMatches(xml), hasLength(3));
+      expect('<clipitem '.allMatches(xml), hasLength(4));
+      expect(xml, contains('v1-a'));
+      expect(xml, contains('v1-b'));
+      expect(xml, contains('v2-a'));
+      expect(xml, contains('Music'));
+    });
+
+    test('After Effects export script writes keyframes on editable properties', () {
+      final doc = CompositionDocument(
+        layers: [
+          CompositionLayer(
+            id: 'animated',
+            name: 'Animated',
+            kind: LayerKind.video,
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'position.x',
+                keyframes: [
+                  ScalarKeyframe(timeMs: 0, value: 100),
+                  ScalarKeyframe(timeMs: 1000, value: 400),
+                ],
+              ),
+              KeyframeTrack(
+                property: 'opacity',
+                keyframes: [
+                  ScalarKeyframe(timeMs: 0, value: 0),
+                  ScalarKeyframe(timeMs: 1000, value: 100),
+                ],
+              ),
+            ],
+            effects: [
+              EffectInstance(
+                id: 'blur',
+                effectId: 'gaussian_blur',
+                name: 'Gaussian Blur',
+                parameters: const {'sigma': 4},
+                keyframeTracks: [
+                  KeyframeTrack(
+                    property: 'sigma',
+                    keyframes: [
+                      ScalarKeyframe(timeMs: 0, value: 1),
+                      ScalarKeyframe(timeMs: 1000, value: 8),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final script = AdobeInterchangeService.buildAfterEffectsScript(doc);
+      expect(script, contains('applyVectorTracks'));
+      expect(script, contains('applyScalarTrack'));
+      expect(script, contains('setValueAtTime'));
+      expect(script, contains('setInterpolationTypeAtKey'));
+      expect(script, contains('ADBE Gaussian Blur 2-0001'));
+    });
+
     test('rejects unsupported snapshot versions and unknown hosts', () {
       expect(
         () => AdobeInterchangeService.importSnapshot({
