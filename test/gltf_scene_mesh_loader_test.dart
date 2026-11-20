@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:image/image.dart' as img;
 
@@ -61,6 +62,7 @@ void main() {
     String encodedBuffer,
   ) => {
         'asset': {'version': '2.0', 'generator': 'DepthVibe test'},
+        'extensionsUsed': ['KHR_texture_transform'],
         'scene': 0,
         'scenes': [
           {'nodes': [0]}
@@ -90,14 +92,35 @@ void main() {
               'baseColorFactor': [0.2, 0.4, 0.8, 1],
               'metallicFactor': 0.65,
               'roughnessFactor': 0.25,
-              'baseColorTexture': {'index': 0}
-            }
+              'baseColorTexture': {
+                'index': 0,
+                'extensions': {
+                  'KHR_texture_transform': {
+                    'offset': [0.25, 0.5],
+                    'scale': [2.0, 0.5],
+                    'rotation': 1.5707963267948966
+                  }
+                }
+              },
+              'metallicRoughnessTexture': {'index': 1}
+            },
+            'normalTexture': {'index': 2, 'scale': 0.65},
+            'occlusionTexture': {'index': 3, 'strength': 0.7},
+            'emissiveTexture': {'index': 4}
           }
         ],
         'textures': [
-          {'source': 0}
+          {'source': 0},
+          {'source': 1},
+          {'source': 2},
+          {'source': 3},
+          {'source': 4}
         ],
         'images': [
+          {'uri': 'data:image/png;base64,AA=='},
+          {'uri': 'data:image/png;base64,AA=='},
+          {'uri': 'data:image/png;base64,AA=='},
+          {'uri': 'data:image/png;base64,AA=='},
           {'uri': 'data:image/png;base64,AA=='}
         ],
         'buffers': [
@@ -189,6 +212,17 @@ void main() {
     expect(material.baseColorTextureWidth, 1);
     expect(material.baseColorTextureHeight, 1);
     expect(material.baseColorTextureRgba, [30, 120, 240, 255]);
+    expect(material.baseColorTextureMap, isNotNull);
+    expect(material.baseColorTextureMap!.transformUv(const Offset(1, 0)).dx,
+        closeTo(0.25, 0.0001));
+    expect(material.baseColorTextureMap!.transformUv(const Offset(1, 0)).dy,
+        closeTo(2.5, 0.0001));
+    expect(material.metallicRoughnessTextureMap?.hasValidPixels, isTrue);
+    expect(material.normalTextureMap?.hasValidPixels, isTrue);
+    expect(material.occlusionTextureMap?.hasValidPixels, isTrue);
+    expect(material.emissiveTextureMap?.hasValidPixels, isTrue);
+    expect(material.normalScale, closeTo(0.65, 0.0001));
+    expect(material.occlusionStrength, closeTo(0.7, 0.0001));
   });
 
   test('evaluates nested node translation animation at the current playhead', () async {
