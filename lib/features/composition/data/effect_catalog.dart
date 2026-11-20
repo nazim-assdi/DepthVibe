@@ -299,6 +299,32 @@ class EffectCatalog {
     ),
 
     EffectDefinition(
+      id: 'color_curves',
+      name: 'Primary Curves',
+      category: 'Color',
+      description: 'Editable master and RGB curves with five control points per channel.',
+      parameters: [
+        for (final channel in const ['master', 'red', 'green', 'blue'])
+          for (var point = 0; point < 5; point++)
+            EffectParameterDefinition(
+              id: '${channel}_${point}',
+              label: '${channel.toUpperCase()} point ${point + 1}',
+              min: 0,
+              max: 1,
+              defaultValue: point * 0.25,
+            ),
+      ],
+      ffmpegFilter: 'curves',
+    ),
+    EffectDefinition(
+      id: 'color_lut',
+      name: '3D LUT',
+      category: 'Color',
+      description: 'Imported 3D .cube lookup table.',
+      parameters: [],
+      ffmpegFilter: 'lut3d',
+    ),
+    EffectDefinition(
       id: 'color_grade',
       name: 'Primary Color Grade',
       category: 'Color',
