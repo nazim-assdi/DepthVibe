@@ -297,6 +297,34 @@ class EffectCatalog {
       parameters: [EffectParameterDefinition(id: 'red', label: 'Red', min: -1, max: 1, defaultValue: 0), EffectParameterDefinition(id: 'green', label: 'Green', min: -1, max: 1, defaultValue: 0), EffectParameterDefinition(id: 'blue', label: 'Blue', min: -1, max: 1, defaultValue: 0)],
       ffmpegFilter: 'colorbalance',
     ),
+
+    EffectDefinition(
+      id: 'color_grade',
+      name: 'Primary Color Grade',
+      category: 'Color',
+      description: 'Lift, Gamma, Gain and Offset wheels with temperature, tint, contrast and saturation controls.',
+      parameters: [
+        EffectParameterDefinition(id: 'lift_r', label: 'Lift Red', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'lift_g', label: 'Lift Green', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'lift_b', label: 'Lift Blue', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'gamma_r', label: 'Gamma Red', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'gamma_g', label: 'Gamma Green', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'gamma_b', label: 'Gamma Blue', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'gain_r', label: 'Gain Red', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'gain_g', label: 'Gain Green', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'gain_b', label: 'Gain Blue', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'offset_r', label: 'Offset Red', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'offset_g', label: 'Offset Green', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'offset_b', label: 'Offset Blue', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'temperature', label: 'Temperature', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'tint', label: 'Tint', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'contrast', label: 'Contrast', min: 0, max: 3, defaultValue: 1),
+        EffectParameterDefinition(id: 'brightness', label: 'Exposure / Brightness', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'master_gamma', label: 'Master Gamma', min: 0.1, max: 3, defaultValue: 1),
+        EffectParameterDefinition(id: 'saturation', label: 'Saturation', min: 0, max: 3, defaultValue: 1),
+      ],
+      ffmpegFilter: 'colorbalance,eq',
+    ),
   ];
 
   static List<EffectDefinition> get allEffects => List.unmodifiable(all);
