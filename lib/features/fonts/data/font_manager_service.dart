@@ -289,6 +289,8 @@ class FontManagerService extends ChangeNotifier {
             }
             inspected++;
             if (inspected > 2500) break;
+            final stat = await entity.stat();
+            if (stat.size < 4 || stat.size > maxFontBytes) continue;
             final fileBytes = await entity.readAsBytes();
             if (!hasValidFontSignature(fileBytes)) continue;
             final name = _fileName(entity.path);
@@ -340,7 +342,7 @@ class FontManagerService extends ChangeNotifier {
     }
     final bytes = await source.readAsBytes();
     if (!hasValidFontSignature(bytes)) {
-      throw const FormatException('The selected file is not a supported TTF/OTF font.');
+      throw const FormatException('The selected file is not a supported TTF/OTF/TTC font.');
     }
 
     final name = _fileName(sourcePath);
@@ -621,14 +623,6 @@ class FontManagerService extends ChangeNotifier {
 
   String _fileName(String path) => path.split(RegExp(r'[/\\]')).last;
 
-  String _familyAlias(String fileName) {
-    final dot = fileName.lastIndexOf('.');
-    final stem = dot < 0 ? fileName : fileName.substring(0, dot);
-    final cleaned = stem.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')
-        .replaceAll(RegExp(r'_+'), '_')
-        .replaceAll(RegExp(r'^_|_$'), '');
-    return cleaned.isEmpty ? 'DepthVibe_Font' : 'DV_' + cleaned;
-  }
 }
 ), '');
     return cleaned.isEmpty ? 'DepthVibe_Font' : 'DV_' + cleaned;
@@ -976,7 +970,13 @@ class FontManagerService extends ChangeNotifier {
         '';
     if (Platform.isWindows) {
       final windows = Platform.environment['WINDIR'] ?? r'C:\Windows';
-      return [windows + r'\Fonts'];
+      final localFonts = Platform.environment['LOCALAPPDATA'] ??
+          (home.isEmpty ? '' : home + r'\AppData\Local');
+      return [
+        windows + r'\Fonts',
+        if (localFonts.isNotEmpty)
+          localFonts + r'\Microsoft\Windows\Fonts',
+      ];
     }
     if (Platform.isMacOS) {
       return [
