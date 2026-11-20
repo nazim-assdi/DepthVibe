@@ -73,7 +73,15 @@ async function captureComponentParameters(component, timeSeconds) {
         if (!time || typeof time.seconds !== "number") continue;
         const keyValue = await readParameterValue(param, time.seconds);
         if (keyValue !== null) {
-          keyframes.push({ timeSeconds: time.seconds, value: keyValue });
+          const key = await optional(() => param.getKeyframePtr(time), null);
+          const interpolationMode = key
+            ? await optional(() => key.getTemporalInterpolationMode(), null)
+            : null;
+          keyframes.push({
+            timeSeconds: time.seconds,
+            value: keyValue,
+            interpolationMode: interpolationMode
+          });
         }
       }
     }
@@ -185,6 +193,70 @@ async function findTrackItem(sequence, clipId, mediaType) {
   }
   return null;
 }
+async function appendNativeParameterActions(param, descriptor, actions, skipped) {
+  const label = String(descriptor.displayName || descriptor.name || "Parameter");
+  const frames = Array.isArray(descriptor.keyframes) ? descriptor.keyframes : [];
+  if (frames.length) {
+    const supportsKeyframes = await optional(() => param.areKeyframesSupported(), false);
+    if (!supportsKeyframes ||
+        typeof param.createSetTimeVaryingAction !== "function" ||
+        typeof param.createAddKeyframeAction !== "function") {
+      skipped.push(label + ": host parameter cannot be animated");
+      return;
+    }
+    try {
+      const timeVaryingAction = param.createSetTimeVaryingAction(true);
+      if (timeVaryingAction) actions.push(timeVaryingAction);
+    } catch (error) {
+      skipped.push(label + ": could not enable keyframes: " + String(error));
+      return;
+    }
+    for (const frame of frames.slice(0, 2048)) {
+      const time = tickTime(Number(frame.timeSeconds));
+      const value = nativeParameterValue(frame.value);
+      if (!time || value === null) {
+        skipped.push(label + ": invalid keyframe time/value");
+        continue;
+      }
+      try {
+        if (typeof param.createRemoveKeyframeAction === "function") {
+          const remove = param.createRemoveKeyframeAction(time, true);
+          if (remove) actions.push(remove);
+        }
+        const keyframe = param.createKeyframe(value);
+        keyframe.position = time;
+        const add = param.createAddKeyframeAction(keyframe);
+        if (add) actions.push(add);
+        if (typeof frame.interpolationMode === "number" &&
+            typeof param.createSetInterpolationAtKeyframeAction === "function") {
+          const interpolation = param.createSetInterpolationAtKeyframeAction(
+            time, frame.interpolationMode, true
+          );
+          if (interpolation) actions.push(interpolation);
+        }
+      } catch (error) {
+        skipped.push(label + " at " + frame.timeSeconds + "s: " + String(error));
+      }
+    }
+    return;
+  }
+
+  const timeVarying = await optional(async () => param.isTimeVarying, false);
+  if (timeVarying) {
+    skipped.push(label + ": parameter is animated in Premiere but no keyframes were returned");
+    return;
+  }
+  const value = nativeParameterValue(descriptor.value);
+  if (value === null) return;
+  try {
+    const keyframe = param.createKeyframe(value);
+    const action = param.createSetValueAction(keyframe, true);
+    if (action) actions.push(action);
+  } catch (error) {
+    skipped.push(label + ": " + String(error));
+  }
+}
+
 async function applyNativeVideoEffect(clipId, matchName, parameters) {
   const project = await premiere.Project.getActiveProject();
   const sequence = project && await project.getActiveSequence();
@@ -215,22 +287,9 @@ async function applyNativeVideoEffect(clipId, matchName, parameters) {
   for (const descriptor of (Array.isArray(parameters) ? parameters : [])) {
     const index = Number(descriptor.index !== undefined ? descriptor.index : descriptor.matchName);
     if (!Number.isInteger(index) || index < 0 || index >= Number(paramCount)) continue;
-    const value = nativeParameterValue(descriptor.value);
-    if (value === null) continue;
     const param = await optional(() => component.getParam(index), null);
     if (!param) continue;
-    const timeVarying = await optional(async () => param.isTimeVarying, false);
-    if (timeVarying) {
-      skippedParameters.push(String(descriptor.displayName || descriptor.name) + ": animated parameter kept at its host default");
-      continue;
-    }
-    try {
-      const keyframe = param.createKeyframe(value);
-      const action = param.createSetValueAction(keyframe, true);
-      if (action) actions.push(action);
-    } catch (error) {
-      skippedParameters.push(String(descriptor.displayName || descriptor.name) + ": " + String(error));
-    }
+    await appendNativeParameterActions(param, descriptor, actions, skippedParameters);
   }
 
   let success = false;
@@ -298,22 +357,9 @@ async function applyNativeAudioEffect(clipId, displayName, parameters) {
   for (const descriptor of (Array.isArray(parameters) ? parameters : [])) {
     const index = Number(descriptor.index !== undefined ? descriptor.index : descriptor.matchName);
     if (!Number.isInteger(index) || index < 0 || index >= Number(paramCount)) continue;
-    const value = nativeParameterValue(descriptor.value);
-    if (value === null) continue;
     const param = await optional(() => component.getParam(index), null);
     if (!param) continue;
-    const timeVarying = await optional(async () => param.isTimeVarying, false);
-    if (timeVarying) {
-      skippedParameters.push(String(descriptor.displayName || descriptor.name) + ": animated parameter retained in DepthVibe");
-      continue;
-    }
-    try {
-      const keyframe = param.createKeyframe(value);
-      const action = param.createSetValueAction(keyframe, true);
-      if (action) actions.push(action);
-    } catch (error) {
-      skippedParameters.push(String(descriptor.displayName || descriptor.name) + ": " + String(error));
-    }
+    await appendNativeParameterActions(param, descriptor, actions, skippedParameters);
   }
 
   let success = false;

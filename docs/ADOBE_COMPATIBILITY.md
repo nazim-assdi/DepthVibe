@@ -118,3 +118,16 @@ These additions are native DepthVibe equivalents and host interoperability paths
 The Premiere XML writer now places XMEML transitionitem nodes between the relevant clip items on their shared track. It uses the original Premiere transition match-name when one was captured; otherwise it uses the DepthVibe transition identifier and display name. Apple documents transitionitem/effect as the interchange structure, but a syntactically valid XML file does not guarantee every host will bind every proprietary transition identically. Adobe will need to resolve the identifier or show a generic transition proxy on projects whose effects do not exist on the target machine.
 
 The After Effects script recreates imported Premiere transitions as editable opacity keyframes, with positional/scale motion for common slide and zoom transitions. It does not execute the proprietary Premiere transition plug-in or claim parameter-exact parity.
+
+
+### Native Adobe effect catalogs and plugin round-trip
+
+The After Effects Beta UXP panel uses the AE 27.0+ `app.effects` inventory and shows a searchable list of installed effects. Applying an item adds the actual match-name effect to the currently selected AE layers; DepthVibe then captures its property tree, parameter values, supported scalar keyframes, units/ranges and inert expression text. A target AE installation must contain the same third-party plug-in for native re-creation.
+
+After Effects 27.0+ also exposes `.ffx` animation preset apply/save APIs. The UXP panel can apply an existing `.ffx` file to selected layers and capture the resulting composition in DepthVibe, or save selected AE properties as a native `.ffx` file. The separate `.dvmpreset` package carries DepthVibe effects, keyframes and native match-name/property descriptors, but not plug-in binaries or external media.
+
+Premiere Pro 25.6+ UXP exposes VideoFilterFactory inventory by match-name/display-name and AudioFilterFactory inventory by display-name. The panel searches both catalogs, applies a native effect to the selected captured video/audio clip, reads parameter values and keyframe times, and synchronizes supported settings from DepthVibe back through Premiere project transactions. Audio-filter identifiers are display-name based; video-filter identifiers are match-name based.
+
+Parameter values are editable in the DepthVibe native-effect panel when a safe scalar range is exposed. Opaque/vector/plugin-specific values remain preserved as native metadata and are applied by the relevant Adobe host when its API supports that value type. For Premiere, keyframe values/interpolation are captured, and the adapter uses ComponentParam time-varying/add-keyframe actions when supported. Parameters without a supported host keyframe API are reported as skipped instead of silently approximated.
+
+This is native-host execution, not a claim that proprietary Adobe plug-ins can run inside DepthVibe's FFmpeg renderer. Unsupported effects stay tagged as native host effects until a portable DepthVibe renderer exists.

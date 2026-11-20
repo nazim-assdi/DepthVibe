@@ -160,9 +160,17 @@ void main() {
       expect(logo.transform.rotation.z, 15);
       expect(logo.transform.opacity, 75);
       expect(logo.sourceUri, r'D:\Assets\logo.png');
-      expect(logo.effects.single.effectId, 'invert');
+      expect(logo.effects.length, 2);
+      expect(logo.effects.first.effectId, 'invert');
+      final nativeBlur = logo.effects.last;
+      expect(nativeBlur.effectId, 'native_effect');
+      expect(nativeBlur.nativeDescriptor['hostApp'], 'aftereffects-beta');
+      expect(nativeBlur.nativeDescriptor['matchName'], 'Vendor.ThirdPartyBlur');
       expect(logo.interchangeMetadata['matchName'], 'ADBE AV Layer');
-      expect(report.unsupportedEffects, contains('aftereffects: Vendor.ThirdPartyBlur'));
+      expect(
+        report.unsupportedEffects.any((item) => item.startsWith('aftereffects: Vendor.ThirdPartyBlur')),
+        isTrue,
+      );
       expect(report.document.layers.last.kind, LayerKind.nullObject);
       expect(report.document.layers.last.parentId, logo.id);
 
@@ -172,6 +180,163 @@ void main() {
       expect(restored.layers.first.externalSourceId, '2');
       expect(restored.layers.first.externalHostApp, 'aftereffects-beta');
       expect(restored.layers.first.interchangeMetadata['matchName'], 'ADBE AV Layer');
+    });
+
+    test('imports unknown After Effects plugins as usable native descriptors and exports them back', () {
+      final report = AdobeInterchangeService.importSnapshot({
+        'schemaVersion': 1,
+        'hostApp': 'aftereffects-beta',
+        'payload': {
+          'composition': {
+            'name': 'Native Effect Test',
+            'width': 1920,
+            'height': 1080,
+            'durationSeconds': 3,
+            'frameRate': 30,
+          },
+          'layers': [
+            {
+              'id': 'layer-1',
+              'index': 1,
+              'name': 'Glow Layer',
+              'matchName': 'ADBE AV Layer',
+              'startTimeSeconds': 0,
+              'inPointSeconds': 0,
+              'outPointSeconds': 3,
+              'hasVideo': true,
+              'effects': [
+                {
+                  'matchName': 'Vendor.SuperGlow',
+                  'name': 'Super Glow',
+                  'displayName': 'Super Glow',
+                  'category': 'Stylize',
+                  'version': '2.4',
+                  'enabled': true,
+                  'parameters': [
+                    {
+                      'matchName': 'Vendor.SuperGlow-0001',
+                      'name': 'Radius',
+                      'displayName': 'Glow Radius',
+                      'path': ['Vendor.SuperGlow-0001'],
+                      'value': 28.0,
+                      'minValue': 0.0,
+                      'maxValue': 100.0,
+                      'unitsText': 'px',
+                      'keyframes': [
+                        {'timeMs': 0, 'value': 12.0},
+                        {'timeMs': 1200, 'value': 28.0},
+                      ],
+                    },
+                    {
+                      'matchName': 'Vendor.SuperGlow-0002',
+                      'name': 'Color',
+                      'value': [1.0, 0.5, 0.2],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      final effect = report.document.layers.single.effects.single;
+      expect(effect.effectId, 'native_effect');
+      expect(effect.name, 'Super Glow');
+      expect(effect.nativeDescriptor['matchName'], 'Vendor.SuperGlow');
+      expect(effect.nativeDescriptor['category'], 'Stylize');
+      expect((effect.nativeDescriptor['parameters'] as List).length, 2);
+      final radius = (effect.nativeDescriptor['parameters'] as List).first as Map;
+      expect(radius['minValue'], 0.0);
+      expect(radius['maxValue'], 100.0);
+      expect((radius['keyframes'] as List).length, 2);
+
+      final restored = CompositionProjectCodec.decodeDocument(
+        CompositionProjectCodec.encodeDocument(report.document),
+      );
+      final restoredEffect = restored.layers.single.effects.single;
+      expect(restoredEffect.nativeDescriptor['matchName'], 'Vendor.SuperGlow');
+      final script = AdobeInterchangeService.buildAfterEffectsScript(restored);
+      expect(script, contains('Vendor.SuperGlow'));
+      expect(script, contains('applyNativeParameters'));
+      expect(script, contains('setValueAtTime'));
+    });
+
+    test('imports Premiere video and audio plugins with media-specific native descriptors', () {
+      final report = AdobeInterchangeService.importSnapshot({
+        'schemaVersion': 1,
+        'hostApp': 'premierepro',
+        'payload': {
+          'sequence': {
+            'name': 'Native Effect Tracks',
+            'width': 1920,
+            'height': 1080,
+            'timebase': '8467200000',
+            'durationSeconds': 4,
+          },
+          'videoTracks': [
+            {
+              'index': 0,
+              'id': 'V1',
+              'name': 'V1',
+              'clips': [
+                {
+                  'id': 'v1',
+                  'name': 'Video',
+                  'startSeconds': 0,
+                  'durationSeconds': 3,
+                  'effects': [
+                    {
+                      'matchName': 'PR.Vendor.VideoGlow',
+                      'name': 'Video Glow',
+                      'displayName': 'Video Glow',
+                      'mediaType': 'video',
+                      'parameters': [
+                        {'index': 0, 'matchName': '0', 'displayName': 'Radius',
+                          'name': 'Radius', 'value': 18.0, 'minValue': 0.0, 'maxValue': 50.0},
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          'audioTracks': [
+            {
+              'index': 0,
+              'id': 'A1',
+              'name': 'A1',
+              'clips': [
+                {
+                  'id': 'a1',
+                  'name': 'Audio',
+                  'startSeconds': 0,
+                  'durationSeconds': 3,
+                  'mediaType': 'audio',
+                  'effects': [
+                    {
+                      'matchName': 'Dynamics',
+                      'name': 'Dynamics',
+                      'displayName': 'Dynamics',
+                      'mediaType': 'audio',
+                      'parameters': [
+                        {'index': 0, 'matchName': '0', 'displayName': 'Threshold',
+                          'name': 'Threshold', 'value': -18.0, 'minValue': -60.0, 'maxValue': 0.0},
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
+      final videoLayer = report.document.layers.firstWhere((layer) => layer.kind == LayerKind.video);
+      final audioLayer = report.document.layers.firstWhere((layer) => layer.kind == LayerKind.audio);
+      expect(videoLayer.effects.single.nativeDescriptor['mediaType'], 'video');
+      expect(videoLayer.effects.single.nativeDescriptor['matchName'], 'PR.Vendor.VideoGlow');
+      expect(audioLayer.effects.single.nativeDescriptor['mediaType'], 'audio');
+      expect(audioLayer.effects.single.nativeDescriptor['matchName'], 'Dynamics');
     });
 
     test('exports Premiere XML and editable After Effects script with explicit mapping report', () {
