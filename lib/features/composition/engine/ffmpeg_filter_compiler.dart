@@ -66,7 +66,19 @@ class FfmpegFilterCompiler {
           .replaceAll('\\', '\\\\')
           .replaceAll(':', '\\:')
           .replaceAll("'", "\\'");
-      return "lut3d=file='$escaped':interp=trilinear";
+      const supportedInterpolations = {
+        'nearest',
+        'trilinear',
+        'tetrahedral',
+        'pyramid',
+        'prism',
+      };
+      final interpolation = supportedInterpolations.contains(
+        effect.assetInterpolation,
+      )
+          ? effect.assetInterpolation
+          : 'trilinear';
+      return "lut3d=file='$escaped':interp=$interpolation";
     }
 
     if (id == 'color_curves') {
