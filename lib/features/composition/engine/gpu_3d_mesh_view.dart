@@ -170,11 +170,16 @@ class _Gpu3dMeshViewState extends State<Gpu3dMeshView> {
     if (widget.cameraSettings.depthOfField) {
       return _cpuFallback('CPU thin-lens depth of field');
     }
-    if (widget.mesh.hasTextureCoordinates &&
-        widget.mesh.materials.values.any(
-          (material) => material.baseColorTextureRgba != null,
-        )) {
-      return _cpuFallback('GLTF base-colour UV textures');
+    final meshUsesBaseColorTextures = widget.mesh.materials.values.any(
+      (material) => material.baseColorTextureBytes != null,
+    );
+    if (meshUsesBaseColorTextures &&
+        !_vertexData.canRenderBaseColorTextures) {
+      return _cpuFallback('multiple glTF base-colour textures');
+    }
+    if (meshUsesBaseColorTextures &&
+        !_vertexData.hasBaseColorTexture) {
+      return _cpuFallback('unavailable glTF base-colour pixels');
     }
     return FutureBuilder<_GpuBoot>(
       future: _boot,
@@ -207,6 +212,9 @@ class _Gpu3dMeshViewState extends State<Gpu3dMeshView> {
                   target: target,
                   vertices: bytes,
                   vertexCount: vertexCount,
+                  baseColorTextureRgba: _vertexData.baseColorTextureRgba,
+                  baseColorTextureWidth: _vertexData.baseColorTextureWidth,
+                  baseColorTextureHeight: _vertexData.baseColorTextureHeight,
                 );
                 if (_needsFrame) {
                   _needsFrame = false;
