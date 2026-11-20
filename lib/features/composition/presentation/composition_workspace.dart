@@ -2484,7 +2484,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       final parameter = definition.parameters.firstWhere(
         (item) => item.id == id,
       );
-      return grade!.parameterAt(
+      return grade.parameterAt(
         id,
         playheadMs,
         fallback: parameter.defaultValue,
@@ -2499,7 +2499,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       required bool keyframeable,
     }) {
       final current = value(id);
-      final hasTrack = grade!.keyframeTracks.any(
+      final hasTrack = grade.keyframeTracks.any(
         (track) => track.property == id && track.enabled,
       );
       return Padding(
@@ -2530,7 +2530,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     visualDensity: VisualDensity.compact,
                     tooltip: 'Add ' + label + ' keyframe',
                     onPressed: () => _controller.addEffectKeyframe(
-                      grade!.id,
+                      grade.id,
                       id,
                     ),
                     icon: Icon(
@@ -2548,7 +2548,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               max: max,
               value: current,
               onChanged: (nextValue) => _controller.setEffectParameter(
-                grade!.id,
+                grade.id,
                 id,
                 nextValue,
                 keyframe: keyframeable && hasTrack,
@@ -2565,7 +2565,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         prefix + '_g',
         prefix + '_b',
       ];
-      final hasWheelTrack = grade!.keyframeTracks.any(
+      final hasWheelTrack = grade.keyframeTracks.any(
         (track) => ids.contains(track.property) && track.enabled,
       );
       return SizedBox(
@@ -2600,7 +2600,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       tooltip: 'Animate ' + title + ' wheel',
                       onPressed: () {
                         for (final id in ids) {
-                          _controller.addEffectKeyframe(grade!.id, id);
+                          _controller.addEffectKeyframe(grade.id, id);
                         }
                       },
                       icon: Icon(
@@ -2620,19 +2620,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   blue: value(prefix + '_b'),
                   onChanged: (wheel) {
                     _controller.setEffectParameter(
-                      grade!.id,
+                      grade.id,
                       prefix + '_r',
                       wheel.red,
                       keyframe: hasWheelTrack,
                     );
                     _controller.setEffectParameter(
-                      grade!.id,
+                      grade.id,
                       prefix + '_g',
                       wheel.green,
                       keyframe: hasWheelTrack,
                     );
                     _controller.setEffectParameter(
-                      grade!.id,
+                      grade.id,
                       prefix + '_b',
                       wheel.blue,
                       keyframe: hasWheelTrack,
@@ -2846,7 +2846,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  lut.assetUri.split(Platform.pathSeparator).last,
+                  lut!.assetUri!.split(Platform.pathSeparator).last,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 10),
@@ -2875,7 +2875,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ),
         if (lut?.assetUri != null)
           DropdownButtonFormField<String>(
-            initialValue: lut.assetInterpolation,
+            initialValue: lut!.assetInterpolation,
             decoration: const InputDecoration(
               labelText: 'LUT interpolation',
               isDense: true,
@@ -2889,7 +2889,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ],
             onChanged: (mode) {
               if (mode != null) {
-                _controller.setEffectAssetInterpolation(lut.id, mode);
+                _controller.setEffectAssetInterpolation(lut!.id, mode);
               }
             },
           ),
@@ -4329,7 +4329,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                               layer.sourceUri != null)
                             Positioned.fill(
                               child: FutureBuilder<File?>(
-                                future: _waveformFor(layer.sourceUri),
+                                future: _waveformFor(layer.sourceUri!),
                                 builder: (context, snapshot) {
                                   final waveform = snapshot.data;
                                   if (waveform == null) {

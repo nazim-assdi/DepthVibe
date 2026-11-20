@@ -60,7 +60,15 @@ class _ExtensionManagerScreenState extends State<ExtensionManagerScreen> {
               DateTime.now().microsecondsSinceEpoch.toString() +
               '.dvext',
         );
-        await picked.readAsByteStream().pipe(temporaryCopy.openWrite());
+        final output = temporaryCopy.openWrite();
+        try {
+          await for (final chunk in picked.readAsByteStream()) {
+            output.add(chunk);
+          }
+          await output.flush();
+        } finally {
+          await output.close();
+        }
         packageFile = temporaryCopy;
       }
 
