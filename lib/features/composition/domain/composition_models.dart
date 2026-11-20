@@ -873,6 +873,17 @@ class CompositionLayer {
     this.sourceDocumentUri,
     this.sourceLayerIndex,
     this.textContent,
+    this.textFontFamily,
+    this.textFontAssetUri,
+    this.textFontFallback = const [],
+    this.textFontSize = 72,
+    this.textFontWeight = 700,
+    this.textItalic = false,
+    this.textColor = '#FFFFFFFF',
+    this.textLetterSpacing = 0,
+    this.textLineHeight = 1.2,
+    this.textAlign = 'left',
+    this.textBoxWidth = 1000,
     this.clippingBaseLayerId,
     this.photoshopClipped = false,
     this.smartObjectSourceUri,
@@ -906,6 +917,17 @@ class CompositionLayer {
   final String? sourceDocumentUri;
   final int? sourceLayerIndex;
   final String? textContent;
+  final String? textFontFamily;
+  final String? textFontAssetUri;
+  final List<String> textFontFallback;
+  final double textFontSize;
+  final int textFontWeight;
+  final bool textItalic;
+  final String textColor;
+  final double textLetterSpacing;
+  final double textLineHeight;
+  final String textAlign;
+  final double textBoxWidth;
   final String? clippingBaseLayerId;
   final bool photoshopClipped;
   final String? smartObjectSourceUri;
@@ -951,6 +973,18 @@ class CompositionLayer {
     String? sourceDocumentUri,
     int? sourceLayerIndex,
     String? textContent,
+    String? textFontFamily,
+    String? textFontAssetUri,
+    List<String>? textFontFallback,
+    double? textFontSize,
+    int? textFontWeight,
+    bool? textItalic,
+    String? textColor,
+    double? textLetterSpacing,
+    double? textLineHeight,
+    String? textAlign,
+    double? textBoxWidth,
+    bool clearTextFont = false,
     String? clippingBaseLayerId,
     bool clearClippingBase = false,
     bool? photoshopClipped,
@@ -987,6 +1021,17 @@ class CompositionLayer {
         sourceDocumentUri: sourceDocumentUri ?? this.sourceDocumentUri,
         sourceLayerIndex: sourceLayerIndex ?? this.sourceLayerIndex,
         textContent: textContent ?? this.textContent,
+        textFontFamily: clearTextFont ? null : (textFontFamily ?? this.textFontFamily),
+        textFontAssetUri: clearTextFont ? null : (textFontAssetUri ?? this.textFontAssetUri),
+        textFontFallback: textFontFallback ?? this.textFontFallback,
+        textFontSize: textFontSize ?? this.textFontSize,
+        textFontWeight: textFontWeight ?? this.textFontWeight,
+        textItalic: textItalic ?? this.textItalic,
+        textColor: textColor ?? this.textColor,
+        textLetterSpacing: textLetterSpacing ?? this.textLetterSpacing,
+        textLineHeight: textLineHeight ?? this.textLineHeight,
+        textAlign: textAlign ?? this.textAlign,
+        textBoxWidth: textBoxWidth ?? this.textBoxWidth,
         clippingBaseLayerId: clearClippingBase
             ? null
             : (clippingBaseLayerId ?? this.clippingBaseLayerId),
