@@ -13,7 +13,7 @@ class ColorCurveEditor extends StatelessWidget {
   void _update(Offset local, Size size) {
     if (values.length != 5 || size.isEmpty) return;
     final x = (local.dx / size.width).clamp(0.0, 1.0);
-    final index = (x * 4).round().clamp(0, 4);
+    final index = (x * 4).round().clamp(0, 4).toInt();
     final next = [...values];
     next[index] = (1 - local.dy / size.height)
         .clamp(0.0, 1.0)
