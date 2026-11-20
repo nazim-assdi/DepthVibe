@@ -279,3 +279,12 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 - Base-colour UV0 applies KHR_texture_transform in the CPU projection path. Texture-coordinate set overrides other than UV0 are preserved as metadata but are not sampled because only TEXCOORD_0 is imported at present.
 - Added loader fixture assertions for all five decoded maps, normal/AO strengths and UV transform math.
 - Explicit limit: this is material ingestion plus base-colour UV transform, not complete PBR shading. Metallic-roughness, normal, occlusion and emissive maps are not yet applied to the CPU lighting equation or uploaded to the WebGPU shader. CI for this increment is pending at the time of this commit; no platform package is claimed as verified.
+
+
+### WebGPU base-colour texture sampling increment — 20 November 2026
+
+- The projected GPU vertex stream now carries UV0 plus a per-triangle texture-present flag. The WebGPU shader has a sampler and `texture_2d` binding, and the renderer uploads RGBA base-colour images with `queue.writeTexture` before sampling them in WGSL.
+- Base-colour images use an sRGB GPU texture format and a repeat/linear sampler. KHR_texture_transform for UV0 is applied by the shared CPU scene projector before upload; texture repeat is performed by the GPU sampler.
+- The GPU route currently accepts opaque meshes that share one decoded base-colour image. Multiple distinct images, alpha MASK/BLEND and unsupported UV sets stay on the CPU route rather than being rendered with the wrong material.
+- Vertex projection, parent/node transforms and light shading are still CPU evaluated; GPU shading currently multiplies the CPU-lit colour by base-colour texture output. A metallic-roughness BRDF, normal mapping, occlusion/emissive lighting, material batching/texture arrays, sampler-specific source modes, GPU-side lights/shadows and full alpha parity remain outstanding.
+- Added vertex-packer tests for UV payloads, a shared texture, multi-image fallback, alpha-mode fallback and perspective/orthographic depth indexing. CI for the final commit must still pass before this increment is release-verified.
