@@ -18,6 +18,7 @@ import '../domain/color_grade_preset.dart';
 import '../engine/parent_transform_resolver.dart';
 import '../engine/camera_projection_resolver.dart';
 import '../engine/composition_export_service.dart';
+import '../engine/composition_project_service.dart';
 import '../engine/obj_mesh_loader.dart';
 import '../engine/scene_mesh_loader.dart';
 import '../engine/software_3d_renderer.dart';
@@ -163,6 +164,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
   String _panel = 'Layers';
   String _effectCategory = 'All';
   String? _notice;
+  final CompositionProjectService _projectService = const CompositionProjectService();
+  bool _projectBusy = false;
 
   static const _layerButtons = <(LayerKind, String, IconData)>[
     (LayerKind.video, 'Video', Icons.movie_outlined),
@@ -475,6 +478,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             ),
             actions: [
               IconButton(
+                tooltip: 'Open .dvproj project',
+                onPressed: _projectBusy || _rendering
+                    ? null
+                    : _openCompositionProject,
+                icon: const Icon(Icons.folder_open_outlined),
+              ),
+              IconButton(
+                tooltip: 'Save complete .dvproj project',
+                onPressed: _projectBusy || _rendering
+                    ? null
+                    : _saveCompositionProject,
+                icon: const Icon(Icons.save_alt),
+              ),
+              IconButton(
                 tooltip: 'Import Photoshop PSD / PSB layers',
                 onPressed: _importPhotoshop,
                 icon: const Icon(Icons.photo_library_outlined),
@@ -528,8 +545,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                 ),
               ),
               _buildTimeline(doc.layers, doc.playheadMs, doc.durationMs),
-              if (_rendering)
-                LinearProgressIndicator(value: _renderProgress == 0 ? null : _renderProgress),
+              if (_rendering || _projectBusy)
+                LinearProgressIndicator(
+                  value: _rendering && _renderProgress != 0
+                      ? _renderProgress
+                      : null,
+                ),
               if (_notice != null)
                 Container(
                   width: double.infinity,
@@ -1731,6 +1752,107 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       if (mounted) {
         setState(() => _notice = '3D LUT import failed: ' + error.toString());
       }
+    }
+  }
+
+  Future<void> _saveCompositionProject() async {
+    if (_projectBusy || _rendering) return;
+    setState(() {
+      _projectBusy = true;
+      _notice = 'Packaging composition and linked media…';
+    });
+    try {
+      final documents = await getApplicationDocumentsDirectory();
+      final projectDirectory = Directory(
+        documents.path + Platform.pathSeparator +
+            'DepthVibe' + Platform.pathSeparator +
+            'Projects' + Platform.pathSeparator + 'Exports',
+      );
+      await projectDirectory.create(recursive: true);
+      final safeName = _controller.document.name
+          .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
+          .replaceAll(RegExp(r'\s+'), '_');
+      final output = File(
+        projectDirectory.path + Platform.pathSeparator +
+            (safeName.isEmpty ? 'Untitled_Composition' : safeName) +
+            '.dvproj',
+      );
+      final result = await _projectService.exportProject(
+        _controller.document,
+        outputFile: output,
+      );
+
+      var shared = false;
+      try {
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(result.file.path)],
+            text: 'DepthVibe composition project',
+          ),
+        );
+        shared = true;
+      } catch (_) {
+        // The project is still safely stored in the app's Projects/Exports folder.
+      }
+      if (!mounted) return;
+      setState(() {
+        final base = 'Project saved · ' +
+            result.embeddedAssetCount.toString() + ' assets embedded.';
+        _notice = result.missingAssetPaths.isEmpty
+            ? (shared ? base + ' Use the share sheet to copy it elsewhere.' : base +
+                ' Saved inside the app Projects/Exports folder.')
+            : base + ' ' + result.missingAssetPaths.length.toString() +
+                ' linked files were missing and remain external.';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _notice = 'Project save failed: ' + error.toString());
+      }
+    } finally {
+      if (mounted) setState(() => _projectBusy = false);
+    }
+  }
+
+  Future<void> _openCompositionProject() async {
+    if (_projectBusy || _rendering) return;
+    try {
+      final picked = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['dvproj'],
+      );
+      if (picked == null) return;
+      final path = picked.path;
+      if (path == null || path.isEmpty) {
+        throw StateError('The selected project has no readable local path.');
+      }
+      if (!mounted) return;
+      setState(() {
+        _projectBusy = true;
+        _notice = 'Verifying project archive and restoring assets…';
+      });
+
+      final documents = await getApplicationDocumentsDirectory();
+      final projects = Directory(
+        documents.path + Platform.pathSeparator +
+            'DepthVibe' + Platform.pathSeparator + 'Projects',
+      );
+      final imported = await _projectService.importProject(
+        File(path),
+        projectsDirectory: projects,
+      );
+      _controller.replaceDocument(imported.document);
+      if (!mounted) return;
+      setState(() {
+        _notice = 'Opened "' + imported.document.name + '" · ' +
+            imported.document.layers.length.toString() + ' layers · ' +
+            imported.extractedAssetCount.toString() + ' restored assets.';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _notice = 'Project open failed: ' + error.toString());
+      }
+    } finally {
+      if (mounted) setState(() => _projectBusy = false);
     }
   }
 

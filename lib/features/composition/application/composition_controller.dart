@@ -44,6 +44,31 @@ class CompositionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  
+  /// Replaces the full composition when a project package is opened.
+  /// The ID counter is advanced past every imported numeric suffix.
+  void replaceDocument(CompositionDocument document) {
+    _document = document;
+    var next = 1;
+    final identifiers = <String>[
+      for (final layer in document.layers) layer.id,
+      for (final layer in document.layers)
+        for (final effect in layer.effects) effect.id,
+      for (final layer in document.layers)
+        for (final mask in layer.masks) mask.id,
+      for (final transition in document.transitions) transition.id,
+      for (final bus in document.audioBuses) bus.id,
+    ];
+    final suffixPattern = RegExp(r'_(\d+)$');
+    for (final identifier in identifiers) {
+      final match = suffixPattern.firstMatch(identifier);
+      final value = match == null ? null : int.tryParse(match.group(1)!);
+      if (value != null && value >= next) next = value + 1;
+    }
+    _nextId = next;
+    notifyListeners();
+  }
+
   CompositionLayer _defaultLayer(LayerKind kind, {String? name}) {
     final id = _id(kind.name);
     final duration = _document.durationMs;
