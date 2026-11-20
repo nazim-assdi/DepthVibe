@@ -25,6 +25,7 @@ import '../data/photoshop_import_service.dart';
 import '../domain/composition_models.dart';
 import '../data/motion_preset_catalog.dart';
 import '../data/motion_preset_package.dart';
+import '../data/motion_bro_pack_service.dart';
 import '../data/transition_catalog.dart';
 import '../domain/color_grade_preset.dart';
 import '../engine/parent_transform_resolver.dart';
@@ -65,6 +66,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   final Map<String, Future<img.Image?>> _scopeImageJobs = {};
   final Map<String, Future<ObjMesh>> _meshJobs = {};
   String _curveChannel = 'master';
+  final MotionBroPackService _motionBroService = MotionBroPackService.instance;
+  List<MotionBroPresetPack> _motionBroPacks = [];
+  bool _motionBroBusy = false;
+  String _motionBroSearch = '';
 
   Future<File?> _waveformFor(String path) =>
       _waveformJobs.putIfAbsent(path, () => _waveformService.generate(path));
@@ -212,6 +217,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     WidgetsBinding.instance.addObserver(this);
     _controller.addListener(_onCompositionChanged);
     ExtensionManagerService.instance.addListener(_onExtensionsChanged);
+    _motionBroService.addListener(_onMotionBroPacksChanged);
+    unawaited(_loadMotionBroPacks());
     AdobeBridgeService.instance.attachController(_controller);
     _recoveryTimer = Timer.periodic(
       const Duration(seconds: 30),
@@ -224,6 +231,181 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   void _onExtensionsChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onMotionBroPacksChanged() {
+    if (mounted) setState(() => _motionBroPacks = _motionBroService.packs);
+  }
+
+  Future<void> _loadMotionBroPacks() async {
+    try {
+      await _motionBroService.initialize();
+      if (mounted) setState(() => _motionBroPacks = _motionBroService.packs);
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Motion Bro library could not be loaded: $error');
+    }
+  }
+
+  Future<void> _importMotionBroPack() async {
+    try {
+      final picked = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['mbr', 'zip'],
+      );
+      if (picked == null) return;
+      final path = picked.path;
+      if (path == null || path.isEmpty) {
+        throw StateError('The selected Motion Bro pack has no readable local path.');
+      }
+      if (mounted) setState(() => _motionBroBusy = true);
+      final pack = await _motionBroService.importPackage(File(path));
+      if (mounted) {
+        setState(() {
+          _motionBroPacks = _motionBroService.packs;
+          _notice = 'Imported "' + pack.name + '" with ' +
+              pack.assets.length.toString() + ' assets. Refresh the Adobe host panel to see compatible FFX/MOGRT files.';
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Motion Bro import failed: $error');
+    } finally {
+      if (mounted) setState(() => _motionBroBusy = false);
+    }
+  }
+
+  Future<void> _exportMotionBroPack(MotionBroPresetPack pack) async {
+    try {
+      final temporary = await getTemporaryDirectory();
+      final safeName = pack.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final output = File(
+        temporary.path + Platform.pathSeparator +
+            safeName + '_' + DateTime.now().microsecondsSinceEpoch.toString() + '.mbr',
+      );
+      await _motionBroService.exportPackage(pack.id, outputFile: output);
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(output.path)],
+        text: 'Motion Bro pack archive. Share only where the pack license permits.',
+      ));
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Motion Bro export failed: $error');
+    }
+  }
+
+  Future<void> _removeMotionBroPack(MotionBroPresetPack pack) async {
+    await _motionBroService.uninstall(pack.id);
+    if (mounted) {
+      setState(() {
+        _motionBroPacks = _motionBroService.packs;
+        _notice = 'Removed imported pack "' + pack.name + '" from the local library.';
+      });
+    }
+  }
+
+  Widget _buildMotionBroPackBrowser() {
+    final term = _motionBroSearch.trim().toLowerCase();
+    final children = <Widget>[
+      _panelHeader('MOTION BRO · IMPORTED PACKS', Icons.video_library_outlined),
+      OutlinedButton.icon(
+        onPressed: _motionBroBusy ? null : _importMotionBroPack,
+        icon: _motionBroBusy
+            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.folder_zip_outlined, size: 16),
+        label: Text(_motionBroBusy ? 'IMPORTING PACK…' : 'IMPORT .MBR PACK'),
+      ),
+      TextField(
+        decoration: const InputDecoration(
+          labelText: 'Search imported preset packs/assets',
+          isDense: true,
+          prefixIcon: Icon(Icons.search, size: 17),
+        ),
+        onChanged: (value) => setState(() => _motionBroSearch = value),
+      ),
+      const Text(
+        'FFX assets are applied from the After Effects host panel; MOGRT assets are inserted from the Premiere host panel. JSX/JSXBIN files are catalogued but never auto-executed.',
+        style: TextStyle(fontSize: 9, color: Color(0xFFE3C28D)),
+      ),
+    ];
+    if (_motionBroPacks.isEmpty) {
+      children.add(const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Text('No Motion Bro packs imported yet. Choose a licensed .MBR pack to browse its presets.',
+          style: TextStyle(fontSize: 10, color: Color(0xFF9DABC3))),
+      ));
+    }
+    for (final pack in _motionBroPacks) {
+      final matchingAssets = pack.assets.where((asset) {
+        if (term.isEmpty) return true;
+        return (pack.name + ' ' + asset.fileName + ' ' +
+            asset.category + ' ' + asset.extension).toLowerCase().contains(term);
+      }).toList();
+      if (term.isNotEmpty && matchingAssets.isEmpty &&
+          !pack.name.toLowerCase().contains(term)) continue;
+      children.add(
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: Text(pack.name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+          subtitle: Text(
+            pack.author + ' · v' + pack.version + ' · ' +
+                pack.assets.length.toString() + ' assets · ' +
+                pack.afterEffectsPresetCount.toString() + ' FFX · ' +
+                pack.premiereTemplateCount.toString() + ' MOGRT',
+            style: const TextStyle(fontSize: 9),
+          ),
+          trailing: PopupMenuButton<String>(
+            onSelected: (action) {
+              if (action == 'export') _exportMotionBroPack(pack);
+              if (action == 'remove') _removeMotionBroPack(pack);
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'export', child: Text('Export original .MBR archive')),
+              PopupMenuItem(value: 'remove', child: Text('Remove imported pack')),
+            ],
+          ),
+          children: [
+            for (final asset in matchingAssets)
+              ListTile(
+                dense: true,
+                contentPadding: const EdgeInsets.only(left: 8, right: 4),
+                leading: Icon(
+                  asset.isAfterEffectsPreset
+                      ? Icons.auto_awesome
+                      : asset.isPremiereMotionGraphicsTemplate
+                          ? Icons.movie_filter_outlined
+                          : asset.isScript
+                              ? Icons.code
+                              : Icons.insert_drive_file_outlined,
+                  size: 16,
+                ),
+                title: Text(asset.fileName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10)),
+                subtitle: Text(
+                  asset.category + ' · ' + asset.extension.toUpperCase() +
+                      ' · ' + (asset.sizeBytes / (1024 * 1024)).toStringAsFixed(1) + ' MB' +
+                      (asset.previewRelativePath == null ? '' : ' · preview available'),
+                  style: const TextStyle(fontSize: 9),
+                ),
+                trailing: Text(
+                  asset.isAfterEffectsPreset
+                      ? 'AE'
+                      : asset.isPremiereMotionGraphicsTemplate
+                          ? 'PR'
+                          : asset.isScript ? 'CODE' : 'ASSET',
+                  style: const TextStyle(fontSize: 9, color: Color(0xFF9DABC3)),
+                ),
+              ),
+            if (matchingAssets.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: Text('No matching assets in this pack.', style: TextStyle(fontSize: 9)),
+              ),
+          ],
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
   }
 
   Future<void> _openSettings() => DepthVibeSettingsDialog.show(context);
@@ -866,6 +1048,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _recoveryTimer?.cancel();
     _controller.removeListener(_onCompositionChanged);
     ExtensionManagerService.instance.removeListener(_onExtensionsChanged);
+    _motionBroService.removeListener(_onMotionBroPacksChanged);
     AdobeBridgeService.instance.detachController(_controller);
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_autosaveIfNeeded());
@@ -2362,6 +2545,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ],
         ),
         const SizedBox(height: 8),
+        _buildMotionBroPackBrowser(),
+        const Divider(height: 16),
         PopupMenuButton<String>(
           tooltip: 'Apply an editable motion preset at the playhead',
           onSelected: _controller.applyMotionPreset,

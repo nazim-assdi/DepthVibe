@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../composition/application/composition_controller.dart';
 import '../../composition/data/effect_catalog.dart';
+import '../../composition/data/motion_bro_pack_service.dart';
 import '../../composition/engine/composition_project_codec.dart';
 import 'adobe_interchange_service.dart';
 
@@ -228,6 +229,18 @@ class AdobeBridgeService extends ChangeNotifier {
             'hostVersion': session.hostVersion,
             'connectedAt': session.connectedAt.toIso8601String(),
             'lastSeenAt': session.lastSeenAt.toIso8601String(),
+          });
+          return;
+
+        case 'GET /v1/motionbro/assets':
+          _touchSession(authorized);
+          final packService = MotionBroPackService.instance;
+          await packService.initialize();
+          _writeJson(response, HttpStatus.ok, {
+            'ok': true,
+            'packs': packService.packs.map((pack) => pack.toJson()).toList(),
+            'assets': await packService.bridgeAssetCatalog(),
+            'scriptExecution': 'disabled',
           });
           return;
 
