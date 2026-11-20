@@ -619,6 +619,47 @@ void main() {
       controller.dispose();
     });
 
+    test('text layers retain editable international typography settings', () {
+      final controller = CompositionController();
+      final id = controller.addLayer(LayerKind.text);
+      expect(controller.selectedLayer!.textContent, 'Your text');
+
+      controller.updateTextLayer(
+        textContent: 'বাংলা العربية English 日本語',
+        textFontFamily: 'DV_Noto_Sans_Bengali',
+        textFontAssetUri: '/fonts/noto-bengali.ttf',
+        textFontFallback: const ['Noto Naskh Arabic', 'Noto Sans CJK SC'],
+        textFontSize: 96,
+        textFontWeight: 600,
+        textItalic: true,
+        textColor: '#FF22AA88',
+        textLetterSpacing: 1.5,
+        textLineHeight: 1.4,
+        textAlign: 'center',
+        textBoxWidth: 1440,
+      );
+
+      final layer = controller.document.layers.single;
+      expect(layer.id, id);
+      expect(layer.textContent, 'বাংলা العربية English 日本語');
+      expect(layer.textFontFamily, 'DV_Noto_Sans_Bengali');
+      expect(layer.textFontAssetUri, '/fonts/noto-bengali.ttf');
+      expect(layer.textFontFallback, ['Noto Naskh Arabic', 'Noto Sans CJK SC']);
+      expect(layer.textFontSize, 96);
+      expect(layer.textFontWeight, 600);
+      expect(layer.textItalic, isTrue);
+      expect(layer.textColor, '#FF22AA88');
+      expect(layer.textLetterSpacing, 1.5);
+      expect(layer.textLineHeight, 1.4);
+      expect(layer.textAlign, 'center');
+      expect(layer.textBoxWidth, 1440);
+
+      controller.updateTextLayer(clearTextFont: true);
+      expect(controller.selectedLayer!.textFontFamily, isNull);
+      expect(controller.selectedLayer!.textFontAssetUri, isNull);
+      controller.dispose();
+    });
+
     test('masks and effects attach to the selected layer', () {
       final controller = CompositionController();
       final id = controller.addLayer(LayerKind.shape);
