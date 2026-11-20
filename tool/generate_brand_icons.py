@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 import struct
 import zlib
 from pathlib import Path
@@ -171,6 +170,55 @@ def make_ico(png: bytes, path: Path) -> None:
     path.write_bytes(struct.pack("<HHH", 0, 1, 1) + entry + png)
 
 
+
+def generate_android_adaptive_icons(master: bytearray, resource_root: Path) -> None:
+    """Create a safe-zone foreground and adaptive icon for Android 8+."""
+    target = 432
+    foreground_size = 300
+    foreground = bytearray(target * target * 4)
+    resized = resize_rgba(master, MASTER_SIZE, foreground_size)
+    offset = (target - foreground_size) // 2
+    for y in range(foreground_size):
+        source_start = y * foreground_size * 4
+        target_start = ((y + offset) * target + offset) * 4
+        foreground[target_start:target_start + foreground_size * 4] = (
+            resized[source_start:source_start + foreground_size * 4]
+        )
+
+    drawable = resource_root / "drawable"
+    drawable.mkdir(parents=True, exist_ok=True)
+    (drawable / "ic_launcher_foreground.png").write_bytes(
+        encode_png(target, target, bytes(foreground))
+    )
+
+    values = resource_root / "values"
+    values.mkdir(parents=True, exist_ok=True)
+    (values / "ic_launcher_background.xml").write_text(
+        '<resources>\n'
+        '    <color name="ic_launcher_background">#090D19</color>\n'
+        '</resources>\n',
+        encoding="utf-8",
+    )
+
+    adaptive = resource_root / "mipmap-anydpi-v26"
+    adaptive.mkdir(parents=True, exist_ok=True)
+    (adaptive / "ic_launcher.xml").write_text(
+        '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
+        '    <background android:drawable="@color/ic_launcher_background" />\n'
+        '    <foreground android:drawable="@drawable/ic_launcher_foreground" />\n'
+        '</adaptive-icon>\n',
+        encoding="utf-8",
+    )
+
+
+def generate_linux_icons(master: bytearray, directory: Path) -> None:
+    for size in (16, 24, 32, 48, 64, 128, 256, 512):
+        write_resized_png(
+            master,
+            size,
+            directory / f"{size}x{size}" / "apps" / "depthvibe.png",
+        )
+
 def generate_ios_icons(master: bytearray, directory: Path) -> None:
     sizes = [
         ("20x20", "2x", 40), ("20x20", "3x", 60),
@@ -241,6 +289,11 @@ def main() -> None:
             f"mipmap-{density}" / "ic_launcher.png",
         )
 
+    generate_android_adaptive_icons(
+        master,
+        ROOT / "android" / "app" / "src" / "main" / "res",
+    )
+
     windows_icon = ROOT / "windows" / "runner" / "resources" / "app_icon.ico"
     windows_png = encode_png(256, 256, resize_rgba(master, MASTER_SIZE, 256))
     make_ico(windows_png, windows_icon)
@@ -254,10 +307,9 @@ def main() -> None:
         ROOT / "macos" / "Runner" / "Assets.xcassets" / "AppIcon.appiconset",
     )
 
-    write_resized_png(
+    generate_linux_icons(
         master,
-        512,
-        ROOT / "linux" / "icons" / "hicolor" / "512x512" / "apps" / "depthvibe.png",
+        ROOT / "linux" / "icons" / "hicolor",
     )
     print("Generated DepthVibe DV launcher and desktop icons.")
 
