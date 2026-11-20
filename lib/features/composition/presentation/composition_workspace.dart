@@ -262,6 +262,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       _controller.updateTextLayer(
         textFontFamily: font.family,
         textFontAssetUri: font.isImported ? font.path : null,
+        clearTextFontAsset: !font.isImported,
         textFontWeight: _fontWeightForStyle(font.styleName),
         textItalic: FontManagerService.isItalicStyle(styleName),
       );
