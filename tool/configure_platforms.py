@@ -231,7 +231,7 @@ def configure_linux_branding() -> None:
         icon_call = 'gtk_window_set_icon_name(window, "depthvibe");'
         if icon_call not in text:
             title_call = re.search(
-                r'(?m)^(?P<indent>\\s*)gtk_window_set_title\\([^;]*;',
+                r'(?m)^(?P<indent>\s*)gtk_window_set_title\([^;]*;',
                 text,
             )
             if title_call is not None:
