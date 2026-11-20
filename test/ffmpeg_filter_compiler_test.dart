@@ -398,7 +398,7 @@ void main() {
 
     expect(filter, startsWith('format=rgba,geq='));
     expect(filter, contains("r='clip(r(X,Y)+"));
-    expect(filter, contains('if(lt(t,'));
+    expect(filter, contains('if(lt(T,'));
     expect(filter, contains("a='alpha(X,Y)'"));
     expect(filter, contains(':eval=frame'));
   });
