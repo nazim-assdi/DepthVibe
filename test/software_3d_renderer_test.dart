@@ -64,6 +64,46 @@ void main() {
     expect(frame.rgba[pixel + 3], 255);
   });
 
+
+  test('applies the base-colour KHR texture transform to projected UV0', () {
+    const texturedMesh = ObjMesh(
+      vertices: [
+        Vector3(-1, -1, 0),
+        Vector3(1, -1, 0),
+        Vector3(0, 1, 0),
+      ],
+      triangles: [ObjTriangle(0, 1, 2, material: 'paint')],
+      materials: {
+        'paint': ObjMaterial(
+          baseColorTextureMap: ObjTextureMap(
+            offset: Offset(0.25, 0.5),
+            scale: Offset(2, 0.5),
+            rotationRadians: 1.5707963267948966,
+          ),
+        ),
+      },
+      boundsMin: Vector3(-1, -1, 0),
+      boundsMax: Vector3(1, 1, 0),
+      textureCoordinates: [Offset.zero, Offset(1, 0), Offset(0, 1)],
+      hasTextureCoordinates: true,
+    );
+
+    final triangles = renderer.projectTriangles(
+      mesh: texturedMesh,
+      viewport: const Size(400, 400),
+      baseWidth: 400,
+      compositionWidth: 400,
+      compositionHeight: 400,
+      modelTransform: modelTransform,
+      cameraTransform: cameraTransform,
+      cameraSettings: const CameraSettings(),
+    );
+
+    expect(triangles, hasLength(1));
+    expect(triangles.single.uvA.dx, closeTo(0.25, 0.0001));
+    expect(triangles.single.uvA.dy, closeTo(2.5, 0.0001));
+  });
+
   test('projects OBJ triangles into camera space with a shaded surface', () {
     final triangles = renderer.projectTriangles(
       mesh: mesh,
