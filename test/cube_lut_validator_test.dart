@@ -58,7 +58,7 @@ DOMAIN_MAX 1.0 1.0 1.0
   test('rejects oversized LUT text before parsing samples', () {
     expect(
       () => CubeLutValidator.parse(
-        ' ' * (CubeLutValidator.maxContentCharacters + 1),
+        ''.padRight(CubeLutValidator.maxContentCharacters + 1),
       ),
       throwsA(isA<FormatException>()),
     );
