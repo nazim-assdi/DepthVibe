@@ -300,7 +300,7 @@ class EffectCatalog {
           for (var point = 0; point < 5; point++)
             EffectParameterDefinition(
               id: '${channel}_${point}',
-              label: '${channel.toUpperCase()} point ${point + 1}',
+              label: '${channel} point ${point + 1}',
               min: 0,
               max: 1,
               defaultValue: point * 0.25,
