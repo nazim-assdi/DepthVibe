@@ -22,6 +22,72 @@ function captureTransform(layer) {
     opacity: safePropertyValue(group, "ADBE Opacity")
   };
 }
+function keyInterpolation(property, keyIndex) {
+  try {
+    const value = property.keyOutInterpolationType(keyIndex);
+    const types = afterEffects.KeyframeInterpolationType || {};
+    if (value === types.HOLD || String(value).toLowerCase().indexOf("hold") >= 0) return "hold";
+    if (value === types.BEZIER || String(value).toLowerCase().indexOf("bezier") >= 0) return "cubicBezier";
+    if (value === types.LINEAR || String(value).toLowerCase().indexOf("linear") >= 0) return "linear";
+  } catch (_) {}
+  return "linear";
+}
+function capturePropertyKeyframes(property, propertyPath) {
+  try {
+    if (!property || typeof property.numKeys !== "number" ||
+        typeof property.keyTime !== "function" || typeof property.keyValue !== "function") return [];
+    const count = Math.min(property.numKeys, 10000);
+    if (count < 1) return [];
+    const first = property.keyValue(1);
+    const isVector = Array.isArray(first) && first.length > 0 &&
+      first.every(function (item) { return typeof item === "number" && Number.isFinite(item); });
+    const axes = ["x", "y", "z", "w"];
+    const paths = isVector
+      ? axes.slice(0, Math.min(first.length, 4)).map(function (axis) { return propertyPath + "." + axis; })
+      : [propertyPath];
+    const tracks = paths.map(function (path, axis) {
+      const keyframes = [];
+      for (let index = 1; index <= count; index += 1) {
+        try {
+          const raw = property.keyValue(index), time = property.keyTime(index);
+          const value = isVector ? raw[axis] : raw;
+          if (typeof value !== "number" || !Number.isFinite(value) ||
+              typeof time !== "number" || !Number.isFinite(time)) continue;
+          keyframes.push({
+            timeMs: Math.round(time * 1000),
+            value: value,
+            interpolation: keyInterpolation(property, index)
+          });
+        } catch (_) {}
+      }
+      return { property: path, keyframes: keyframes };
+    }).filter(function (track) { return track.keyframes.length > 0; });
+    return tracks;
+  } catch (_) { return []; }
+}
+function captureLayerAnimation(layer) {
+  const group = layer.property("ADBE Transform Group");
+  const properties = [
+    ["ADBE Position", "position"],
+    ["ADBE Anchor Point", "anchor"],
+    ["ADBE Scale", "scale"],
+    ["ADBE Rotate Z", "rotation.z"],
+    ["ADBE Opacity", "opacity"]
+  ];
+  const keyframeTracks = [], expressions = [];
+  for (let i = 0; i < properties.length; i += 1) {
+    const property = group && group.property(properties[i][0]);
+    if (!property) continue;
+    keyframeTracks.push.apply(keyframeTracks, capturePropertyKeyframes(property, properties[i][1]));
+    try {
+      if (typeof property.expression === "string" && property.expression.length > 0) {
+        expressions.push({ property: properties[i][1], source: property.expression, enabled: property.expressionEnabled === true });
+      }
+    } catch (_) {}
+  }
+  return { keyframeTracks: keyframeTracks, expressions: expressions };
+}
+
 function captureScalarPropertyKeyframes(property) {
   try {
     if (!property || typeof property.numKeys !== "number" ||
@@ -80,6 +146,7 @@ function captureActiveComposition() {
   for (let index = 1; index <= composition.numLayers; index += 1) {
     const layer = composition.layer(index);
     const parent = layer.parent;
+    const animation = captureLayerAnimation(layer);
     const source = layer.source;
     const sourcePath = source && typeof source.file === "string" ? source.file : null;
     let textContent = null;
@@ -111,6 +178,8 @@ function captureActiveComposition() {
       source: source ? { name: source.name || null, width: source.width || null, height: source.height || null, path: sourcePath } : null,
       textContent: textContent,
       transform: captureTransform(layer),
+      keyframeTracks: animation.keyframeTracks,
+      expressions: animation.expressions,
       effects: captureEffects(layer),
       blendMode: layer.blendingMode !== undefined ? String(layer.blendingMode) : null
     });

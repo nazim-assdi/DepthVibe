@@ -21,6 +21,56 @@ function depthVibeTransform(layer) {
     opacity: depthVibeSafeValue(group, "ADBE Opacity")
   };
 }
+function depthVibeKeyInterpolation(property, keyIndex) {
+  try {
+    var value = property.keyOutInterpolationType(keyIndex);
+    if (value === KeyframeInterpolationType.HOLD) return "hold";
+    if (value === KeyframeInterpolationType.BEZIER) return "cubicBezier";
+    if (value === KeyframeInterpolationType.LINEAR) return "linear";
+  } catch (_) {}
+  return "linear";
+}
+function depthVibePropertyKeyframes(property, propertyPath) {
+  try {
+    if (!property || typeof property.numKeys !== "number" ||
+        typeof property.keyTime !== "function" || typeof property.keyValue !== "function") return [];
+    var count=Math.min(property.numKeys,10000);
+    if(count<1)return [];
+    var first=property.keyValue(1),vector=first instanceof Array && first.length>0;
+    if(vector) for(var v=0;v<first.length;v++) if(typeof first[v]!=="number") vector=false;
+    var axisNames=["x","y","z","w"],paths=vector?axisNames.slice(0,Math.min(first.length,4)):[""];
+    var result=[];
+    for(var axis=0;axis<paths.length;axis++) {
+      var frames=[];
+      for(var index=1;index<=count;index++) {
+        try {
+          var raw=property.keyValue(index),time=property.keyTime(index),value=vector?raw[axis]:raw;
+          if(typeof value!=="number"||!isFinite(value)||typeof time!=="number"||!isFinite(time))continue;
+          frames.push({timeMs:Math.round(time*1000),value:value,interpolation:depthVibeKeyInterpolation(property,index)});
+        } catch (_) {}
+      }
+      if(frames.length)result.push({property:propertyPath+(vector?"."+paths[axis]:""),keyframes:frames});
+    }
+    return result;
+  } catch (_) { return []; }
+}
+function depthVibeLayerAnimation(layer) {
+  var group=layer.property("ADBE Transform Group");
+  var properties=[["ADBE Position","position"],["ADBE Anchor Point","anchor"],["ADBE Scale","scale"],["ADBE Rotate Z","rotation.z"],["ADBE Opacity","opacity"]];
+  var tracks=[],expressions=[];
+  for(var i=0;i<properties.length;i++) {
+    var property=group?group.property(properties[i][0]):null;
+    if(!property)continue;
+    var found=depthVibePropertyKeyframes(property,properties[i][1]);
+    for(var j=0;j<found.length;j++)tracks.push(found[j]);
+    try {
+      if(typeof property.expression==="string"&&property.expression.length)
+        expressions.push({property:properties[i][1],source:property.expression,enabled:property.expressionEnabled===true});
+    } catch (_) {}
+  }
+  return {keyframeTracks:tracks,expressions:expressions};
+}
+
 function depthVibeScalarKeyframes(property) {
   try {
     if (!property || typeof property.numKeys !== "number" ||
@@ -71,6 +121,7 @@ function depthVibeGetActiveCompSnapshot() {
     for (var index = 1; index <= comp.numLayers; index += 1) {
       var layer = comp.layer(index);
       var parent = layer.parent;
+      var animation = depthVibeLayerAnimation(layer);
       var source = layer.source;
       var footageFile = source && source.file ? source.file : null;
       var textContent = null;
@@ -99,6 +150,8 @@ function depthVibeGetActiveCompSnapshot() {
         source: source ? {name:source.name||null,width:source.width||null,height:source.height||null,path:footageFile&&footageFile.fsName?footageFile.fsName:null} : null,
         textContent: textContent,
         transform: depthVibeTransform(layer),
+        keyframeTracks: animation.keyframeTracks,
+        expressions: animation.expressions,
         effects: depthVibeEffects(layer),
         blendMode: layer.blendingMode !== undefined ? String(layer.blendingMode) : null
       });
