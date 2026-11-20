@@ -13,6 +13,7 @@ Future<void> main() async {
   MediaKit.ensureInitialized();
   await FFmpegKitExtended.initialize();
   await FontManagerService.instance.initialize();
+  await FontManagerService.instance.refreshAvailableFonts();
   await ExtensionManagerService.instance.initialize();
   await AdobeBridgeService.instance.start();
   try {
