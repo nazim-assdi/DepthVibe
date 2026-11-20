@@ -2161,6 +2161,26 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             lut?.assetUri == null ? 'IMPORT .CUBE LUT' : 'REPLACE LUT',
           ),
         ),
+        if (lut?.assetUri != null)
+          DropdownButtonFormField<String>(
+            initialValue: lut!.assetInterpolation,
+            decoration: const InputDecoration(
+              labelText: 'LUT interpolation',
+              isDense: true,
+            ),
+            items: const [
+              DropdownMenuItem(value: 'nearest', child: Text('Nearest · fastest')),
+              DropdownMenuItem(value: 'trilinear', child: Text('Trilinear · smooth')),
+              DropdownMenuItem(value: 'tetrahedral', child: Text('Tetrahedral · high quality')),
+              DropdownMenuItem(value: 'pyramid', child: Text('Pyramid')),
+              DropdownMenuItem(value: 'prism', child: Text('Prism')),
+            ],
+            onChanged: (mode) {
+              if (mode != null) {
+                _controller.setEffectAssetInterpolation(lut!.id, mode);
+              }
+            },
+          ),
         const Divider(color: Color(0xFF29354A)),
         _panelHeader('HDR COLOR OUTPUT', Icons.hdr_on),
         DropdownButtonFormField<ColorOutputProfile>(
