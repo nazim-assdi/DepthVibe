@@ -147,7 +147,69 @@ class DepthVibeExtensionManifest {
       throw const FormatException('The extension id is invalid.');
     }
     final version = _requiredString(json['version'], 'extension version', 40);
-    if (!RegExp(r'^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$')
+    if (!RegExp(r'^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?
+        .hasMatch(version)) {
+      throw const FormatException(
+        'Extension version must use semantic version notation.',
+      );
+    }
+
+    final rawEffects = json['effects'];
+    if (rawEffects is! List || rawEffects.isEmpty || rawEffects.length > 100) {
+      throw const FormatException(
+        'An extension must declare between 1 and 100 effects.',
+      );
+    }
+    final effects = rawEffects
+        .map(ExtensionEffectSpec.fromJson)
+        .toList(growable: false);
+    final seen = <String>{};
+    for (final effect in effects) {
+      if (!seen.add(effect.id)) {
+        throw FormatException('Duplicate extension effect id: ' + effect.id);
+      }
+    }
+
+    return DepthVibeExtensionManifest(
+      id: id,
+      name: _requiredString(json['name'], 'extension name', 80),
+      version: version,
+      author: _optionalString(json['author'], 80),
+      description: _optionalString(json['description'], 500),
+      effects: List.unmodifiable(effects),
+    );
+  }
+}
+
+Map<String, Object?> _asMap(Object? value, String label) {
+  if (value is! Map) throw FormatException('The ' + label + ' must be an object.');
+  final result = <String, Object?>{};
+  for (final entry in value.entries) {
+    if (entry.key is! String) {
+      throw FormatException('The ' + label + ' contains a non-string key.');
+    }
+    result[entry.key as String] = entry.value;
+  }
+  return result;
+}
+
+String _requiredString(Object? value, String label, int maxLength) {
+  if (value is! String ||
+      value.trim().isEmpty ||
+      value.trim().length > maxLength) {
+    throw FormatException('The ' + label + ' is missing or too long.');
+  }
+  return value.trim();
+}
+
+String _optionalString(Object? value, int maxLength) {
+  if (value == null) return '';
+  if (value is! String || value.length > maxLength) {
+    throw const FormatException('An optional text field is invalid.');
+  }
+  return value.trim();
+}
+)
         .hasMatch(version)) {
       throw const FormatException(
         'Extension version must use semantic version notation.',

@@ -6,6 +6,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../data/extension_manager_service.dart';
+import '../data/extension_marketplace_service.dart';
+import 'extension_marketplace_screen.dart';
+import 'adobe_integration_screen.dart';
 
 class ExtensionManagerScreen extends StatefulWidget {
   const ExtensionManagerScreen({super.key});
@@ -147,6 +150,24 @@ class _ExtensionManagerScreenState extends State<ExtensionManagerScreen> {
               style: TextStyle(fontWeight: FontWeight.w800),
             ),
             actions: [
+              IconButton(
+                tooltip: 'Marketplace',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ExtensionMarketplaceScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.storefront_outlined),
+              ),
+              IconButton(
+                tooltip: 'Adobe Integration',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AdobeIntegrationScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.hub_outlined),
+              ),
               IconButton(
                 tooltip: 'Refresh extensions',
                 onPressed: _busy ? null : _manager.refresh,

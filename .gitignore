@@ -34,3 +34,7 @@ Thumbs.db
 key.properties
 .env
 .env.*
+
+# DepthVibe publisher private signing keys — never commit.
+**/*.dvpublisher-private.json
+marketplace/keys/private/

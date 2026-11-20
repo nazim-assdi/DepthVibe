@@ -1,0 +1,23 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>DepthVibe Bridge CEP</title>
+<style>
+body{background:#171d29;color:#edf2fb;font:13px Arial,sans-serif;padding:14px}
+input,textarea,button{width:100%;box-sizing:border-box;padding:9px;margin:5px 0}
+input,textarea{color:#edf2fb;background:#232d40;border:1px solid #3d4a62}
+button{background:#536acb;color:white;border:0;font-weight:bold}
+pre{white-space:pre-wrap;overflow-wrap:anywhere}
+small,p{color:#a8b6cc}
+</style></head>
+<body>
+<h2>DepthVibe Bridge</h2>
+<small>CEP compatibility panel for After Effects and Premiere legacy hosts.</small>
+<input id="bridgeUrl" value="http://127.0.0.1:47653" placeholder="Bridge URL; use HTTPS on macOS">
+<input id="pairing" maxlength="6" placeholder="DepthVibe one-time pairing code">
+<button id="connect">Connect</button>
+<button id="read" disabled>Read DepthVibe composition</button>
+<button id="effects" disabled>List DepthVibe effects</button>
+<textarea id="document" rows="6" placeholder="Paste a DepthVibe composition JSON document"></textarea>
+<button id="send" disabled>Send composition to DepthVibe</button>
+<p id="status">Not connected.</p><pre id="result"></pre>
+<script src="main.js"></script>
+</body></html>

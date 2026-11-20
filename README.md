@@ -41,6 +41,19 @@ The current final-render path is a CPU/native FFmpeg 2D compositor, not a comple
 
 Color Studio now shows the selected video’s decoded frame at the playhead and applies a fast primary-grade matrix in the live canvas; this is frame-seeking preview, not continuous real-time playback or GPU/export pixel parity. The scopes are sampled from that current frame and currently include the primary-wheel approximation only (curves/LUT are not included in scope data). Curves and LUTs are export-only at present. HDR10 PQ and HLG output use a Rec.709-to-BT.2020 zscale conversion and ProRes 422 HQ 10-bit MOV tags; this is not scene-referred HDR grading, HDR source preservation, Dolby Vision, or mastering-metadata authoring. Shot matching, LUT authoring/management, GPU preview parity and full colour-managed 10/12-bit processing remain open. The 3D workspace now has a CPU mesh projector/shader and a WebGPU triangle raster backend with depth testing and MSAA. For opaque meshes sharing one base-colour image, the GPU path uploads RGBA textures and samples them in WGSL using UV0 and a repeat/linear sampler; multiple distinct base-colour images and MASK/BLEND materials use the CPU fallback. Geometry projection and scene-light shading remain CPU-evaluated before GPU upload. Metallic-roughness, normal, occlusion and emissive maps are decoded and retained but are not yet applied to lighting; the WebGPU path is not yet a complete PBR renderer. The 3D preview/export pipeline is not yet integrated into the final FFmpeg compositor. A basic 2D template tracker can track a manually selected rectangle and write translation keyframes; planar/perspective tracking, scale/rotation solving, occlusion handling and rotoscoping remain open work. Full PSD groups/clipping/smart objects and Photoshop-style adjustment rendering also remain open. Glow and Drop Shadow now have CPU multi-pass export paths, but there is no complete GPU VFX render graph yet. Optical-flow effects, advanced denoise, displacement, volumetrics and high-end VFX still need a dedicated GPU renderer. An effect-library entry does not mean that effect is complete in final export.
 
+## Extension ecosystem and Adobe interoperability
+
+DepthVibe has a declarative `.dvext` installer and a signed marketplace client. Publisher public keys are imported from `.dvpub` files and explicitly trusted by SHA-256 fingerprint. Marketplace catalogs are Ed25519-signed; downloaded package bytes are checked against the SHA-256 digest covered by the catalog signature. Opt-in automatic updates apply only to DepthVibe `.dvext` packages. No production marketplace feed or publisher is pre-trusted in the repository; operators must host and sign their own HTTPS catalog using the scripts in `tool/`.
+
+Adobe host adapters are provided as panel source:
+- Premiere Pro 25.6+: UXP panel under `integrations/adobe/premiere-uxp/`.
+- After Effects stable: CEP compatibility panel under `integrations/adobe/after-effects-cep/`.
+- After Effects Beta: UXP panel source under `integrations/adobe/after-effects-uxp-beta/`, to be loaded into Adobe's generated AE Beta starter project.
+
+The Adobe panels use an authenticated localhost bridge to list DepthVibe effects and exchange DepthVibe composition JSON. On macOS, Adobe UXP network access requires HTTPS; the local bridge supports a user-supplied trusted certificate. This initial adapter is not yet an arbitrary Premiere sequence or After Effects composition importer. Adobe native `.prm`/`.aex` plug-ins remain native code that must execute inside the appropriate Adobe host; they are not loaded into Flutter or `.dvext` packages.
+
+See [Extension package format](docs/EXTENSIONS.md), [Marketplace publishing](docs/MARKETPLACE_AND_PUBLISHING.md), [Adobe compatibility](docs/ADOBE_COMPATIBILITY.md), and the [Adobe Bridge SDK](integrations/adobe/sdk/README.md).
+ 
 ## FFmpeg bundle
 
 The app configures ffmpeg_kit_extended_flutter with the full LGPL native bundle: type=full, gpl=false, small=false. Native FFmpeg libraries are included in the application package; no hosted rendering backend is needed for the local render path. The full bundle can substantially increase installer/APK size. GPL-only codecs are intentionally disabled; review all codec and third-party licence obligations before distribution.
@@ -76,6 +89,9 @@ Build commands:
 
 - lib/features/editor: Video Studio and first export workflow.
 - lib/features/composition: layer/timeline model, keyframes, effects, Photoshop importer, transform compiler, FFmpeg compositor and workspace.
+- lib/features/extensions: .dvext install manager, signed marketplace, publisher trust store and Adobe localhost bridge.
+- integrations/adobe: Premiere UXP, After Effects CEP/UXP Beta panels and TypeScript bridge SDK.
+- docs/MARKETPLACE_AND_PUBLISHING.md and docs/ADOBE_COMPATIBILITY.md: publisher signing, updates and Adobe host compatibility.
 - lib/features/media: platform file import, capture and gallery permissions.
 - legacy/android-native: preserved Kotlin/Compose Android implementation and prior AI/AR/3D/VFX experiments.
 - docs/ARCHITECTURE.md: renderer architecture and known export gaps.

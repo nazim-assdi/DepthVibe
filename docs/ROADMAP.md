@@ -70,6 +70,25 @@ A capability is complete only when it has a project model, working controls, rea
 - [x] Effect library registration backed by audited host renderer operations.
 - [x] Bundled .cube LUT package assets with safe extraction rules.
 - [x] Bounded composition Undo/Redo controls.
-- [ ] Extension marketplace, publisher signatures and versioned in-app updates.
-- [ ] General extension SDK for reviewed native/GPU algorithms and richer panels.
+- [x] Signed extension marketplace model, publisher signatures and opt-in .dvext updates.
+- [x] Initial TypeScript bridge SDK and Adobe host-adapter contract; native/GPU extension runtime remains open.
 - [ ] Undo transaction grouping for continuous drag/slider gestures and durable history snapshots.
+
+
+## Stage 6 — Extension marketplace and Adobe interoperability
+
+- [x] Declarative .dvext package format with safe package extraction, extension registry, enable/disable/uninstall.
+- [x] Signed marketplace catalog model and UI with Ed25519 publisher signature verification.
+- [x] .dvpub publisher-key import, fingerprint verification, explicit trust and revoke controls.
+- [x] Publisher key-generation and catalog-signing CLI tools; catalog template and publishing guide.
+- [x] Opt-in automatic version checks; transactional automatic updates for DepthVibe .dvext packages only.
+- [x] Premiere Pro 25.6+ UXP bridge panel source and Adobe local authenticated bridge.
+- [x] After Effects CEP compatibility panel and After Effects Beta UXP bridge-panel source.
+- [x] Bridge SDK protocol types, client and host-adapter contract.
+- [ ] Premiere sequence/track/clip import and export translation with host DOM round-trip tests.
+- [ ] After Effects project/comp/layer/keyframe/expression translation with host DOM round-trip tests.
+- [ ] Effect capability mapping and render parity for individual Adobe host effects.
+- [ ] Native .prm/.aex plugin integration through separate Adobe C++ SDK builds, platform signing and host certification.
+- [ ] Marketplace backend hosting, publisher onboarding/review, key-rotation workflow and update rollback UI.
+
+Adobe panels exchange DepthVibe composition JSON and effect descriptors through a paired loopback bridge. They are initial compatibility adapters, not general-purpose Premiere sequence or After Effects project translators. Marketplace feed hosting and publisher trust are operator/user managed; the repository does not include a production marketplace server or a pre-trusted publisher.

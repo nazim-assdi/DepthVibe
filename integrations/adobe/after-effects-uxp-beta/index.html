@@ -1,0 +1,24 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DepthVibe Bridge</title>
+<style>
+body{font-family:Arial,sans-serif;padding:14px;color:#e7edf8;background:#171d29}
+input,textarea,button{box-sizing:border-box;width:100%;margin:5px 0;padding:9px}
+input,textarea{color:#e7edf8;background:#232d40;border:1px solid #3d4a62;border-radius:6px}
+button{border:0;border-radius:6px;color:#fff;background:#536acb;font-weight:700}
+button.secondary{background:#34435b}
+small,#status{color:#a8b6cc}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#10151f;padding:9px;border-radius:6px}
+</style></head><body>
+<h2>DepthVibe Bridge · After Effects Beta</h2>
+<small>Pair this UXP panel with the DepthVibe desktop compositor.</small>
+<input id="bridgeUrl" value="http://127.0.0.1:47653" placeholder="Bridge URL; use HTTPS on macOS">
+<input id="pairing" maxlength="6" inputmode="numeric" placeholder="One-time pairing code">
+<button id="connect">Connect</button>
+<button id="read" class="secondary" disabled>Read DepthVibe composition</button>
+<button id="effects" class="secondary" disabled>List effects</button>
+<textarea id="document" rows="6" placeholder="DepthVibe composition JSON"></textarea>
+<button id="send" class="secondary" disabled>Send to DepthVibe</button>
+<p id="status">Not connected.</p><pre id="result"></pre>
+<script src="index.js"></script>
+</body></html>

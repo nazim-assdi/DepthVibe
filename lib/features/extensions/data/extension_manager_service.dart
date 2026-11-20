@@ -77,7 +77,12 @@ class ExtensionManagerService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<InstalledExtension> installFromFile(File packageFile) async {
+  Future<InstalledExtension> installFromFile(
+    File packageFile, {
+    bool replaceExisting = false,
+    String? expectedExtensionId,
+    String? expectedVersion,
+  }) async {
     await _ensureInitialized();
     if (!await packageFile.exists()) {
       throw const FileSystemException('The extension package does not exist.');
@@ -144,6 +149,17 @@ class ExtensionManagerService extends ChangeNotifier {
       final manifest = DepthVibeExtensionManifest.fromJson(
         jsonDecode(utf8.decode(manifestBytes)),
       );
+      if (expectedExtensionId != null &&
+          manifest.id != expectedExtensionId) {
+        throw const FormatException(
+          'The installed package ID does not match the signed marketplace entry.',
+        );
+      }
+      if (expectedVersion != null && manifest.version != expectedVersion) {
+        throw const FormatException(
+          'The installed package version does not match the signed marketplace entry.',
+        );
+      }
 
       final manifestFile = File(
         _join(staging.path, 'manifest.json'),
@@ -182,16 +198,57 @@ class ExtensionManagerService extends ChangeNotifier {
       }
 
       final destination = Directory(_join(root.path, manifest.id));
-      if (await destination.exists()) {
+      final existingDirectory = await destination.exists();
+      if (existingDirectory && !replaceExisting) {
         throw FormatException(
           'Extension "' + manifest.id + '" is already installed.',
         );
       }
-      await staging.rename(destination.path);
-      installedDirectory = true;
-      _disabledIds.remove(manifest.id);
-      await _scanInstalled();
-      await _writeRegistry();
+      final wasDisabled = _disabledIds.contains(manifest.id);
+      final backupRoot = Directory(_join(root.path, '.updates'));
+      final backup = Directory(_join(backupRoot.path, manifest.id));
+      var movedExisting = false;
+      try {
+        if (existingDirectory) {
+          await backupRoot.create(recursive: true);
+          if (await backup.exists()) {
+            await backup.delete(recursive: true);
+          }
+          await destination.rename(backup.path);
+          movedExisting = true;
+        }
+        await staging.rename(destination.path);
+        installedDirectory = true;
+        if (existingDirectory && wasDisabled) {
+          _disabledIds.add(manifest.id);
+        } else {
+          _disabledIds.remove(manifest.id);
+        }
+        await _scanInstalled();
+        await _writeRegistry();
+      } catch (_) {
+        if (installedDirectory && await destination.exists()) {
+          await destination.delete(recursive: true);
+        }
+        if (movedExisting && await backup.exists()) {
+          await backup.rename(destination.path);
+        }
+        if (wasDisabled) {
+          _disabledIds.add(manifest.id);
+        } else {
+          _disabledIds.remove(manifest.id);
+        }
+        await _scanInstalled();
+        _refreshEffectCatalog();
+        rethrow;
+      }
+      if (movedExisting && await backup.exists()) {
+        try {
+          await backup.delete(recursive: true);
+        } catch (_) {
+          // Retain the previous version in the hidden .updates folder.
+        }
+      }
       _refreshEffectCatalog();
       notifyListeners();
 

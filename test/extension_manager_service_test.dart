@@ -125,6 +125,100 @@ LUT_3D_SIZE 2
       expect(EffectCatalog.find(effectId), isNull);
     });
 
+
+    test('replaces an installed package with the exact signed version', () async {
+      Future<File> makePackage(String version, double defaultSigma) async {
+        final manifest = <String, Object?>{
+          'format': 'DepthVibe.Extension',
+          'schemaVersion': 1,
+          'id': 'com.example.update-pack',
+          'name': 'Update Pack',
+          'version': version,
+          'author': 'Test',
+          'description': 'Transactional update test.',
+          'effects': [
+            {
+              'id': 'soft-blur',
+              'name': 'Soft Blur',
+              'category': 'Looks',
+              'description': 'A soft blur test.',
+              'operation': 'gaussian_blur',
+              'defaults': {'sigma': defaultSigma},
+            },
+          ],
+        };
+        final bytes = utf8.encode(jsonEncode(manifest));
+        final archive = Archive()
+          ..addFile(ArchiveFile('manifest.json', bytes.length, bytes));
+        final package = File(
+          temporaryDirectory.path +
+              Platform.pathSeparator +
+              'update-' +
+              version +
+              '.dvext',
+        );
+        await package.writeAsBytes(ZipEncoder().encode(archive));
+        return package;
+      }
+
+      final original = await makePackage('1.0.0', 1.0);
+      await manager.installFromFile(original);
+      const effectId = 'extension.com.example.update-pack.soft-blur';
+      expect(EffectCatalog.find(effectId)!.parameters.single.defaultValue, 1.0);
+      await manager.setEnabled('com.example.update-pack', false);
+
+      final update = await makePackage('1.1.0', 2.0);
+      await manager.installFromFile(
+        update,
+        replaceExisting: true,
+        expectedExtensionId: 'com.example.update-pack',
+        expectedVersion: '1.1.0',
+      );
+
+      expect(manager.installed.single.manifest.version, '1.1.0');
+      expect(manager.installed.single.enabled, isFalse);
+      expect(EffectCatalog.find(effectId), isNull);
+      await manager.setEnabled('com.example.update-pack', true);
+      expect(EffectCatalog.find(effectId)!.parameters.single.defaultValue, 2.0);
+    });
+
+    test('rejects a package whose id or version does not match marketplace metadata', () async {
+      final manifest = <String, Object?>{
+        'format': 'DepthVibe.Extension',
+        'schemaVersion': 1,
+        'id': 'com.example.mismatch',
+        'name': 'Mismatch',
+        'version': '1.0.0',
+        'effects': [
+          {
+            'id': 'blur',
+            'name': 'Blur',
+            'operation': 'gaussian_blur',
+            'defaults': {'sigma': 1},
+          },
+        ],
+      };
+      final bytes = utf8.encode(jsonEncode(manifest));
+      final archive = Archive()
+        ..addFile(ArchiveFile('manifest.json', bytes.length, bytes));
+      final package = File(
+        temporaryDirectory.path +
+            Platform.pathSeparator +
+            'mismatch.dvext',
+      );
+      await package.writeAsBytes(ZipEncoder().encode(archive));
+
+      await expectLater(
+        manager.installFromFile(
+          package,
+          expectedExtensionId: 'com.example.expected',
+          expectedVersion: '1.0.0',
+        ),
+        throwsFormatException,
+      );
+      expect(manager.installed, isEmpty);
+    });
+
     test('rejects a package with an unsupported file', () async {
       final manifestBytes = utf8.encode(jsonEncode({
         'format': 'DepthVibe.Extension',

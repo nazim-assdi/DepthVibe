@@ -14,6 +14,7 @@ import 'package:share_plus/share_plus.dart';
 import '../application/composition_controller.dart';
 import '../data/effect_catalog.dart';
 import '../../extensions/data/extension_manager_service.dart';
+import '../../extensions/data/adobe_bridge_service.dart';
 import '../data/photoshop_import_service.dart';
 import '../domain/composition_models.dart';
 import '../domain/color_grade_preset.dart';
@@ -201,6 +202,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     WidgetsBinding.instance.addObserver(this);
     _controller.addListener(_onCompositionChanged);
     ExtensionManagerService.instance.addListener(_onExtensionsChanged);
+    AdobeBridgeService.instance.attachController(_controller);
     _recoveryTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => _autosaveIfNeeded(),
@@ -790,6 +792,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _recoveryTimer?.cancel();
     _controller.removeListener(_onCompositionChanged);
     ExtensionManagerService.instance.removeListener(_onExtensionsChanged);
+    AdobeBridgeService.instance.detachController(_controller);
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_autosaveIfNeeded());
     _controller.dispose();

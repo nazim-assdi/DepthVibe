@@ -323,3 +323,15 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 - Extension package limits, authoring instructions and security boundaries are documented in docs/EXTENSIONS.md.
 
 The extension manager is a data-only v1, not a general-purpose runtime for arbitrary third-party Dart, JavaScript, native code, shaders or FFmpeg command strings. New rendering algorithms still require a reviewed host renderer implementation and tests.
+
+
+## Implementation Update — Marketplace, publisher trust and Adobe adapters (20 November 2026)
+
+- Added Ed25519 publisher-key trust with SHA-256 fingerprints, explicit user trust and key revocation.
+- Added signed marketplace catalog parsing, signature verification, signed package SHA-256 checks, HTTPS feeds, package metadata/version listing and release notes.
+- Added CLI tools to generate publisher key pairs and sign marketplace catalogs. Private key paths are excluded from version control; the repository does not contain a publisher private key.
+- Added opt-in 24-hour marketplace checks while DepthVibe is running. Automatic replacement is restricted to DepthVibe .dvext packages and uses transactional installation; Adobe packages remain user-installed through Adobe's own host workflow.
+- Added a loopback-only Adobe bridge with one-time pairing codes, bearer session tokens, session disconnect, effect listing, and DepthVibe composition JSON exchange. Secure HTTPS startup is available using a user-supplied certificate/key pair for Adobe UXP on macOS.
+- Added a Premiere Pro 25.6+ UXP panel, an After Effects CEP legacy panel, an After Effects Beta UXP panel source scaffold, and TypeScript SDK contracts/client.
+
+**Important boundary:** these panels are bridge integrations. They do not yet translate arbitrary Premiere sequences or After Effects compositions/projects. Native Adobe .prm/.aex effects remain Adobe-host binaries requiring separate C++ SDK builds and host-side testing. No production marketplace catalog/server is hosted by this repository.
