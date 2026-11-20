@@ -8,7 +8,7 @@ Open **Font Manager** from either the Video Studio or Compositor toolbar. The ma
 
 System-folder discovery is currently implemented for:
 
-- Windows: `%WINDIR%\Fonts`
+- Windows: `%WINDIR%\\Fonts` and `%LOCALAPPDATA%\\Microsoft\\Windows\\Fonts` (machine-wide and per-user installs)
 - macOS: `/System/Library/Fonts`, `/Library/Fonts` and the user's `~/Library/Fonts`
 - Linux: `/usr/share/fonts`, `/usr/local/share/fonts`, `~/.local/share/fonts` and `~/.fonts`
 - Android: `/system/fonts` where the platform allows file access
