@@ -101,7 +101,9 @@ void main() {
 
     expect(triangles, hasLength(1));
     expect(triangles.single.uvA.dx, closeTo(0.25, 0.0001));
-    expect(triangles.single.uvA.dy, closeTo(2.5, 0.0001));
+    expect(triangles.single.uvA.dy, closeTo(0.5, 0.0001));
+    expect(triangles.single.uvB.dx, closeTo(0.25, 0.0001));
+    expect(triangles.single.uvB.dy, closeTo(2.5, 0.0001));
   });
 
   test('projects OBJ triangles into camera space with a shaded surface', () {
