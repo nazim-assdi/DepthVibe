@@ -717,6 +717,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     Size canvasSize,
   ) {
     final timeMs = doc.playheadMs;
+    if (layer.kind == LayerKind.video &&
+        (timeMs < layer.startMs || timeMs >= layer.endMs)) {
+      return const SizedBox.shrink();
+    }
     final resolved = const ParentTransformResolver().resolve(
       layer: layer,
       timeMs: timeMs,
@@ -780,7 +784,30 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       case LayerKind.video:
         baseWidth = doc.width.toDouble();
         baseHeight = doc.height.toDouble();
-        visual = const Icon(Icons.movie, color: Color(0xFFB3BEFF), size: 36);
+        visual = FutureBuilder<File?>(
+          future: _videoFrameFor(layer, timeMs, doc.frameRate),
+          builder: (context, snapshot) {
+            final frame = snapshot.data;
+            if (frame != null) {
+              return Image.file(
+                frame,
+                fit: BoxFit.fill,
+                errorBuilder: (_, __, ___) => const Center(
+                  child: Icon(Icons.broken_image_outlined),
+                ),
+              );
+            }
+            return Center(
+              child: snapshot.connectionState == ConnectionState.waiting
+                  ? const CircularProgressIndicator(strokeWidth: 2)
+                  : const Icon(
+                      Icons.movie_outlined,
+                      color: Color(0xFFB3BEFF),
+                      size: 36,
+                    ),
+            );
+          },
+        );
         break;
       case LayerKind.shape:
         visual = CustomPaint(
@@ -929,6 +956,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             ),
             child: visual,
           );
+    final gradeEffect = layer.effects
+        .where((effect) => effect.effectId == 'color_grade')
+        .firstOrNull;
+    final gradeFilter = ColorGradePreview.filterFor(gradeEffect, timeMs);
+    final gradedVisual = gradeFilter == null
+        ? maskedVisual
+        : ColorFiltered(colorFilter: gradeFilter, child: maskedVisual);
 
     return Positioned(
       left: left,
@@ -942,7 +976,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
           child: Transform.scale(
             scaleX: isMeshLayer ? 1 : (scaleX.isNegative ? -1 : 1),
             scaleY: isMeshLayer ? 1 : (scaleY.isNegative ? -1 : 1),
-            child: maskedVisual,
+            child: gradedVisual,
           ),
         ),
       ),
