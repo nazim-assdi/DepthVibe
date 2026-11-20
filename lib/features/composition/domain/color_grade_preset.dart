@@ -137,6 +137,19 @@ class ColorGradePreset {
     }
     final decoded = jsonDecode(source);
     final json = _asMap(decoded, 'preset');
+    _rejectUnknownKeys(
+      json,
+      const {
+        'format',
+        'version',
+        'name',
+        'outputProfile',
+        'primary',
+        'curves',
+        'lut',
+      },
+      'preset',
+    );
     if (json['format'] != formatId) {
       throw const FormatException('This is not a DepthVibe color preset.');
     }
@@ -189,6 +202,11 @@ class ColorGradePreset {
   }) {
     if (value == null) return null;
     final json = _asMap(value, label);
+    _rejectUnknownKeys(
+      json,
+      const {'enabled', 'parameters', 'keyframeTracks'},
+      label,
+    );
     final enabled = json['enabled'] ?? true;
     if (enabled is! bool) {
       throw FormatException('The $label enabled flag is invalid.');
@@ -286,6 +304,11 @@ class ColorGradePreset {
   static ColorGradePresetLut? _readLut(Object? value) {
     if (value == null) return null;
     final json = _asMap(value, '3D LUT');
+    _rejectUnknownKeys(
+      json,
+      const {'enabled', 'interpolation', 'fileName', 'content'},
+      '3D LUT',
+    );
     final enabled = json['enabled'] ?? true;
     if (enabled is! bool) {
       throw const FormatException('The 3D LUT enabled flag is invalid.');
@@ -315,6 +338,18 @@ class ColorGradePreset {
       fileName: rawFileName as String?,
       content: rawContent as String?,
     );
+  }
+
+  static void _rejectUnknownKeys(
+    Map<String, Object?> json,
+    Set<String> allowed,
+    String label,
+  ) {
+    for (final key in json.keys) {
+      if (!allowed.contains(key)) {
+        throw FormatException('Unsupported field in $label: $key.');
+      }
+    }
   }
 
   static Map<String, Object?> _asMap(Object? value, String label) {
