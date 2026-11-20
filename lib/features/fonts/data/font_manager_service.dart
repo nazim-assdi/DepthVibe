@@ -1,0 +1,383 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+
+class FontCatalogEntry {
+  const FontCatalogEntry({
+    required this.family,
+    required this.displayName,
+    required this.path,
+    required this.isImported,
+  });
+
+  final String family;
+  final String displayName;
+  final String path;
+  final bool isImported;
+
+  Map<String, Object?> toJson() => {
+        'family': family,
+        'displayName': displayName,
+        'path': path,
+      };
+
+  factory FontCatalogEntry.fromJson(Map<String, Object?> json) =>
+      FontCatalogEntry(
+        family: json['family'] as String? ?? '',
+        displayName: json['displayName'] as String? ?? '',
+        path: json['path'] as String? ?? '',
+        isImported: true,
+      );
+}
+
+/// Runtime font library for imported and locally installed TTF/OTF fonts.
+///
+/// Font binaries stay in Application Support. Project files explicitly embed
+/// the chosen font asset so a .dvproj can be moved to another computer.
+class FontManagerService extends ChangeNotifier {
+  FontManagerService._();
+
+  static final FontManagerService instance = FontManagerService._();
+
+  static const maxFontBytes = 64 * 1024 * 1024;
+  static const defaultFallbackFamilies = <String>[
+    'Noto Sans',
+    'Noto Sans Bengali',
+    'Noto Sans Arabic',
+    'Noto Sans Devanagari',
+    'Noto Sans CJK SC',
+    'Noto Sans Thai',
+    'Noto Sans Symbols 2',
+    'Noto Color Emoji',
+    'Segoe UI Emoji',
+    'Apple Color Emoji',
+  ];
+
+  Directory? _directory;
+  final Set<String> _loadedFamilies = <String>{};
+  List<FontCatalogEntry> _importedFonts = <FontCatalogEntry>[];
+  List<FontCatalogEntry> _availableFonts = <FontCatalogEntry>[];
+  List<String> _fallbackFamilies = List<String>.from(defaultFallbackFamilies);
+  String? _activeFamily;
+  String? _activeFontPath;
+  bool _initialized = false;
+  bool _scanning = false;
+
+  List<FontCatalogEntry> get fonts =>
+      List<FontCatalogEntry>.unmodifiable(_availableFonts);
+  List<FontCatalogEntry> get importedFonts =>
+      List<FontCatalogEntry>.unmodifiable(_importedFonts);
+  List<String> get fallbackFamilies =>
+      List<String>.unmodifiable(_fallbackFamilies);
+  String? get activeFamily => _activeFamily;
+  String? get activeFontPath => _activeFontPath;
+  bool get isScanning => _scanning;
+
+  static bool isSupportedFontFilePath(String path) {
+    final extension = path.split('.').last.toLowerCase();
+    return extension == 'ttf' || extension == 'otf';
+  }
+
+  static bool hasValidFontSignature(Uint8List bytes) {
+    if (bytes.length < 4) return false;
+    final signature = String.fromCharCodes(bytes.take(4));
+    return signature == 'OTTO' ||
+        signature == 'true' ||
+        signature == 'typ1' ||
+        (bytes[0] == 0 && bytes[1] == 1 && bytes[2] == 0 && bytes[3] == 0);
+  }
+
+  Future<void> initialize() async {
+    if (_initialized) return;
+    final support = await getApplicationSupportDirectory();
+    _directory = Directory(
+      support.path + Platform.pathSeparator + 'DepthVibe' +
+          Platform.pathSeparator + 'Fonts',
+    );
+    await _directory!.create(recursive: true);
+    await _readSettings();
+    _availableFonts = List<FontCatalogEntry>.from(_importedFonts);
+    if (_activeFamily != null && _activeFontPath != null) {
+      try {
+        await ensureFontLoaded(
+          family: _activeFamily!,
+          path: _activeFontPath!,
+        );
+      } catch (_) {
+        _activeFamily = null;
+        _activeFontPath = null;
+        await _writeSettings();
+      }
+    }
+    _initialized = true;
+  }
+
+  Future<void> refreshAvailableFonts() async {
+    await initialize();
+    if (_scanning) return;
+    _scanning = true;
+    notifyListeners();
+    try {
+      final entries = <FontCatalogEntry>[..._importedFonts];
+      final seen = <String>{for (final item in entries) item.path};
+      for (final root in _systemFontRoots()) {
+        final directory = Directory(root);
+        if (!await directory.exists()) continue;
+        var inspected = 0;
+        try {
+          await for (final entity
+              in directory.list(recursive: true, followLinks: false)) {
+            if (entity is! File ||
+                !isSupportedFontFilePath(entity.path) ||
+                !seen.add(entity.path)) {
+              continue;
+            }
+            inspected++;
+            if (inspected > 2500) break;
+            final name = _fileName(entity.path);
+            entries.add(FontCatalogEntry(
+              family: _familyAlias(name),
+              displayName: name,
+              path: entity.path,
+              isImported: false,
+            ));
+          }
+        } catch (_) {
+          // A platform font directory may be present but not readable.
+        }
+      }
+      entries.sort((a, b) =>
+          a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+      _availableFonts = entries;
+    } finally {
+      _scanning = false;
+      notifyListeners();
+    }
+  }
+
+  Future<FontCatalogEntry> importFont(String sourcePath) async {
+    await initialize();
+    if (!isSupportedFontFilePath(sourcePath)) {
+      throw const FormatException('Choose a TrueType (.ttf) or OpenType (.otf) font.');
+    }
+    final source = File(sourcePath);
+    if (!await source.exists()) {
+      throw FileSystemException('Font file does not exist.', sourcePath);
+    }
+    final stat = await source.stat();
+    if (stat.size < 4 || stat.size > maxFontBytes) {
+      throw const FormatException('Font file size is invalid or exceeds 64 MiB.');
+    }
+    final bytes = await source.readAsBytes();
+    if (!hasValidFontSignature(bytes)) {
+      throw const FormatException('The selected file is not a supported TTF/OTF font.');
+    }
+
+    final name = _fileName(sourcePath);
+    final safeName = name.replaceAll(RegExp(r'[^A-Za-z0-9._ -]'), '_');
+    var destination = File(
+      _directory!.path + Platform.pathSeparator + safeName,
+    );
+    var suffix = 2;
+    while (await destination.exists()) {
+      final dot = safeName.lastIndexOf('.');
+      final stem = dot < 0 ? safeName : safeName.substring(0, dot);
+      final extension = dot < 0 ? '' : safeName.substring(dot);
+      destination = File(
+        _directory!.path + Platform.pathSeparator + stem +
+            '_' + suffix.toString() + extension,
+      );
+      suffix++;
+    }
+    await destination.writeAsBytes(bytes, flush: true);
+    final base = _familyAlias(_fileName(destination.path));
+    var family = base;
+    var familySuffix = 2;
+    while (_importedFonts.any((font) => font.family == family)) {
+      family = base + '_' + familySuffix.toString();
+      familySuffix++;
+    }
+    final entry = FontCatalogEntry(
+      family: family,
+      displayName: name,
+      path: destination.path,
+      isImported: true,
+    );
+    _importedFonts = [..._importedFonts, entry];
+    _availableFonts = [..._availableFonts, entry]
+      ..sort((a, b) => a.displayName.toLowerCase()
+          .compareTo(b.displayName.toLowerCase()));
+    await ensureFontLoaded(family: family, path: destination.path);
+    await _writeSettings();
+    notifyListeners();
+    return entry;
+  }
+
+  Future<void> ensureFontLoaded({
+    required String family,
+    required String path,
+  }) async {
+    if (_loadedFamilies.contains(family)) return;
+    final file = File(path);
+    if (!await file.exists()) {
+      throw FileSystemException('Font file is missing.', path);
+    }
+    final stat = await file.stat();
+    if (stat.size < 4 || stat.size > maxFontBytes) {
+      throw const FormatException('Font file size is invalid or exceeds 64 MiB.');
+    }
+    final bytes = await file.readAsBytes();
+    if (!hasValidFontSignature(bytes)) {
+      throw const FormatException('Font file signature is invalid.');
+    }
+    final loader = FontLoader(family);
+    loader.addFont(Future<ByteData>.value(ByteData.sublistView(bytes)));
+    await loader.load();
+    _loadedFamilies.add(family);
+  }
+
+  Future<void> setAppDefault(FontCatalogEntry? entry) async {
+    await initialize();
+    if (entry == null) {
+      _activeFamily = null;
+      _activeFontPath = null;
+    } else {
+      await ensureFontLoaded(family: entry.family, path: entry.path);
+      _activeFamily = entry.family;
+      _activeFontPath = entry.path;
+    }
+    await _writeSettings();
+    notifyListeners();
+  }
+
+  Future<void> setFallbackFamilies(String commaSeparated) async {
+    final values = commaSeparated
+        .split(RegExp(r'[,;\n]'))
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .take(30)
+        .toSet()
+        .toList();
+    _fallbackFamilies = values.isEmpty
+        ? List<String>.from(defaultFallbackFamilies)
+        : values;
+    await _writeSettings();
+    notifyListeners();
+  }
+
+  Future<void> removeImportedFont(FontCatalogEntry entry) async {
+    if (!entry.isImported) {
+      throw StateError('System fonts cannot be removed from this device.');
+    }
+    _importedFonts = _importedFonts
+        .where((font) => font.path != entry.path)
+        .toList();
+    _availableFonts = _availableFonts
+        .where((font) => font.path != entry.path)
+        .toList();
+    final file = File(entry.path);
+    if (await file.exists()) await file.delete();
+    if (_activeFontPath == entry.path) {
+      _activeFamily = null;
+      _activeFontPath = null;
+    }
+    await _writeSettings();
+    notifyListeners();
+  }
+
+  Future<void> _readSettings() async {
+    final file = File(
+      _directory!.path + Platform.pathSeparator + 'font-settings.json',
+    );
+    if (!await file.exists()) return;
+    try {
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map) return;
+      _activeFamily = decoded['activeFamily'] as String?;
+      _activeFontPath = decoded['activeFontPath'] as String?;
+      final fallback = decoded['fallbackFamilies'];
+      if (fallback is List) {
+        final values = fallback.whereType<String>()
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .take(30)
+            .toList();
+        if (values.isNotEmpty) _fallbackFamilies = values;
+      }
+      final rawFonts = decoded['importedFonts'];
+      if (rawFonts is List) {
+        _importedFonts = rawFonts.whereType<Map>().map((item) =>
+            FontCatalogEntry.fromJson(item.cast<String, Object?>()))
+            .where((item) => item.family.isNotEmpty && item.path.isNotEmpty)
+            .toList();
+        _importedFonts = [
+          for (final font in _importedFonts)
+            if (await File(font.path).exists()) font,
+        ];
+      }
+    } catch (_) {
+      _importedFonts = <FontCatalogEntry>[];
+    }
+  }
+
+  Future<void> _writeSettings() async {
+    if (_directory == null) return;
+    final file = File(
+      _directory!.path + Platform.pathSeparator + 'font-settings.json',
+    );
+    final temporary = File(file.path + '.tmp');
+    await temporary.writeAsString(
+      const JsonEncoder.withIndent('  ').convert({
+        'activeFamily': _activeFamily,
+        'activeFontPath': _activeFontPath,
+        'fallbackFamilies': _fallbackFamilies,
+        'importedFonts': _importedFonts.map((font) => font.toJson()).toList(),
+      }),
+      flush: true,
+    );
+    if (await file.exists()) await file.delete();
+    await temporary.rename(file.path);
+  }
+
+  List<String> _systemFontRoots() {
+    final home = Platform.environment['HOME'] ??
+        Platform.environment['USERPROFILE'] ??
+        '';
+    if (Platform.isWindows) {
+      final windows = Platform.environment['WINDIR'] ?? r'C:\Windows';
+      return [windows + r'\Fonts'];
+    }
+    if (Platform.isMacOS) {
+      return [
+        '/System/Library/Fonts',
+        '/Library/Fonts',
+        if (home.isNotEmpty) home + '/Library/Fonts',
+      ];
+    }
+    if (Platform.isLinux) {
+      return [
+        '/usr/share/fonts',
+        '/usr/local/share/fonts',
+        if (home.isNotEmpty) home + '/.local/share/fonts',
+        if (home.isNotEmpty) home + '/.fonts',
+      ];
+    }
+    if (Platform.isAndroid) return ['/system/fonts'];
+    return <String>[];
+  }
+
+  String _fileName(String path) => path.split(RegExp(r'[/\\]')).last;
+
+  String _familyAlias(String fileName) {
+    final dot = fileName.lastIndexOf('.');
+    final stem = dot < 0 ? fileName : fileName.substring(0, dot);
+    final cleaned = stem.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+    return cleaned.isEmpty ? 'DepthVibe_Font' : 'DV_' + cleaned;
+  }
+}
