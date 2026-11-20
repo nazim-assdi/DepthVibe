@@ -143,7 +143,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     const vertexLayout = [
       GpuVertexLayout(
-        arrayStride: 28,
+        arrayStride: 40,
         attributes: [
           GpuVertexAttr(
             format: GpuVertexFormat.float32x3,
