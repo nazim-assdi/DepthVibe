@@ -1733,14 +1733,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         OutlinedButton.icon(
           onPressed: () => _chooseLayerFont(layer),
           icon: const Icon(Icons.font_download_outlined, size: 17),
-          label: Expanded(
-            child: Text(
-              fonts.where((font) => font.family == selectedFamily).isNotEmpty
-                  ? fonts.firstWhere((font) => font.family == selectedFamily).displayName
-                  : (selectedFamily.isEmpty ? 'App default / automatic fallback' : selectedFamily),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+          label: Text(
+            fonts.where((font) => font.family == selectedFamily).isNotEmpty
+                ? fonts.firstWhere((font) => font.family == selectedFamily).displayName
+                : (selectedFamily.isEmpty ? 'App default / automatic fallback' : selectedFamily),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         const SizedBox(height: 8),
