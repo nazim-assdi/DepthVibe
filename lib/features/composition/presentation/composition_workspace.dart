@@ -17,6 +17,7 @@ import '../../../app/depthvibe_settings_dialog.dart';
 import '../application/composition_controller.dart';
 import '../../fonts/data/font_manager_service.dart';
 import '../../fonts/presentation/font_manager_dialog.dart';
+import '../../fonts/presentation/font_picker_dialog.dart';
 import '../data/effect_catalog.dart';
 import '../../extensions/data/extension_manager_service.dart';
 import '../../extensions/data/adobe_bridge_service.dart';
@@ -231,6 +232,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       builder: (_) => const FontManagerDialog(),
     );
     if (mounted) setState(() {});
+  }
+
+  Future<void> _chooseLayerFont(CompositionLayer layer) async {
+    final font = await FontPickerDialog.show(
+      context,
+      currentFamily: layer.textFontFamily,
+    );
+    if (!mounted || font == null) return;
+    await _applyLayerFont(font);
   }
 
   Future<void> _applyLayerFont(FontCatalogEntry? font) async {
@@ -1720,36 +1730,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               _controller.updateTextLayer(textContent: value),
         ),
         const SizedBox(height: 10),
-        DropdownButtonFormField<String>(
-          initialValue: fonts.any((font) => font.family == selectedFamily)
-              ? selectedFamily
-              : '',
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Font family'),
-          items: [
-            const DropdownMenuItem(
-              value: '',
-              child: Text('App default / automatic fallback'),
+        OutlinedButton.icon(
+          onPressed: () => _chooseLayerFont(layer),
+          icon: const Icon(Icons.font_download_outlined, size: 17),
+          label: Expanded(
+            child: Text(
+              fonts.where((font) => font.family == selectedFamily).isNotEmpty
+                  ? fonts.firstWhere((font) => font.family == selectedFamily).displayName
+                  : (selectedFamily.isEmpty ? 'App default / automatic fallback' : selectedFamily),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            for (final font in fonts)
-              DropdownMenuItem(
-                value: font.family,
-                child: Text(
-                  font.displayName + (font.isImported ? ' · Imported' : ' · System'),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
-          onChanged: (value) {
-            if (value == null || value.isEmpty) {
-              _applyLayerFont(null);
-            } else {
-              final font = fonts.firstWhere(
-                (item) => item.family == value,
-              );
-              _applyLayerFont(font);
-            }
-          },
+          ),
         ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
