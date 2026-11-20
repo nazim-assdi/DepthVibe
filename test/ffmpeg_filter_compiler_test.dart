@@ -94,6 +94,97 @@ void main() {
     expect(filters.single, contains(':a=val'));
   });
 
+
+  test('compiles primary lift gamma gain and offset wheels into color balance', () {
+    const layer = CompositionLayer(
+      id: 'graded-clip',
+      name: 'Graded Footage',
+      kind: LayerKind.video,
+      effects: [
+        EffectInstance(
+          id: 'grade-1',
+          effectId: 'color_grade',
+          name: 'Primary Color Grade',
+          parameters: {
+            'lift_r': 0.2,
+            'lift_g': -0.1,
+            'lift_b': 0.05,
+            'gamma_g': 0.25,
+            'gain_b': -0.2,
+            'offset_r': 0.1,
+            'offset_b': -0.05,
+            'temperature': 0.2,
+            'tint': 0.1,
+            'contrast': 1.35,
+            'brightness': 0.05,
+            'master_gamma': 1.2,
+            'saturation': 1.4,
+          },
+        ),
+      ],
+    );
+
+    final filters = const FfmpegFilterCompiler().compileEffects(
+      layer,
+      timeMs: 0,
+    );
+
+    expect(filters, hasLength(1));
+    expect(filters.single, startsWith('colorbalance='));
+    expect(filters.single, contains('rs=0.355:gs=-0.065:bs=-0.085'));
+    expect(filters.single, contains('rm=0.155:gm=0.285:bm=-0.135'));
+    expect(filters.single, contains('rh=0.155:gh=0.035:bh=-0.335:pl=1'));
+    expect(
+      filters.single,
+      contains("eq=contrast='1.350':brightness='0.050':gamma='1.200':saturation='1.400':eval=frame"),
+    );
+  });
+
+  test('exports animated contrast saturation and master gamma as frame expressions', () {
+    const layer = CompositionLayer(
+      id: 'animated-grade',
+      name: 'Animated Grade',
+      kind: LayerKind.video,
+      effects: [
+        EffectInstance(
+          id: 'grade-animated',
+          effectId: 'color_grade',
+          name: 'Primary Color Grade',
+          parameters: {
+            'contrast': 1,
+            'brightness': 0,
+            'master_gamma': 1,
+            'saturation': 1,
+          },
+          keyframeTracks: [
+            KeyframeTrack(
+              property: 'contrast',
+              keyframes: [
+                ScalarKeyframe(timeMs: 0, value: 1),
+                ScalarKeyframe(timeMs: 1000, value: 1.8),
+              ],
+            ),
+            KeyframeTrack(
+              property: 'saturation',
+              keyframes: [
+                ScalarKeyframe(timeMs: 0, value: 1),
+                ScalarKeyframe(timeMs: 1000, value: 1.5),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final filter = const FfmpegFilterCompiler()
+        .compileEffects(layer, timeMs: 0)
+        .single;
+
+    expect(filter, contains("contrast='if(lt(t,"));
+    expect(filter, contains("saturation='if(lt(t,"));
+    expect(filter, contains(':eval=frame'));
+  });
+
   test('compiles an effect stack into FFmpeg filters', () {
     const layer = CompositionLayer(
       id: 'video-1',
