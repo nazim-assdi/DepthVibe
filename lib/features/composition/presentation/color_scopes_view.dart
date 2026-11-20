@@ -74,7 +74,7 @@ class _ColorScopePainter extends CustomPainter {
 
     if (mode == ColorScopeMode.vectorscope) {
       final center = Offset(size.width / 2, size.height / 2);
-      final radius = math.min(size.width, size.height) * 0.43;
+      final radius = math.min(size.width, size.height).toDouble() * 0.43;
       canvas.drawCircle(
         center,
         radius,
@@ -100,8 +100,8 @@ class _ColorScopePainter extends CustomPainter {
       Color(0xFF70E49A),
       Color(0xFF79AFFF),
     ];
-    final stepX = math.max(1, image.width ~/ 150);
-    final stepY = math.max(1, image.height ~/ 90);
+    final stepX = math.max(1, image.width ~/ 150).toInt();
+    final stepY = math.max(1, image.height ~/ 90).toInt();
     for (var y = 0; y < image.height; y += stepY) {
       for (var x = 0; x < image.width; x += stepX) {
         final pixel = image.getPixel(x, y);
