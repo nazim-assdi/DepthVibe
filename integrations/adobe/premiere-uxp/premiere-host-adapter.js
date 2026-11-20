@@ -14,7 +14,86 @@ async function optional(call, fallback) {
   }
 }
 
-async function captureEffects(trackItem) {
+function nativeParameterValue(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" || typeof value === "boolean") return value;
+  if (Array.isArray(value) && value.length <= 16 &&
+      value.every((item) => typeof item === "number" && Number.isFinite(item))) return value.slice();
+  if (value && typeof value === "object") {
+    if (typeof value.x === "number" && typeof value.y === "number") return [value.x, value.y];
+    if (typeof value.red === "number" && typeof value.green === "number" &&
+        typeof value.blue === "number") {
+      return {
+        red: value.red, green: value.green, blue: value.blue,
+        alpha: typeof value.alpha === "number" ? value.alpha : 1
+      };
+    }
+    if (typeof value.text === "string") return value.text;
+  }
+  return null;
+}
+function tickTime(seconds) {
+  const factory = premiere.TickTime;
+  if (!factory || typeof factory.createWithSeconds !== "function") return null;
+  return factory.createWithSeconds(Number.isFinite(seconds) ? seconds : 0);
+}
+async function readParameterValue(param, timeSeconds) {
+  const time = tickTime(timeSeconds);
+  if (time) {
+    const sampled = await optional(() => param.getValueAtTime(time), null);
+    if (sampled && Object.prototype.hasOwnProperty.call(sampled, "value")) {
+      return nativeParameterValue(sampled.value);
+    }
+  }
+  const initial = await optional(() => param.getStartValue(), null);
+  if (initial && Object.prototype.hasOwnProperty.call(initial, "value")) {
+    return nativeParameterValue(initial.value);
+  }
+  return null;
+}
+async function captureComponentParameters(component, timeSeconds) {
+  const paramCount = await optional(() => component.getParamCount(), 0);
+  const parameters = [];
+  for (let index = 0; index < Math.min(Number(paramCount) || 0, 256); index += 1) {
+    const param = await optional(() => component.getParam(index), null);
+    if (!param) continue;
+    const displayName = await optional(
+      async () => param.displayName,
+      "Parameter " + (index + 1)
+    );
+    const [value, supportsKeyframes, isTimeVarying] = await Promise.all([
+      readParameterValue(param, timeSeconds),
+      optional(() => param.areKeyframesSupported(), false),
+      optional(async () => param.isTimeVarying, false)
+    ]);
+    const keyframes = [];
+    if (supportsKeyframes) {
+      const times = await optional(() => param.getKeyframeListAsTickTimes(), []);
+      for (const time of (Array.isArray(times) ? times : []).slice(0, 2048)) {
+        if (!time || typeof time.seconds !== "number") continue;
+        const keyValue = await readParameterValue(param, time.seconds);
+        if (keyValue !== null) {
+          keyframes.push({ timeSeconds: time.seconds, value: keyValue });
+        }
+      }
+    }
+    if (value !== null || keyframes.length) {
+      parameters.push({
+        index: index,
+        matchName: String(index),
+        name: String(displayName || ("Parameter " + (index + 1))),
+        displayName: String(displayName || ("Parameter " + (index + 1))),
+        value: value,
+        valueType: value === null ? "unknown" : Array.isArray(value) ? "vector" : typeof value,
+        keyframesSupported: supportsKeyframes === true,
+        isTimeVarying: isTimeVarying === true,
+        keyframes: keyframes
+      });
+    }
+  }
+  return parameters;
+}
+async function captureEffects(trackItem, startSeconds) {
   const chain = await optional(() => trackItem.getComponentChain(), null);
   if (!chain) return [];
   const count = await optional(() => chain.getComponentCount(), 0);
@@ -24,21 +103,127 @@ async function captureEffects(trackItem) {
     if (!component) continue;
     const matchName = await optional(() => component.getMatchName(), "");
     const name = await optional(() => component.getDisplayName(), matchName || "Premiere Effect");
-    const paramCount = await optional(() => component.getParamCount(), 0);
-    const properties = [];
-    for (let p = 0; p < Math.min(Number(paramCount) || 0, 128); p += 1) {
-      const param = await optional(() => component.getParam(p), null);
-      if (!param) continue;
-      const paramName = await optional(() => param.getName(), "Parameter " + p);
-      const value = await optional(() => param.getValue(), null);
-      if (typeof value === "number" || typeof value === "string" || typeof value === "boolean" ||
-          (Array.isArray(value) && value.every((item) => typeof item === "number"))) {
-        properties.push({ name: String(paramName), value: value });
-      }
-    }
-    effects.push({ matchName: String(matchName || ""), name: String(name || "Premiere Effect"), properties: properties });
+    const parameters = await captureComponentParameters(
+      component, Number.isFinite(startSeconds) ? startSeconds : 0
+    );
+    effects.push({
+      matchName: String(matchName || ""),
+      name: String(name || "Premiere Effect"),
+      displayName: String(name || "Premiere Effect"),
+      enabled: true,
+      hostApp: "premierepro",
+      properties: parameters,
+      parameters: parameters
+    });
   }
   return effects;
+}
+async function captureInstalledVideoEffects() {
+  const factory = premiere.VideoFilterFactory;
+  if (!factory ||
+      typeof factory.getMatchNames !== "function" ||
+      typeof factory.getDisplayNames !== "function") {
+    return { supported: false, minimumVersion: "25.6", effects: [] };
+  }
+  const [matchNames, displayNames] = await Promise.all([
+    optional(() => factory.getMatchNames(), []),
+    optional(() => factory.getDisplayNames(), [])
+  ]);
+  const effects = [];
+  const matches = Array.isArray(matchNames) ? matchNames : [];
+  const labels = Array.isArray(displayNames) ? displayNames : [];
+  for (let index = 0; index < Math.min(matches.length, 8192); index += 1) {
+    if (typeof matches[index] !== "string" || !matches[index]) continue;
+    effects.push({
+      matchName: matches[index],
+      displayName: typeof labels[index] === "string" ? labels[index] : matches[index],
+      category: "",
+      version: "",
+      hostApp: "premierepro"
+    });
+  }
+  return { supported: true, minimumVersion: "25.6", effects: effects };
+}
+async function findTrackItem(sequence, clipId) {
+  for (const type of ["video", "audio"]) {
+    const count = type === "video"
+      ? await sequence.getVideoTrackCount()
+      : await sequence.getAudioTrackCount();
+    for (let index = 0; index < count; index += 1) {
+      const track = type === "video"
+        ? await sequence.getVideoTrack(index)
+        : await sequence.getAudioTrack(index);
+      const items = await optional(
+        () => track.getTrackItems(premiere.Constants.TrackItemType.CLIP, false), []
+      );
+      for (const item of items || []) {
+        const id = typeof item.getId === "function"
+          ? await optional(() => item.getId(), null) : null;
+        if (String(id) === String(clipId)) return item;
+      }
+    }
+  }
+  return null;
+}
+async function applyNativeVideoEffect(clipId, matchName, parameters) {
+  const project = await premiere.Project.getActiveProject();
+  const sequence = project && await project.getActiveSequence();
+  if (!project || !sequence) throw new Error("Open an active Premiere project and sequence.");
+  if (!matchName) throw new Error("A video effect matchName is required.");
+  const item = await findTrackItem(sequence, clipId);
+  if (!item) throw new Error("The captured Premiere clip no longer exists. Capture the sequence again.");
+  const factory = premiere.VideoFilterFactory;
+  const component = await factory.createComponent(matchName);
+  if (!component) throw new Error("Premiere could not create effect: " + matchName);
+
+  const skippedParameters = [];
+  const actions = [];
+  const paramCount = await optional(() => component.getParamCount(), 0);
+  for (const descriptor of (Array.isArray(parameters) ? parameters : [])) {
+    const index = Number(descriptor.index !== undefined ? descriptor.index : descriptor.matchName);
+    if (!Number.isInteger(index) || index < 0 || index >= Number(paramCount)) continue;
+    const value = nativeParameterValue(descriptor.value);
+    if (value === null) continue;
+    const param = await optional(() => component.getParam(index), null);
+    if (!param) continue;
+    const timeVarying = await optional(async () => param.isTimeVarying, false);
+    if (timeVarying) {
+      skippedParameters.push(String(descriptor.displayName || descriptor.name) + ": animated parameter kept at its host default");
+      continue;
+    }
+    try {
+      const keyframe = param.createKeyframe(value);
+      const action = param.createSetValueAction(keyframe, true);
+      if (action) actions.push(action);
+    } catch (error) {
+      skippedParameters.push(String(descriptor.displayName || descriptor.name) + ": " + String(error));
+    }
+  }
+
+  const chain = await item.getComponentChain();
+  let success = false;
+  project.lockedAccess(() => {
+    success = project.executeTransaction((compoundAction) => {
+      compoundAction.addAction(chain.createAppendComponentAction(component));
+      for (const action of actions) compoundAction.addAction(action);
+    }, "DepthVibe · Add Native Video Effect");
+  });
+  if (!success) throw new Error("Premiere did not accept the native effect transaction.");
+  const snapshot = await capturePremiereSequence();
+  const importedClip = snapshot.payload.videoTracks
+    .concat(snapshot.payload.audioTracks)
+    .flatMap((track) => track.clips || [])
+    .find((clip) => String(clip.id) === String(clipId));
+  return {
+    matchName: matchName,
+    appliedToClipId: String(clipId),
+    parametersApplied: actions.length,
+    skippedParameters: skippedParameters,
+    capturedEffect: importedClip && importedClip.effects
+      ? importedClip.effects.find((effect) => effect.matchName === matchName) || null
+      : null,
+    snapshot: snapshot
+  };
 }
 
 async function captureTrackTransitions(track) {
@@ -94,7 +279,8 @@ async function captureTrackItems(track, trackType) {
     const sourcePath = projectItem
       ? await optional(() => projectItem.getMediaFilePath(), null)
       : null;
-    const effects = await captureEffects(item);
+    const startSeconds = secondsOf(values[1]);
+    const effects = await captureEffects(item, startSeconds);
     clips.push({
       id: typeof item.getId === "function" ? await optional(() => item.getId()) : null,
       name: values[0],
@@ -173,11 +359,11 @@ async function capturePremiereSequence() {
     }
   }
 
-  const transitionFactory = premiere.TransitionFactory;
-  const installedVideoTransitions = await optional(
-    () => transitionFactory.getVideoTransitionMatchNames(),
-    []
-  );
+  const [installedTransitionResult, installedEffectResult] = await Promise.all([
+    optional(async () => premiere.TransitionFactory.getVideoTransitionMatchNames(), []),
+    captureInstalledVideoEffects()
+  ]);
+  const installedVideoTransitions = installedTransitionResult;
   const installedTransitionNames = Array.isArray(installedVideoTransitions)
     ? installedVideoTransitions.map((item) => typeof item === "string"
         ? item : (item && (item.matchName || item.name))
@@ -219,10 +405,13 @@ async function capturePremiereSequence() {
       videoTracks: videoTracks,
       audioTracks: audioTracks,
       installedVideoTransitions: installedTransitionNames,
+      installedVideoEffects: installedEffectResult.effects,
+      installedVideoEffectsSupported: installedEffectResult.supported,
+      installedVideoEffectsMinimumVersion: installedEffectResult.minimumVersion,
       warnings: trackWarnings,
       transferScope: "metadata-only; media files and native effects are not copied"
     }
   };
 }
 
-module.exports = { capturePremiereSequence };
+module.exports = { capturePremiereSequence, captureInstalledVideoEffects, applyNativeVideoEffect };
