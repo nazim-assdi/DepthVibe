@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../../app/depthvibe_settings.dart';
+
 import '../data/font_manager_service.dart';
 
 class FontManagerDialog extends StatefulWidget {
@@ -63,7 +65,7 @@ class _FontManagerDialogState extends State<FontManagerDialog> {
     try {
       final picked = await FilePicker.pickFile(
         type: FileType.custom,
-        allowedExtensions: const ['ttf', 'otf'],
+        allowedExtensions: const ['ttf', 'otf', 'ttc'],
       );
       final path = picked?.path;
       if (path == null) return;
@@ -163,7 +165,7 @@ class _FontManagerDialogState extends State<FontManagerDialog> {
                   FilledButton.icon(
                     onPressed: _working ? null : _importFont,
                     icon: const Icon(Icons.add, size: 17),
-                    label: const Text('Import TTF / OTF'),
+                    label: const Text('Import TTF / OTF / TTC'),
                   ),
                   const SizedBox(width: 6),
                   IconButton(
@@ -247,7 +249,7 @@ class _FontManagerDialogState extends State<FontManagerDialog> {
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                     fontSize: 9,
-                                    color: Color(0xFF8292A9),
+                                    color: Theme.of(context).extension<DepthVibePalette>()!.secondaryText,
                                   ),
                                 ),
                               ],
