@@ -129,6 +129,24 @@ class FontManagerService extends ChangeNotifier {
     return extension == 'ttf' || extension == 'otf';
   }
 
+  static int suggestedWeight(String? style) {
+    final value = (style ?? '').toLowerCase();
+    if (value.contains('thin')) return 100;
+    if (value.contains('extra light') || value.contains('ultra light')) return 200;
+    if (value.contains('light')) return 300;
+    if (value.contains('extra bold') || value.contains('ultra bold')) return 800;
+    if (value.contains('semi bold') || value.contains('demi')) return 600;
+    if (value.contains('black') || value.contains('heavy')) return 900;
+    if (value.contains('bold')) return 700;
+    if (value.contains('medium')) return 500;
+    return 400;
+  }
+
+  static bool isItalicStyle(String? style) {
+    final value = (style ?? '').toLowerCase();
+    return value.contains('italic') || value.contains('oblique');
+  }
+
   static bool hasValidFontSignature(Uint8List bytes) {
     if (bytes.length < 4) return false;
     final signature = String.fromCharCodes(bytes.take(4));
