@@ -697,6 +697,7 @@ class EffectInstance {
     this.parameters = const {},
     this.keyframeTracks = const [],
     this.assetUri,
+    this.assetInterpolation = 'trilinear',
   });
 
   final String id;
@@ -705,6 +706,7 @@ class EffectInstance {
   final bool enabled;
   final Map<String, double> parameters;
   final String? assetUri;
+  final String assetInterpolation;
   final List<KeyframeTrack> keyframeTracks;
 
   double parameterAt(String key, int timeMs, {double fallback = 0}) {
@@ -719,6 +721,7 @@ class EffectInstance {
     List<KeyframeTrack>? keyframeTracks,
     String? assetUri,
     bool clearAssetUri = false,
+    String? assetInterpolation,
   }) =>
       EffectInstance(
         id: id,
@@ -728,6 +731,7 @@ class EffectInstance {
         parameters: parameters ?? this.parameters,
         keyframeTracks: keyframeTracks ?? this.keyframeTracks,
         assetUri: clearAssetUri ? null : (assetUri ?? this.assetUri),
+        assetInterpolation: assetInterpolation ?? this.assetInterpolation,
       );
 }
 
