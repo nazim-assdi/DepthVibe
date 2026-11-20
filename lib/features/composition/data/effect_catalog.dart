@@ -39,7 +39,7 @@ class EffectDefinition {
 class EffectCatalog {
   EffectCatalog._();
 
-  static const all = <EffectDefinition>[
+  static final all = <EffectDefinition>[
     EffectDefinition(
       id: 'brightness',
       name: 'Brightness',

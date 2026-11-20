@@ -93,7 +93,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ' -frames:v 1 -vf scale=960:540:force_original_aspect_ratio=decrease,'
           'pad=960:540:(ow-iw)/2:(oh-ih)/2 -an ' +
           _quoteFfmpeg(frame.path);
-      final session = await FFmpegKit.execute(command).timeout(
+      final session = await FFmpegKit.executeAsync(command).timeout(
         const Duration(seconds: 12),
         onTimeout: () {
           final activeSessions = FFmpegKit.getFFmpegSessions()
