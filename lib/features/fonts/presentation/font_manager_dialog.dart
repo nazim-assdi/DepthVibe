@@ -63,6 +63,28 @@ class _FontManagerDialogState extends State<FontManagerDialog> {
     }
   }
 
+
+  Future<void> _importFolder() async {
+    try {
+      final selected = await FilePicker.pickDirectory();
+      final path = selected?.toFilePath();
+      if (path == null) return;
+      setState(() => _working = true);
+      final result = await _fonts.importFontFolder(path);
+      if (mounted) {
+        setState(() => _notice =
+            'Imported ' + result.imported.toString() +
+            ' fonts; skipped ' + result.skipped.toString() + '.');
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _notice = 'Folder import failed: ' + error.toString());
+      }
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _setDefault(FontCatalogEntry? entry) async {
     try {
       await _fonts.setAppDefault(entry);
@@ -117,6 +139,12 @@ class _FontManagerDialogState extends State<FontManagerDialog> {
                     onPressed: _working ? null : _refresh,
                     icon: const Icon(Icons.refresh),
                   ),
+                  OutlinedButton.icon(
+                    onPressed: _working ? null : _importFolder,
+                    icon: const Icon(Icons.folder_open, size: 17),
+                    label: const Text('Import folder'),
+                  ),
+                  const SizedBox(width: 6),
                   FilledButton.icon(
                     onPressed: _working ? null : _importFont,
                     icon: const Icon(Icons.add, size: 17),
