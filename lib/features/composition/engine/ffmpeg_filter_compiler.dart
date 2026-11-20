@@ -56,6 +56,42 @@ class FfmpegFilterCompiler {
       );
     }
 
+    if (id == 'color_grade') {
+      double wheel(String band, String channel) {
+        final bandValue = effect.parameters['${band}_${channel}'] ?? 0;
+        final offset = effect.parameters['offset_$channel'] ?? 0;
+        final temperature = effect.parameters['temperature'] ?? 0;
+        final tint = effect.parameters['tint'] ?? 0;
+        final whiteBalance = switch (channel) {
+          'r' => temperature * 0.35 - tint * 0.15,
+          'g' => tint * 0.35,
+          _ => -temperature * 0.35 - tint * 0.15,
+        };
+        return (bandValue + offset + whiteBalance)
+            .clamp(-1.0, 1.0)
+            .toDouble();
+      }
+
+      String number(double value) => value.toStringAsFixed(3);
+      final colorBalance = 'colorbalance='
+          'rs=${number(wheel('lift', 'r'))}:'
+          'gs=${number(wheel('lift', 'g'))}:'
+          'bs=${number(wheel('lift', 'b'))}:'
+          'rm=${number(wheel('gamma', 'r'))}:'
+          'gm=${number(wheel('gamma', 'g'))}:'
+          'bm=${number(wheel('gamma', 'b'))}:'
+          'rh=${number(wheel('gain', 'r'))}:'
+          'gh=${number(wheel('gain', 'g'))}:'
+          'bh=${number(wheel('gain', 'b'))}:pl=1';
+      final eq = 'eq='
+          "contrast='${parameterExpression('contrast')}':"
+          "brightness='${parameterExpression('brightness')}':"
+          "gamma='${parameterExpression('master_gamma')}':"
+          "saturation='${parameterExpression('saturation')}':"
+          'eval=frame';
+      return colorBalance + ',' + eq;
+    }
+
     if (id == 'displacement') {
       final amount = parameterExpression('amount');
       final wavelength = parameterExpression('wavelength');
