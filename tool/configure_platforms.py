@@ -228,11 +228,19 @@ def configure_linux_branding() -> None:
     app_source = linux / "runner" / "my_application.cc"
     if app_source.exists():
         text = app_source.read_text(encoding="utf-8")
-        marker = 'gtk_window_set_title(window, "DepthVibe");'
         icon_call = 'gtk_window_set_icon_name(window, "depthvibe");'
-        if marker in text and icon_call not in text:
-            text = text.replace(marker, marker + "\n  " + icon_call, 1)
-            app_source.write_text(text, encoding="utf-8")
+        if icon_call not in text:
+            title_call = re.search(
+                r'(?m)^(?P<indent>\\s*)gtk_window_set_title\\([^;]*;',
+                text,
+            )
+            if title_call is not None:
+                replacement = (
+                    title_call.group(0) +
+                    "\\n" + title_call.group("indent") + icon_call
+                )
+                text = text[:title_call.start()] + replacement + text[title_call.end():]
+                app_source.write_text(text, encoding="utf-8")
 
 
 def ensure_windows_icon_resource() -> None:
