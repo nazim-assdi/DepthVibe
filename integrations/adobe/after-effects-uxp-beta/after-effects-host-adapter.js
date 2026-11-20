@@ -135,29 +135,165 @@ function captureScalarPropertyKeyframes(property) {
     return frames;
   } catch (_) { return []; }
 }
+function nativeSerializableValue(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" || typeof value === "boolean") return value;
+  if (Array.isArray(value) && value.length <= 16 &&
+      value.every(function (item) {
+        return typeof item === "number" && Number.isFinite(item);
+      })) return value.slice();
+  return null;
+}
+function captureNativeProperty(property, path, depth) {
+  if (!property || depth > 8) return [];
+  const children = [];
+  const childCount = Math.min(Number(property.numProperties) || 0, 256);
+  for (let index = 1; index <= childCount; index += 1) {
+    let child = null;
+    try { child = property.property(index); } catch (_) {}
+    if (!child) continue;
+    const nextPath = path.concat([child.matchName || child.name || String(index)]);
+    children.push.apply(children, captureNativeProperty(child, nextPath, depth + 1));
+  }
+  if (children.length) return children;
+
+  const value = nativeSerializableValue((function () {
+    try { return property.value; } catch (_) { return null; }
+  }()));
+  const descriptor = {
+    matchName: property.matchName || "",
+    name: property.name || property.matchName || "Parameter",
+    displayName: property.name || property.matchName || "Parameter",
+    path: path,
+    propertyType: property.propertyType,
+    propertyValueType: property.propertyValueType,
+    unitsText: property.unitsText || "",
+    value: value
+  };
+  try { if (property.hasMin) descriptor.minValue = property.minValue; } catch (_) {}
+  try { if (property.hasMax) descriptor.maxValue = property.maxValue; } catch (_) {}
+  try {
+    if (property.propertyParameters && property.propertyParameters.length) {
+      descriptor.options = property.propertyParameters.slice(0, 256);
+      descriptor.valueText = property.valueText || "";
+    }
+  } catch (_) {}
+  try {
+    if (property.numKeys > 0) {
+      descriptor.keyframes = captureScalarPropertyKeyframes(property);
+    }
+  } catch (_) {}
+  try {
+    if (typeof property.expression === "string" && property.expression.length > 0) {
+      descriptor.expression = {
+        source: property.expression,
+        enabled: property.expressionEnabled === true
+      };
+    }
+  } catch (_) {}
+  return [descriptor];
+}
 function captureEffects(layer) {
   const group = layer.property("ADBE Effect Parade"), effects = [];
   if (!group) return effects;
   for (let i = 1; i <= Math.min(group.numProperties || 0, 128); i += 1) {
-    const effect = group.property(i), properties = [];
+    const effect = group.property(i), parameters = [];
     if (!effect) continue;
-    for (let p = 1; p <= Math.min(effect.numProperties || 0, 128); p += 1) {
+    for (let p = 1; p <= Math.min(effect.numProperties || 0, 256); p += 1) {
       const property = effect.property(p);
       if (!property) continue;
-      const value = safePropertyValue(effect, property.matchName);
-      if (value !== null) properties.push({
-        matchName: property.matchName,
-        name: property.name,
-        value: value,
-        keyframes: captureScalarPropertyKeyframes(property),
-        expression: typeof property.expression === "string" && property.expression.length
-          ? { source: property.expression, enabled: property.expressionEnabled === true }
-          : null
-      });
+      parameters.push.apply(parameters,
+        captureNativeProperty(property, [property.matchName || property.name || String(p)], 0));
     }
-    effects.push({ matchName: effect.matchName, name: effect.name, enabled: effect.enabled !== false, properties: properties });
+    effects.push({
+      matchName: effect.matchName || "",
+      name: effect.name || effect.matchName || "Adobe Effect",
+      displayName: effect.name || effect.matchName || "Adobe Effect",
+      enabled: effect.enabled !== false,
+      category: effect.category || "",
+      properties: parameters,
+      parameters: parameters
+    });
   }
   return effects;
+}
+function captureInstalledEffects() {
+  try {
+    if (!Array.isArray(afterEffects.effects)) {
+      return { supported: false, minimumVersion: "27.0", effects: [] };
+    }
+    return {
+      supported: true,
+      minimumVersion: "27.0",
+      effects: afterEffects.effects.slice(0, 4096).map(function (effect) {
+        return {
+          displayName: String(effect.displayName || effect.matchName || "Effect"),
+          matchName: String(effect.matchName || ""),
+          category: String(effect.category || ""),
+          version: String(effect.version || ""),
+          hostApp: "aftereffects"
+        };
+      }).filter(function (effect) { return effect.matchName.length > 0; })
+    };
+  } catch (error) {
+    return { supported: false, minimumVersion: "27.0", effects: [], error: String(error) };
+  }
+}
+function applyNativeEffectToSelection(matchName) {
+  const project = afterEffects.project;
+  const composition = project && project.activeItem;
+  if (!composition || !Array.isArray(composition.selectedLayers) ||
+      composition.selectedLayers.length === 0) {
+    throw new Error("Select one or more layers in the active composition first.");
+  }
+  if (!matchName || typeof matchName !== "string") {
+    throw new Error("An installed effect matchName is required.");
+  }
+  const applied = [], warnings = [];
+  afterEffects.beginUndoGroup("DepthVibe · Apply Native Effect");
+  try {
+    const selected = composition.selectedLayers.slice();
+    for (let index = 0; index < selected.length; index += 1) {
+      const layer = selected[index];
+      try {
+        let parade = layer.property("ADBE Effect Parade");
+        if (!parade || !parade.canAddProperty(matchName)) {
+          warnings.push(layer.name + ": effect is unavailable: " + matchName);
+          continue;
+        }
+        const effect = parade.addProperty(matchName);
+        applied.push({ layerId: layer.id, layerName: layer.name, matchName: effect.matchName || matchName });
+      } catch (error) {
+        warnings.push(layer.name + ": " + String(error));
+      }
+    }
+  } finally {
+    afterEffects.endUndoGroup();
+  }
+  return { applied: applied, warnings: warnings, snapshot: captureActiveComposition() };
+}
+function applyFfxPreset(path) {
+  const project = afterEffects.project;
+  const composition = project && project.activeItem;
+  if (!composition || typeof composition.applyPreset !== "function") {
+    throw new Error("The active composition does not support UXP animation presets. After Effects 27.0 or later is required.");
+  }
+  if (!path || typeof path !== "string") throw new Error("Choose a valid .ffx preset file.");
+  const applied = composition.applyPreset(path);
+  if (!applied) throw new Error("After Effects did not apply the selected .ffx preset. Select target layers first.");
+  return { applied: true, snapshot: captureActiveComposition() };
+}
+function saveFfxPreset(path) {
+  const project = afterEffects.project;
+  const composition = project && project.activeItem;
+  if (!composition || !Array.isArray(composition.selectedLayers) ||
+      composition.selectedLayers.length === 0) {
+    throw new Error("Select a layer and the properties you want to include in the preset.");
+  }
+  if (!path || typeof path !== "string") throw new Error("Choose an output .ffx file path.");
+  const saved = composition.selectedLayers[0].savePreset(path);
+  if (!saved) throw new Error("No selected properties were saved. Select effect/animation properties in the Timeline panel.");
+  return { saved: true, path: path };
 }
 
 function captureActiveComposition() {
@@ -248,9 +384,16 @@ function captureActiveComposition() {
         backgroundColor: composition.bgColor
       },
       layers: layers,
+      installedEffects: captureInstalledEffects(),
       transferScope: "metadata-only; footage files, plugin binaries and rendered frames are not copied"
     }
   };
 }
 
-module.exports = { captureActiveComposition };
+module.exports = {
+  captureActiveComposition,
+  captureInstalledEffects,
+  applyNativeEffectToSelection,
+  applyFfxPreset,
+  saveFfxPreset
+};

@@ -316,9 +316,8 @@ class AdobeInterchangeService {
         if (raw['parameterTree'] is List)
           'parameterTree': raw['parameterTree'],
       };
-      final additions=<EffectInstance>[];
       double param(List<String> keys,double fallback){
-        for(final p in props){final n=(_s(p['matchName'])+' '+_s(p['name'])).toLowerCase();
+        for(final p in props){final n=(_s(p['matchName'])+' '+_s(p['name'])+' '+_s(p['displayName'])).toLowerCase();
           if(keys.any(n.contains)){final v=_n(p['value']);if(v!=null)return v;}}return fallback;
       }
       final additions=<EffectInstance>[];
@@ -344,6 +343,7 @@ class AdobeInterchangeService {
           parameters:{'value':(1+param(['master saturation','saturation'],0)/100).clamp(0,3).toDouble()},
           keyframeTracks:_effectKeyframeTracks(props,['master saturation','saturation'],'value',mapValue:(v)=>(1+v/100).clamp(0,3).toDouble()),enabled:_b(raw['enabled'],true)));id++;
       }
+      final additions=<EffectInstance>[];
       if(additions.isEmpty) {
         final nativeName = _s(raw['displayName'], _s(raw['name'], match));
         additions.add(EffectInstance(
