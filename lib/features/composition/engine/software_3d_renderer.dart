@@ -232,11 +232,16 @@ class Software3dRenderer {
           ? _multiply(shadingNormal, -1)
           : shadingNormal;
 
-      Offset uvAt(int vertexIndex) =>
-          mesh.hasTextureCoordinates &&
-                  mesh.textureCoordinates.length == mesh.vertices.length
-              ? mesh.textureCoordinates[vertexIndex]
-              : Offset.zero;
+      final material = mesh.materialFor(triangle);
+      Offset uvAt(int vertexIndex) {
+        final uv = mesh.hasTextureCoordinates &&
+                mesh.textureCoordinates.length == mesh.vertices.length
+            ? mesh.textureCoordinates[vertexIndex]
+            : Offset.zero;
+        final textureMap = material.baseColorTextureMap;
+        if (textureMap == null || textureMap.texCoord != 0) return uv;
+        return textureMap.transformUv(uv);
+      }
       var polygon = <_SceneVertex>[
         _SceneVertex(worldA, cameraVertices[triangle.a], focus, uvAt(triangle.a)),
         _SceneVertex(worldB, cameraVertices[triangle.b], focus, uvAt(triangle.b)),
@@ -246,7 +251,6 @@ class Software3dRenderer {
       polygon = _clipPolygon(polygon, far, keepGreater: false);
       if (polygon.length < 3) continue;
 
-      final material = mesh.materialFor(triangle);
       final color = _shade(
         material,
         twoSidedNormal,
@@ -291,6 +295,8 @@ class Software3dRenderer {
         );
         final textureIsUsable = triangleHasUvs &&
             mesh.hasTextureCoordinates &&
+            (material.baseColorTextureMap == null ||
+                material.baseColorTextureMap!.texCoord == 0) &&
             material.baseColorTextureRgba != null &&
             material.baseColorTextureWidth > 0 &&
             material.baseColorTextureHeight > 0 &&
