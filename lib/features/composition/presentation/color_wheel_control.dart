@@ -41,12 +41,13 @@ class ColorWheelControl extends StatelessWidget {
   }
 
   void _update(Offset localPosition) {
-    final radius = diameter / 2 - 5;
+    final center = diameter / 2;
+    final radius = center - 5;
     final vector = Offset(
-      (localPosition.dx - radius) / radius,
-      (radius - localPosition.dy) / radius,
+      (localPosition.dx - center) / radius,
+      (center - localPosition.dy) / radius,
     );
-    final distance = math.min(1.0, vector.distance);
+    final distance = math.min(1.0, vector.distance).toDouble();
     if (distance <= 0.015) {
       onChanged(const ColorWheelValue(0, 0, 0));
       return;
@@ -100,7 +101,7 @@ class _ColorWheelPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = math.min(size.width, size.height) / 2 - 5;
+    final radius = (math.min(size.width, size.height) / 2 - 5).toDouble();
     final rect = Rect.fromCircle(center: center, radius: radius);
     final wheelPaint = Paint()
       ..shader = const SweepGradient(
