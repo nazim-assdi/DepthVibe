@@ -14,6 +14,7 @@ import '../application/composition_controller.dart';
 import '../data/effect_catalog.dart';
 import '../data/photoshop_import_service.dart';
 import '../domain/composition_models.dart';
+import '../domain/color_grade_preset.dart';
 import '../engine/parent_transform_resolver.dart';
 import '../engine/camera_projection_resolver.dart';
 import '../engine/composition_export_service.dart';
@@ -1733,6 +1734,119 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     }
   }
 
+  Future<void> _exportColorGradePreset(CompositionLayer layer) async {
+    try {
+      var preset = ColorGradePreset.fromLayer(
+        layer,
+        outputProfile: _controller.document.colorOutputProfile,
+        name: layer.name,
+      );
+      var lutWasEmbedded = false;
+      final lutPath = layer.effects
+          .where((effect) => effect.effectId == 'color_lut')
+          .firstOrNull
+          ?.assetUri;
+      if (preset.lut != null && lutPath != null) {
+        final lutFile = File(lutPath);
+        if (await lutFile.exists()) {
+          final lutContent = await lutFile.readAsString();
+          CubeLutValidator.parse(lutContent);
+          preset = preset.withLutContent(lutContent);
+          lutWasEmbedded = true;
+        }
+      }
+
+      final safeName = preset.name
+          .replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_')
+          .replaceAll(RegExp(r'_+'), '_');
+      final temporary = await getTemporaryDirectory();
+      final output = File(
+        temporary.path + Platform.pathSeparator +
+            'DepthVibe_' +
+            (safeName.isEmpty ? 'Color_Grade' : safeName) +
+            '_' + DateTime.now().millisecondsSinceEpoch.toString() +
+            '.dvgrade',
+      );
+      await output.writeAsString(preset.encode(), flush: true);
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(output.path)],
+          text: 'DepthVibe color grade preset',
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _notice = preset.lut != null && !lutWasEmbedded
+            ? 'Preset exported. Its LUT file was not available to embed; share the .cube file separately.'
+            : 'Color preset exported with animated keyframes and LUT data.';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _notice = 'Color preset export failed: $error');
+      }
+    }
+  }
+
+  Future<void> _importColorGradePreset() async {
+    try {
+      final picked = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['dvgrade', 'json'],
+      );
+      if (picked == null) return;
+      final sourcePath = picked.path;
+      if (sourcePath == null || sourcePath.isEmpty) {
+        throw StateError('The selected preset has no readable local path.');
+      }
+      final preset = ColorGradePreset.decode(
+        await File(sourcePath).readAsString(),
+      );
+      if (_selected == null) {
+        throw StateError('Select a layer before applying a color preset.');
+      }
+
+      String? importedLutPath;
+      final lutContent = preset.lut?.content;
+      if (lutContent != null) {
+        final info = CubeLutValidator.parse(lutContent);
+        final documents = await getApplicationDocumentsDirectory();
+        final lutDirectory = Directory(
+          documents.path + Platform.pathSeparator +
+              'DepthVibe' + Platform.pathSeparator + 'LUTs',
+        );
+        await lutDirectory.create(recursive: true);
+        final fileName = (preset.lut?.fileName ?? 'preset.cube')
+            .replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+        final safeName = fileName.isEmpty ? 'preset.cube' : fileName;
+        final target = File(
+          lutDirectory.path + Platform.pathSeparator +
+              DateTime.now().millisecondsSinceEpoch.toString() +
+              '_' + safeName,
+        );
+        importedLutPath = (await target.writeAsString(
+          lutContent,
+          flush: true,
+        )).path;
+        _notice = 'Validated ${info.size}³ LUT · ${info.entryCount} samples';
+      }
+
+      _controller.applyColorGradePreset(
+        preset,
+        lutAssetUri: importedLutPath,
+      );
+      if (!mounted) return;
+      setState(() {
+        _notice = preset.lut != null && importedLutPath == null
+            ? 'Applied "${preset.name}". Re-import its missing .cube LUT to render that effect.'
+            : 'Applied color preset "${preset.name}" to ${_selected!.name}.';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _notice = 'Color preset import failed: $error');
+      }
+    }
+  }
+
   Widget _buildColorScopes(
     CompositionLayer layer,
     EffectInstance? grade,
@@ -1988,6 +2102,26 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _panelHeader('COLOR PAGE · PRIMARY & SECONDARY', Icons.color_lens),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _exportColorGradePreset(layer),
+                icon: const Icon(Icons.ios_share, size: 15),
+                label: const Text('SAVE PRESET'),
+              ),
+            ),
+            const SizedBox(width: 7),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _importColorGradePreset,
+                icon: const Icon(Icons.file_open_outlined, size: 15),
+                label: const Text('LOAD PRESET'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
         if (grade == null)
           FilledButton.icon(
             onPressed: () => _controller.addEffect('color_grade'),

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../data/effect_catalog.dart';
 import '../domain/composition_models.dart';
+import '../domain/color_grade_preset.dart';
 import '../engine/transition_frame_validator.dart';
 
 class CompositionController extends ChangeNotifier {
@@ -678,6 +679,63 @@ class CompositionController extends ChangeNotifier {
   void setColorOutputProfile(ColorOutputProfile profile) {
     _document = _document.copyWith(colorOutputProfile: profile);
     notifyListeners();
+  }
+
+  void applyColorGradePreset(
+    ColorGradePreset preset, {
+    String? lutAssetUri,
+  }) {
+    final layer = selectedLayer;
+    if (layer == null) return;
+
+    final replacements = <EffectInstance>[];
+    final primary = preset.primary;
+    if (primary != null) {
+      replacements.add(EffectInstance(
+        id: _id('effect'),
+        effectId: 'color_grade',
+        name: 'Primary Color Grade',
+        enabled: primary.enabled,
+        parameters: primary.parameters,
+        keyframeTracks: primary.keyframeTracks,
+      ));
+    }
+    final curves = preset.curves;
+    if (curves != null) {
+      replacements.add(EffectInstance(
+        id: _id('effect'),
+        effectId: 'color_curves',
+        name: 'Primary Curves',
+        enabled: curves.enabled,
+        parameters: curves.parameters,
+        keyframeTracks: curves.keyframeTracks,
+      ));
+    }
+    final lut = preset.lut;
+    if (lut != null) {
+      replacements.add(EffectInstance(
+        id: _id('effect'),
+        effectId: 'color_lut',
+        name: '3D LUT',
+        enabled: lut.enabled,
+        assetUri: lutAssetUri,
+        assetInterpolation: lut.interpolation,
+      ));
+    }
+
+    const colorEffectIds = {'color_grade', 'color_curves', 'color_lut'};
+    final retained = layer.effects
+        .where((effect) => !colorEffectIds.contains(effect.effectId))
+        .toList();
+    final updatedLayer = layer.copyWith(
+      effects: [...retained, ...replacements],
+    );
+    _set(_document.copyWith(
+      colorOutputProfile: preset.outputProfile,
+      layers: _document.layers
+          .map((item) => item.id == layer.id ? updatedLayer : item)
+          .toList(),
+    ));
   }
 
   void setEffectParameter(
