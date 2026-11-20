@@ -19,7 +19,7 @@ void main() {
       directory = await Directory.systemTemp.createTemp('depthvibe_publishers_');
       store = PublisherTrustStore(directory: directory);
       keyPair = await Ed25519().newKeyPair();
-      publicKey = await keyPair.extractPublicKey() as SimplePublicKey;
+      publicKey = await keyPair.extractPublicKey();
       final digest = await Sha256().hash(publicKey.bytes);
       fingerprint = digest.bytes
           .map((value) => value.toRadixString(16).padLeft(2, '0'))

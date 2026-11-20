@@ -35,9 +35,6 @@ Future<void> main(List<String> args) async {
   final pair = await Ed25519().newKeyPair();
   try {
     final extracted = await pair.extract();
-    if (extracted is! SimpleKeyPairData) {
-      throw StateError('Unexpected Ed25519 key type.');
-    }
     final seed = extracted.bytes;
     final publicBytes = extracted.publicKey.bytes;
     if (seed.length != 32 || publicBytes.length != 32) {

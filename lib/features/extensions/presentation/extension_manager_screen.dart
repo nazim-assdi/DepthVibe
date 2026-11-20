@@ -6,7 +6,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../data/extension_manager_service.dart';
-import '../data/extension_marketplace_service.dart';
 import 'extension_marketplace_screen.dart';
 import 'adobe_integration_screen.dart';
 
