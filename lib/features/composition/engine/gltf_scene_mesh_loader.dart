@@ -63,6 +63,7 @@ class GltfSceneMeshLoader {
     }
 
     final encoded = document.imageData[gltf.ImageIdx(source.value)];
+    if (encoded == null || encoded.isEmpty) return null;
     final decoded = img.decodeImage(encoded);
     final transform = extensions?.get(gltf.khrTextureTransform);
     return ObjTextureMap(
