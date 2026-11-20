@@ -280,9 +280,31 @@ class MotionBroPackService extends ChangeNotifier {
         flush: true,
       );
 
-      if (await destination.exists()) await destination.delete(recursive: true);
-      await staging.rename(destination.path);
-      installed = true;
+      final backupRoot = Directory(join(root.path, '.updates'));
+      final backup = Directory(join(backupRoot.path, id));
+      var movedExisting = false;
+      try {
+        if (await destination.exists()) {
+          await backupRoot.create(recursive: true);
+          if (await backup.exists()) await backup.delete(recursive: true);
+          await destination.rename(backup.path);
+          movedExisting = true;
+        }
+        await staging.rename(destination.path);
+        installed = true;
+      } catch (_) {
+        if (movedExisting && await backup.exists() && !await destination.exists()) {
+          await backup.rename(destination.path);
+        }
+        rethrow;
+      }
+      if (movedExisting && await backup.exists()) {
+        try {
+          await backup.delete(recursive: true);
+        } catch (_) {
+          // Keep the previous imported pack for manual recovery.
+        }
+      }
       final pack = MotionBroPresetPack(
         id: id,
         name: name,
@@ -406,8 +428,13 @@ class MotionBroPackService extends ChangeNotifier {
       final equals = line.indexOf('=');
       if (equals <= 0) continue;
       final key = line.substring(0, equals).trim().toLowerCase();
-      final value = line.substring(equals + 1).trim();
-      if (key.isNotEmpty) result[key] = value;
+      var value = line.substring(equals + 1).trim();
+      // Motion Bro's published pack.info examples include inline "// comments".
+      final inlineComment = value.indexOf('//');
+      if (inlineComment >= 0) value = value.substring(0, inlineComment).trim();
+      final hashComment = value.indexOf(' #');
+      if (hashComment >= 0) value = value.substring(0, hashComment).trim();
+      if (key.isNotEmpty && value.isNotEmpty) result[key] = value;
     }
     return result;
   }
@@ -457,9 +484,16 @@ class MotionBroPackService extends ChangeNotifier {
   static String? _previewFor(String relativePath, Set<String> allPaths) {
     final parts = relativePath.split('/');
     final fileName = parts.removeLast();
-    final previewPath = parts.isEmpty
-        ? '(Preview)/' + fileName
-        : [...parts, '(Preview)', fileName].join('/');
-    return allPaths.contains(previewPath.toLowerCase()) ? previewPath : null;
+    final separator = fileName.lastIndexOf('.');
+    final stem = separator < 0 ? fileName : fileName.substring(0, separator);
+    final previewDirectory = [...parts, '(Preview)'].join('/');
+    // Motion Bro allows preview video/image formats independent of preset type
+    // (for example, an FFX preset may have a same-name MP4/JPG preview).
+    for (final extension in const ['mp4', 'jpg', 'jpeg', 'png', 'gif']) {
+      final candidate = (previewDirectory.isEmpty ? '' : '$previewDirectory/') +
+          stem + '.' + extension;
+      if (allPaths.contains(candidate.toLowerCase())) return candidate;
+    }
+    return null;
   }
 }

@@ -131,3 +131,10 @@ Premiere Pro 25.6+ UXP exposes VideoFilterFactory inventory by match-name/displa
 Parameter values are editable in the DepthVibe native-effect panel when a safe scalar range is exposed. Opaque/vector/plugin-specific values remain preserved as native metadata and are applied by the relevant Adobe host when its API supports that value type. For Premiere, keyframe values/interpolation are captured, and the adapter uses ComponentParam time-varying/add-keyframe actions when supported. Parameters without a supported host keyframe API are reported as skipped instead of silently approximated.
 
 This is native-host execution, not a claim that proprietary Adobe plug-ins can run inside DepthVibe's FFmpeg renderer. Unsupported effects stay tagged as native host effects until a portable DepthVibe renderer exists.
+
+
+### Motion Bro .MBR pack support
+
+The Compositor can import user-supplied legacy `.MBR` packages. The importer reads root `pack.info` metadata (including inline comments used in Motion Bro examples), category/subcategory folders, optional `(Assets)` files and `(Preview)` folders. It keeps original preset/media files, identifies `.FFX` and `.MOGRT` separately, and matches same-basename previews even when their extension differs from the preset.
+
+The After Effects UXP panel can apply imported `.FFX` files to selected layers; the Premiere UXP panel can insert imported `.MOGRT` files at the active sequence playhead. The imported library is not a license activator: current Motion Bro packs that require a license key still require their original valid license and supported Motion Bro workflow. DepthVibe does not unlock, decrypt, remove activation checks or alter licensed pack contents. The importer does not execute `.JSX` or `.JSXBIN` code.

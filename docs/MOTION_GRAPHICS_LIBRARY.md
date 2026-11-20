@@ -40,3 +40,10 @@ This is not a copy of all Adobe built-in or third-party plug-ins and not a redis
 - `.dvmpreset`: portable single-layer package with DepthVibe editable transforms, effects, scalar keyframes and Adobe native effect descriptors. External assets and plugin binaries are not bundled.
 - `.ffx`: native After Effects animation preset import/export through the AE UXP host API (After Effects 27.0+). The host applies the preset to its selected AE layer(s) and DepthVibe captures the result.
 - Premiere installed video/audio effects: discoverable via VideoFilterFactory and AudioFilterFactory (Premiere Pro 25.6+), apply to a selected captured clip, then capture values and supported animation back to DepthVibe.
+
+
+## Motion Bro pack library
+
+The Compositor can import legacy user-supplied `.MBR` archives into a local pack library. It reads `pack.info`, categories/subcategories, `(Assets)` and `(Preview)` assets, retaining original files. Search by pack, category or preset name. Compatible `.FFX` entries appear in the After Effects host panel; compatible `.MOGRT` entries appear in the Premiere host panel.
+
+After Effects applies the selected `.FFX` to selected layer(s). Premiere inserts the selected `.MOGRT` at the current sequence playhead. `.JSX/.JSXBIN` files are displayed as inert assets and never automatically executed. Licensed packs retain their original license requirements; DepthVibe does not activate or unlock them.
