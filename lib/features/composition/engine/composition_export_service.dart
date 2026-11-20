@@ -459,6 +459,9 @@ class CompositionExportService {
             fontStyle: layer.textItalic ? FontStyle.italic : FontStyle.normal,
             letterSpacing: layer.textLetterSpacing.clamp(-100.0, 500.0).toDouble(),
             height: layer.textLineHeight.clamp(0.1, 10.0).toDouble(),
+            shadows: const [
+              Shadow(color: Color(0xDD000000), blurRadius: 8),
+            ],
           ),
         ),
         textAlign: alignment,
