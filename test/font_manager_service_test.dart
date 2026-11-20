@@ -65,6 +65,33 @@ Uint8List _fontFixture({
   return bytes;
 }
 
+
+Uint8List _ttcFixture(List<Uint8List> faces) {
+  final headerLength = 12 + faces.length * 4;
+  final totalLength = headerLength + faces.fold<int>(
+    0,
+    (sum, face) => sum + face.length,
+  );
+  final bytes = Uint8List(totalLength);
+  final data = ByteData.sublistView(bytes);
+  bytes.setRange(0, 4, 'ttcf'.codeUnits);
+  data.setUint32(4, 0x00010000, Endian.big);
+  data.setUint32(8, faces.length, Endian.big);
+
+  var offset = headerLength;
+  for (var index = 0; index < faces.length; index++) {
+    final face = faces[index];
+    data.setUint32(12 + index * 4, offset, Endian.big);
+    bytes.setRange(offset, offset + face.length, face);
+
+    // The fixture's name-table record is at face offset + 12; TTC table
+    // offsets are absolute from the beginning of the collection.
+    data.setUint32(offset + 20, offset + 28, Endian.big);
+    offset += face.length;
+  }
+  return bytes;
+}
+
 void main() {
   group('FontManagerService file validation', () {
     test('accepts TrueType, OpenType and collection extensions', () {
@@ -118,6 +145,24 @@ void main() {
       expect(face.style, 'SemiBold');
       expect(face.fullName, 'Depth Sans SemiBold');
       expect(face.displayName, 'Depth Sans · SemiBold');
+    });
+
+    test('reads every face from an installed TrueType collection', () {
+      final collection = _ttcFixture([
+        _fontFixture(family: 'Depth Sans', style: 'Regular'),
+        _fontFixture(family: 'Depth Sans', style: 'Bold'),
+      ]);
+
+      final faces = FontManagerService.readFontFaces(collection);
+      final secondFace = FontManagerService.readFontFaceMetadata(
+        collection,
+        faceIndex: 1,
+      );
+
+      expect(faces, hasLength(2));
+      expect(faces.map((face) => face.style), ['Regular', 'Bold']);
+      expect(secondFace?.family, 'Depth Sans');
+      expect(secondFace?.style, 'Bold');
     });
 
     test('rejects truncated and invalid font headers', () {
