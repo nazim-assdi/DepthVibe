@@ -93,7 +93,6 @@ class FontManagerService extends ChangeNotifier {
     final signature = String.fromCharCodes(bytes.take(4));
     return signature == 'OTTO' ||
         signature == 'true' ||
-        signature == 'typ1' ||
         (bytes[0] == 0 && bytes[1] == 1 && bytes[2] == 0 && bytes[3] == 0);
   }
 
@@ -224,11 +223,16 @@ class FontManagerService extends ChangeNotifier {
       path: destination.path,
       isImported: true,
     );
+    try {
+      await ensureFontLoaded(family: family, path: destination.path);
+    } catch (_) {
+      if (await destination.exists()) await destination.delete();
+      rethrow;
+    }
     _importedFonts = [..._importedFonts, entry];
     _availableFonts = [..._availableFonts, entry]
       ..sort((a, b) => a.displayName.toLowerCase()
           .compareTo(b.displayName.toLowerCase()));
-    await ensureFontLoaded(family: family, path: destination.path);
     if (persistSettings) {
       await _writeSettings();
       notifyListeners();
