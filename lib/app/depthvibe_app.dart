@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../features/editor/presentation/editor_screen.dart';
 import '../features/fonts/data/font_manager_service.dart';
+import 'depthvibe_settings.dart';
 
 class DepthVibeApp extends StatelessWidget {
   const DepthVibeApp({super.key});
@@ -9,50 +10,26 @@ class DepthVibeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: FontManagerService.instance,
+      animation: Listenable.merge([
+        FontManagerService.instance,
+        DepthVibeSettingsService.instance,
+      ]),
       builder: (context, _) => _buildApplication(),
     );
   }
 
   Widget _buildApplication() {
-    const background = Color(0xFF0A0D13);
-    const surface = Color(0xFF121824);
-    const accent = Color(0xFF7C8CFF);
+    final settings = DepthVibeSettingsService.instance;
+    final fontManager = FontManagerService.instance;
 
     return MaterialApp(
       title: 'DepthVibe',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        fontFamily: FontManagerService.instance.activeFamily,
-        fontFamilyFallback: FontManagerService.instance.fallbackFamilies,
-        scaffoldBackgroundColor: background,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: accent,
-          brightness: Brightness.dark,
-          surface: surface,
-        ),
-        cardTheme: CardThemeData(
-          color: surface,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-            side: const BorderSide(color: Color(0xFF263044)),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: const Color(0xFF0D131E),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF2B3548)),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF2B3548)),
-          ),
-        ),
+      themeMode: ThemeMode.light,
+      theme: DepthVibeTheme.build(
+        appearance: settings.appearance,
+        fontFamily: fontManager.activeFamily,
+        fontFallback: fontManager.fallbackFamilies,
       ),
       home: const EditorScreen(),
     );
