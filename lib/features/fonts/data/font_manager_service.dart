@@ -131,14 +131,21 @@ class FontManagerService extends ChangeNotifier {
 
   static int suggestedWeight(String? style) {
     final value = (style ?? '').toLowerCase();
-    if (value.contains('thin')) return 100;
-    if (value.contains('extra light') || value.contains('ultra light')) return 200;
-    if (value.contains('light')) return 300;
-    if (value.contains('extra bold') || value.contains('ultra bold')) return 800;
-    if (value.contains('semi bold') || value.contains('demi')) return 600;
-    if (value.contains('black') || value.contains('heavy')) return 900;
-    if (value.contains('bold')) return 700;
-    if (value.contains('medium')) return 500;
+    final compact = value.replaceAll(RegExp(r'[\\s_-]+'), '');
+    if (compact.contains('thin')) return 100;
+    if (compact.contains('extralight') || compact.contains('ultralight')) {
+      return 200;
+    }
+    if (compact.contains('light')) return 300;
+    if (compact.contains('extrabold') || compact.contains('ultrabold')) {
+      return 800;
+    }
+    if (compact.contains('semibold') || compact.contains('demibold')) {
+      return 600;
+    }
+    if (compact.contains('black') || compact.contains('heavy')) return 900;
+    if (compact.contains('bold')) return 700;
+    if (compact.contains('medium')) return 500;
     return 400;
   }
 
