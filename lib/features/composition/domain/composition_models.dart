@@ -985,6 +985,7 @@ class CompositionLayer {
     String? textAlign,
     double? textBoxWidth,
     bool clearTextFont = false,
+    bool clearTextFontAsset = false,
     String? clippingBaseLayerId,
     bool clearClippingBase = false,
     bool? photoshopClipped,
@@ -1022,7 +1023,9 @@ class CompositionLayer {
         sourceLayerIndex: sourceLayerIndex ?? this.sourceLayerIndex,
         textContent: textContent ?? this.textContent,
         textFontFamily: clearTextFont ? null : (textFontFamily ?? this.textFontFamily),
-        textFontAssetUri: clearTextFont ? null : (textFontAssetUri ?? this.textFontAssetUri),
+        textFontAssetUri: clearTextFont || clearTextFontAsset
+            ? null
+            : (textFontAssetUri ?? this.textFontAssetUri),
         textFontFallback: textFontFallback ?? this.textFontFallback,
         textFontSize: textFontSize ?? this.textFontSize,
         textFontWeight: textFontWeight ?? this.textFontWeight,
