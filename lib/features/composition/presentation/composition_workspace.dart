@@ -1659,7 +1659,6 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                   style: const TextStyle(
                     fontSize: 10,
                     color: Color(0xFFB9C6D9),
-                    fontFeatures: [],
                   ),
                 ),
                 if (keyframeable)
