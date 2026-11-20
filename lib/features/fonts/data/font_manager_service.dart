@@ -172,7 +172,10 @@ class FontManagerService extends ChangeNotifier {
     }
   }
 
-  Future<FontCatalogEntry> importFont(String sourcePath) async {
+  Future<FontCatalogEntry> importFont(
+    String sourcePath, {
+    bool persistSettings = true,
+  }) async {
     await initialize();
     if (!isSupportedFontFilePath(sourcePath)) {
       throw const FormatException('Choose a TrueType (.ttf) or OpenType (.otf) font.');
@@ -226,8 +229,10 @@ class FontManagerService extends ChangeNotifier {
       ..sort((a, b) => a.displayName.toLowerCase()
           .compareTo(b.displayName.toLowerCase()));
     await ensureFontLoaded(family: family, path: destination.path);
-    await _writeSettings();
-    notifyListeners();
+    if (persistSettings) {
+      await _writeSettings();
+      notifyListeners();
+    }
     return entry;
   }
 
@@ -241,20 +246,33 @@ class FontManagerService extends ChangeNotifier {
     var imported = 0;
     var skipped = 0;
     var inspected = 0;
+    var totalBytes = 0;
+    const maxBulkImportBytes = 1024 * 1024 * 1024;
     await for (final entity
         in directory.list(recursive: true, followLinks: false)) {
       if (entity is! File || !isSupportedFontFilePath(entity.path)) continue;
-      inspected++;
-      if (inspected > 2000) {
+      if (inspected >= 2000) {
         skipped++;
-        continue;
+        break;
       }
+      inspected++;
       try {
-        await importFont(entity.path);
+        final size = await entity.length();
+        if (size < 4 || size > maxFontBytes ||
+            totalBytes + size > maxBulkImportBytes) {
+          skipped++;
+          continue;
+        }
+        await importFont(entity.path, persistSettings: false);
+        totalBytes += size;
         imported++;
       } catch (_) {
         skipped++;
       }
+    }
+    if (imported > 0) {
+      await _writeSettings();
+      notifyListeners();
     }
     return FontFolderImportResult(imported: imported, skipped: skipped);
   }
