@@ -75,6 +75,58 @@ void main() {
     );
   });
 
+  test('embeds selected text fonts and preserves multilingual typography settings', () async {
+    final fontBytes = <int>[0x4F, 0x54, 0x54, 0x4F, 1, 2, 3, 4, 5, 6];
+    final font = File(temporary.path + '/NotoSansBengali.otf')
+      ..writeAsBytesSync(fontBytes);
+    final document = CompositionDocument(
+      name: 'Typography project',
+      layers: [
+        CompositionLayer(
+          id: 'text_1',
+          name: 'Multilingual title',
+          kind: LayerKind.text,
+          textContent: 'বাংলা العربية English हिन्दी 中文 日本語',
+          textFontFamily: 'DV_NotoSansBengali',
+          textFontAssetUri: font.path,
+          textFontFallback: const ['Noto Naskh Arabic', 'Noto Sans CJK SC'],
+          textFontSize: 104,
+          textFontWeight: 600,
+          textItalic: true,
+          textColor: '#FF42A5F5',
+          textLetterSpacing: 1.25,
+          textLineHeight: 1.35,
+          textAlign: 'center',
+          textBoxWidth: 1600,
+        ),
+      ],
+    );
+    final archiveFile = File(temporary.path + '/typography.dvproj');
+    final exported = await service.exportProject(document, outputFile: archiveFile);
+    expect(exported.embeddedAssetCount, 1);
+    expect(exported.missingAssetPaths, isEmpty);
+
+    final imported = await service.importProject(
+      archiveFile,
+      projectsDirectory: Directory(temporary.path + '/restored'),
+    );
+    expect(imported.extractedAssetCount, 1);
+    final text = imported.document.layers.single;
+    expect(text.textContent, 'বাংলা العربية English हिन्दी 中文 日本語');
+    expect(text.textFontFamily, 'DV_NotoSansBengali');
+    expect(text.textFontFallback, ['Noto Naskh Arabic', 'Noto Sans CJK SC']);
+    expect(text.textFontSize, 104);
+    expect(text.textFontWeight, 600);
+    expect(text.textItalic, isTrue);
+    expect(text.textColor, '#FF42A5F5');
+    expect(text.textLetterSpacing, 1.25);
+    expect(text.textLineHeight, 1.35);
+    expect(text.textAlign, 'center');
+    expect(text.textBoxWidth, 1600);
+    expect(text.textFontAssetUri, isNot(font.path));
+    expect(await File(text.textFontAssetUri!).readAsBytes(), fontBytes);
+  });
+
   test('rejects archives containing parent-directory traversal entries', () async {
     final archivePath = temporary.path + '/unsafe.dvproj';
     final encoder = ZipFileEncoder()..create(archivePath);
