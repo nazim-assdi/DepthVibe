@@ -298,7 +298,25 @@ class AdobeInterchangeService {
     List<Map<String,Object?>> input,{required String host,required int layerIndex}){
     final effects=<EffectInstance>[],mapped=<String>[],unsupported=<String>[],rawUnsupported=<Map<String,Object?>>[];var id=0;
     for(final raw in input){
-      final match=_s(raw['matchName'],_s(raw['name'],'Unknown Effect')),lower=match.toLowerCase(),props=_maps(raw['properties']);
+      final match=_s(raw['matchName'],_s(raw['name'],'Unknown Effect')),
+        lower=match.toLowerCase(),
+        props=_maps(raw['properties']).isNotEmpty
+          ? _maps(raw['properties'])
+          : _maps(raw['parameters']);
+      final nativeParameters = _maps(
+        raw['parameters'] is List ? raw['parameters'] : raw['properties'],
+      );
+      Map<String,Object?> nativeDescriptor() => {
+        'hostApp': host,
+        'matchName': match,
+        'displayName': _s(raw['displayName'],_s(raw['name'],match)),
+        'category': _s(raw['category']),
+        'version': _s(raw['version']),
+        'parameters': nativeParameters,
+        if (raw['parameterTree'] is List)
+          'parameterTree': raw['parameterTree'],
+      };
+      final additions=<EffectInstance>[];
       double param(List<String> keys,double fallback){
         for(final p in props){final n=(_s(p['matchName'])+' '+_s(p['name'])).toLowerCase();
           if(keys.any(n.contains)){final v=_n(p['value']);if(v!=null)return v;}}return fallback;
@@ -326,9 +344,28 @@ class AdobeInterchangeService {
           parameters:{'value':(1+param(['master saturation','saturation'],0)/100).clamp(0,3).toDouble()},
           keyframeTracks:_effectKeyframeTracks(props,['master saturation','saturation'],'value',mapValue:(v)=>(1+v/100).clamp(0,3).toDouble()),enabled:_b(raw['enabled'],true)));id++;
       }
-      if(additions.isEmpty||additions.any((e)=>EffectCatalog.findBuiltin(e.effectId)==null)){
-        unsupported.add(host+': '+match);rawUnsupported.add(raw);
-      }else{effects.addAll(additions);mapped.add(host+': '+match+' -> '+additions.map((e)=>e.effectId).join(', '));}
+      if(additions.isEmpty) {
+        final nativeName = _s(raw['displayName'], _s(raw['name'], match));
+        additions.add(EffectInstance(
+          id: 'adobe_' + layerIndex.toString() + '_' + id.toString(),
+          effectId: 'native_effect',
+          name: nativeName,
+          enabled: _b(raw['enabled'], true),
+          nativeDescriptor: nativeDescriptor(),
+        ));
+        id++;
+        // Keep the effect visible/editable in DepthVibe, while clearly marking
+        // that its renderer remains the original Adobe host/plugin.
+        effects.addAll(additions);
+        unsupported.add(host + ': ' + match + ' (native host effect)');
+        mapped.add(host + ': ' + match + ' -> native parameter descriptor');
+      } else if(additions.any((e)=>EffectCatalog.findBuiltin(e.effectId)==null)) {
+        unsupported.add(host+': '+match);
+        rawUnsupported.add(raw);
+      } else {
+        effects.addAll(additions);
+        mapped.add(host+': '+match+' -> '+additions.map((e)=>e.effectId).join(', '));
+      }
     }
     return(effects:effects,mapped:mapped,unsupported:unsupported,rawUnsupported:rawUnsupported);
   }
@@ -603,6 +640,43 @@ class AdobeInterchangeService {
  }
  function fx(id){var m={brightness:"ADBE Brightness & Contrast 2",contrast:"ADBE Brightness & Contrast 2",
   gaussian_blur:"ADBE Gaussian Blur 2",sharpen:"ADBE Sharpen",invert:"ADBE Invert",saturation:"ADBE Hue/Saturation"};return m[id]||null;}
+ function effectProperty(group, descriptor) {
+  if(!group||!descriptor) return null;
+  var path=descriptor.path||[descriptor.matchName||descriptor.name];
+  if(!(path instanceof Array)||!path.length) return null;
+  var current=group;
+  for(var pi=0;pi<path.length;pi++) {
+   if(!path[pi]) continue;
+   try { current=current.property(path[pi]); } catch(_) { return null; }
+   if(!current) return null;
+  }
+  return current;
+ }
+ function applyNativeParameters(group, parameters) {
+  if(!group||!(parameters instanceof Array)) return;
+  for(var ni=0;ni<parameters.length;ni++) {
+   var item=parameters[ni],property=effectProperty(group,item);
+   if(!property) continue;
+   if(item.parameters instanceof Array && item.parameters.length) {
+    applyNativeParameters(property,item.parameters);
+    continue;
+   }
+   if(item.keyframes instanceof Array && item.keyframes.length) {
+    applyScalarTrack(property,{
+     property:item.matchName||item.name||"native",
+     keyframes:item.keyframes
+    });
+   } else if(item.value!==undefined && item.value!==null) {
+    try {
+     var val=item.value;
+     if(typeof val==="number"||typeof val==="string"||typeof val==="boolean"||
+        (val instanceof Array && val.length>0)) {
+      if(!property.isTimeVarying) property.setValue(val);
+     }
+    } catch(err) { warnings.push("Native parameter "+String(item.name||item.matchName)+" skipped: "+String(err)); }
+   }
+  }
+ }
  for(var i=0;i<d.layers.length;i++){
   var x=d.layers[i],l=null;
   try{if(x.sourceUri&&new File(x.sourceUri).exists)l=comp.layers.add(app.project.importFile(new ImportOptions(new File(x.sourceUri))));}
@@ -638,9 +712,11 @@ class AdobeInterchangeService {
    }
    made[x.id]=l;var parade=l.property("ADBE Effect Parade");
   if(parade&&x.effects)for(var e=0;e<x.effects.length;e++){
-   var ef=x.effects[e],mn=fx(ef.effectId);
-   try{if(!mn||!parade.canAddProperty(mn)){warnings.push(x.name+": unsupported "+ef.name);continue;}
+   var ef=x.effects[e],nativeDescriptor=ef.nativeDescriptor||{},mn=fx(ef.effectId);
+   if(!mn && nativeDescriptor.matchName) mn=nativeDescriptor.matchName;
+   try{if(!mn||!parade.canAddProperty(mn)){warnings.push(x.name+": unavailable effect "+String(mn||ef.name));continue;}
     var added=parade.addProperty(mn),p=ef.parameters||{};
+    try { added.enabled=ef.enabled!==false; } catch(_){}
     if(ef.effectId==="gaussian_blur")put(added,"ADBE Gaussian Blur 2-0001",p.sigma);
     if(ef.effectId==="brightness")put(added,"ADBE Brightness & Contrast 2-0001",p.value*100);
     if(ef.effectId==="contrast")put(added,"ADBE Brightness & Contrast 2-0002",(p.value-1)*100);
@@ -652,6 +728,8 @@ class AdobeInterchangeService {
      var track=ef.keyframeTracks[kt],propertyName=parameterMap[track.property];
      if(propertyName) applyScalarTrack(added.property(propertyName),track);
     }
+    if(nativeDescriptor.parameters instanceof Array)
+     applyNativeParameters(added,nativeDescriptor.parameters);
    }catch(err){warnings.push(x.name+": effect skipped "+String(err));}
   }
   // Try the exact native matchName for source effects without a DepthVibe map.
