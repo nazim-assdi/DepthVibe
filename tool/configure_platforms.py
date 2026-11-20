@@ -237,7 +237,7 @@ def configure_linux_branding() -> None:
             if title_call is not None:
                 replacement = (
                     title_call.group(0) +
-                    "\\n" + title_call.group("indent") + icon_call
+                    "\n" + title_call.group("indent") + icon_call
                 )
                 text = text[:title_call.start()] + replacement + text[title_call.end():]
                 app_source.write_text(text, encoding="utf-8")
