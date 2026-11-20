@@ -281,6 +281,30 @@ class FontManagerService extends ChangeNotifier {
     return FontFolderImportResult(imported: imported, skipped: skipped);
   }
 
+
+  Future<void> ensureFontsLoaded({
+    String? family,
+    String? path,
+    Iterable<String> fallbackFamilies = const [],
+  }) async {
+    await initialize();
+    if (family != null && family.isNotEmpty) {
+      final entry = _availableFonts.where((font) => font.family == family)
+          .firstOrNull;
+      final resolvedPath = path ?? entry?.path;
+      if (resolvedPath != null) {
+        await ensureFontLoaded(family: family, path: resolvedPath);
+      }
+    }
+    for (final fallback in fallbackFamilies.toSet()) {
+      if (fallback.isEmpty || _loadedFamilies.contains(fallback)) continue;
+      final entry = _availableFonts.where((font) => font.family == fallback)
+          .firstOrNull;
+      if (entry == null) continue;
+      await ensureFontLoaded(family: entry.family, path: entry.path);
+    }
+  }
+
   Future<void> ensureFontLoaded({
     required String family,
     required String path,
