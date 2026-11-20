@@ -21,6 +21,7 @@ import '../engine/gpu_3d_mesh_view.dart';
 import '../engine/audio_waveform_service.dart';
 import '../engine/motion_tracking_service.dart';
 import '../engine/transition_frame_validator.dart';
+import 'color_wheel_control.dart';
 
 class CompositionWorkspace extends StatefulWidget {
   const CompositionWorkspace({super.key});
@@ -888,7 +889,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                for (final panel in const ['Layers', 'Timing', 'Transform', 'Animation', 'Shape', 'Effects', 'Masks', 'Audio', 'Bus Mixer', 'Tracking', 'Transitions', 'Parent', '3D'])
+                for (final panel in const ['Layers', 'Timing', 'Transform', 'Color', 'Animation', 'Shape', 'Effects', 'Masks', 'Audio', 'Bus Mixer', 'Tracking', 'Transitions', 'Parent', '3D'])
                   TextButton(
                     onPressed: () => setState(() => _panel = panel),
                     child: Text(panel, style: TextStyle(fontSize: 10, fontWeight: _panel == panel ? FontWeight.w900 : FontWeight.normal)),
@@ -921,6 +922,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         return _buildTimingPanel(layer);
       case 'Transform':
         return _buildTransformPanel(layer);
+      case 'Color':
+        return _buildColorPanel(layer);
       case 'Animation':
         return _buildAnimationPanel(layer);
       case 'Shape':
@@ -1456,8 +1459,17 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                         ),
                       ],
                     ),
-                    for (final parameter in EffectCatalog.find(effect.effectId)?.parameters ?? const [])
-                      Column(
+                    if (effect.effectId == 'color_grade')
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          'Edit Lift, Gamma, Gain, Offset and primary controls in the Color panel.',
+                          style: TextStyle(fontSize: 10, color: Color(0xFF9DABC3)),
+                        ),
+                      )
+                    else
+                      for (final parameter in EffectCatalog.find(effect.effectId)?.parameters ?? const [])
+                        Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Row(
@@ -1520,6 +1532,271 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                 ),
               ),
             ),
+      ],
+    );
+  }
+
+
+  Widget _buildColorPanel(CompositionLayer layer) {
+    final matches = layer.effects.where(
+      (effect) => effect.effectId == 'color_grade',
+    );
+    final grade = matches.isEmpty ? null : matches.first;
+    final definition = EffectCatalog.find('color_grade')!;
+    final playheadMs = _controller.document.playheadMs;
+
+    if (grade == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _panelHeader('COLOR PAGE', Icons.color_lens),
+          const Text(
+            'Build a primary grade with Lift, Gamma, Gain and Offset wheels, then refine contrast, exposure, white balance and saturation.',
+            style: TextStyle(fontSize: 11, color: Color(0xFF9DABC3)),
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: () => _controller.addEffect('color_grade'),
+            icon: const Icon(Icons.add),
+            label: const Text('ADD PRIMARY COLOR GRADE'),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'The grade is stored on the selected layer and included in the FFmpeg composition export.',
+            style: TextStyle(fontSize: 10, color: Color(0xFF8190A8)),
+          ),
+        ],
+      );
+    }
+
+    double value(String id) {
+      final parameter = definition.parameters.firstWhere(
+        (item) => item.id == id,
+      );
+      return grade.parameterAt(
+        id,
+        playheadMs,
+        fallback: parameter.defaultValue,
+      ).clamp(parameter.min, parameter.max).toDouble();
+    }
+
+    Widget wheelCard(String title, String prefix) {
+      return SizedBox(
+        width: 136,
+        child: Card(
+          color: const Color(0xFF182231),
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 9),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title.toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.7,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                ColorWheelControl(
+                  diameter: 112,
+                  red: value('${prefix}_r'),
+                  green: value('${prefix}_g'),
+                  blue: value('${prefix}_b'),
+                  onChanged: (wheel) {
+                    _controller.setEffectParameter(
+                      grade.id,
+                      '${prefix}_r',
+                      wheel.red,
+                    );
+                    _controller.setEffectParameter(
+                      grade.id,
+                      '${prefix}_g',
+                      wheel.green,
+                    );
+                    _controller.setEffectParameter(
+                      grade.id,
+                      '${prefix}_b',
+                      wheel.blue,
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget gradeSlider({
+      required String id,
+      required String label,
+      required double min,
+      required double max,
+      required bool keyframeable,
+    }) {
+      final current = value(id);
+      final hasTrack = grade.keyframeTracks.any(
+        (track) => track.property == id,
+      );
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 5),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Text(
+                  current.toStringAsFixed(2),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xFFB9C6D9),
+                    fontFeatures: [],
+                  ),
+                ),
+                if (keyframeable)
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Animate $label',
+                    onPressed: () => _controller.addEffectKeyframe(
+                      grade.id,
+                      id,
+                    ),
+                    icon: Icon(
+                      Icons.diamond,
+                      size: 15,
+                      color: hasTrack
+                          ? const Color(0xFFB8A4FF)
+                          : const Color(0xFF8290A8),
+                    ),
+                  ),
+              ],
+            ),
+            Slider(
+              min: min,
+              max: max,
+              value: current,
+              onChanged: (nextValue) => _controller.setEffectParameter(
+                grade.id,
+                id,
+                nextValue,
+                keyframe: keyframeable && hasTrack,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _panelHeader('PRIMARY COLOR GRADE', Icons.color_lens)),
+            Switch(
+              value: grade.enabled,
+              onChanged: (enabled) => _controller.setEffectEnabled(
+                grade.id,
+                enabled,
+              ),
+            ),
+          ],
+        ),
+        const Text(
+          'Lift controls shadows · Gamma controls midtones · Gain controls highlights · Offset applies a global balance.',
+          style: TextStyle(fontSize: 10, color: Color(0xFF9DABC3)),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            wheelCard('Lift', 'lift'),
+            wheelCard('Gamma', 'gamma'),
+            wheelCard('Gain', 'gain'),
+            wheelCard('Offset', 'offset'),
+          ],
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () {
+              for (final prefix in const ['lift', 'gamma', 'gain', 'offset']) {
+                for (final channel in const ['r', 'g', 'b']) {
+                  _controller.setEffectParameter(
+                    grade.id,
+                    '${prefix}_${channel}',
+                    0,
+                  );
+                }
+              }
+              _controller.setEffectParameter(grade.id, 'temperature', 0);
+              _controller.setEffectParameter(grade.id, 'tint', 0);
+            },
+            icon: const Icon(Icons.restart_alt, size: 15),
+            label: const Text('Reset Wheels', style: TextStyle(fontSize: 10)),
+          ),
+        ),
+        const Divider(color: Color(0xFF29354A)),
+        _panelHeader('PRIMARY CONTROLS', Icons.tune),
+        gradeSlider(
+          id: 'contrast',
+          label: 'Contrast',
+          min: 0,
+          max: 3,
+          keyframeable: true,
+        ),
+        gradeSlider(
+          id: 'brightness',
+          label: 'Exposure / Brightness',
+          min: -1,
+          max: 1,
+          keyframeable: true,
+        ),
+        gradeSlider(
+          id: 'master_gamma',
+          label: 'Master Gamma',
+          min: 0.1,
+          max: 3,
+          keyframeable: true,
+        ),
+        gradeSlider(
+          id: 'saturation',
+          label: 'Saturation',
+          min: 0,
+          max: 3,
+          keyframeable: true,
+        ),
+        const Divider(color: Color(0xFF29354A)),
+        _panelHeader('WHITE BALANCE', Icons.wb_sunny_outlined),
+        gradeSlider(
+          id: 'temperature',
+          label: 'Temperature · Cool / Warm',
+          min: -1,
+          max: 1,
+          keyframeable: false,
+        ),
+        gradeSlider(
+          id: 'tint',
+          label: 'Tint · Green / Magenta',
+          min: -1,
+          max: 1,
+          keyframeable: false,
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Export applies the grade to the selected layer. Contrast, brightness, master gamma and saturation keyframes evaluate per frame. Primary wheel and white-balance changes are currently static. Live viewer grading, waveform / parade / vectorscope, LUT management, HDR color management and GPU preview parity are still in development.',
+          style: TextStyle(fontSize: 10, color: Color(0xFF8190A8)),
+        ),
       ],
     );
   }
