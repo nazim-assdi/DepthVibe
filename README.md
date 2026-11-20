@@ -70,7 +70,7 @@ Adobe host adapters are provided as panel source:
 - After Effects stable: CEP compatibility panel under `integrations/adobe/after-effects-cep/`.
 - After Effects Beta: UXP panel source under `integrations/adobe/after-effects-uxp-beta/`, to be loaded into Adobe's generated AE Beta starter project.
 
-The Adobe panels use an authenticated localhost bridge to list DepthVibe effects and exchange DepthVibe composition JSON. On macOS, Adobe UXP network access requires HTTPS; the local bridge supports a user-supplied trusted certificate. This initial adapter is not yet an arbitrary Premiere sequence or After Effects composition importer. Adobe native `.prm`/`.aex` plug-ins remain native code that must execute inside the appropriate Adobe host; they are not loaded into Flutter or `.dvext` packages.
+The Adobe panels use an authenticated localhost bridge to capture and import Premiere sequence / After Effects composition metadata as editable DepthVibe layers. DepthVibe exports Premiere-compatible FCP 7 XML for clip placement and an After Effects ExtendScript layer-import file. On macOS, Adobe UXP network access requires HTTPS; the local bridge supports a user-supplied trusted certificate. See the compatibility guide for supported effects and current media / interchange limits. Adobe native `.prm`/`.aex` plug-ins remain native code that must execute inside the appropriate Adobe host; they are not loaded into Flutter or `.dvext` packages.
 
 See [Extension package format](docs/EXTENSIONS.md), [Marketplace publishing](docs/MARKETPLACE_AND_PUBLISHING.md), [Adobe compatibility](docs/ADOBE_COMPATIBILITY.md), and the [Adobe Bridge SDK](integrations/adobe/sdk/README.md).
  
