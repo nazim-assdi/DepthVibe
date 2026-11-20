@@ -241,7 +241,9 @@ class MotionBroPackService extends ChangeNotifier {
         throw const FormatException('pack.info must include packName.');
       }
       final version = (info['version'] ?? '1.0').trim();
-      final id = _slug(name) + '_' + _slug(version);
+      // The pack ID must remain stable across version updates so the
+      // transactional replace path can update the same imported pack.
+      final id = _slug(name);
       final destination = Directory(join(root.path, id));
       if (await destination.exists() && !replaceExisting) {
         throw FormatException('Pack "' + name + '" is already imported.');
