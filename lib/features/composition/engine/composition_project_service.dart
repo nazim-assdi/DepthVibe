@@ -92,6 +92,7 @@ class CompositionProjectService {
         await embed(layer.sourceUri);
         await embed(layer.sourceDocumentUri);
         await embed(layer.smartObjectSourceUri);
+        await embed(layer.textFontAssetUri);
         for (final effect in layer.effects) {
           await embed(effect.assetUri);
         }
