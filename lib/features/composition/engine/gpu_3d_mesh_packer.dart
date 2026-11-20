@@ -7,9 +7,9 @@ import 'software_3d_renderer.dart';
 /// Packs projected scene triangles for the WebGPU mesh pass.
 ///
 /// Position, precomputed CPU lighting and UV0 are uploaded together. A single
-/// shared base-colour image can be sampled by the GPU; multi-image materials
-/// are explicitly flagged for the software renderer until material batching
-/// and texture arrays are introduced.
+/// shared base-colour image and opaque alpha mode can be sampled by the GPU;
+/// multi-image or alpha-mask/blend materials are explicitly routed to the
+/// software renderer until material batching and alpha parity are implemented.
 class GpuMeshVertexPacker {
   const GpuMeshVertexPacker();
 
@@ -36,11 +36,12 @@ class GpuMeshVertexPacker {
         uniqueTextures.add(triangle.textureRgba!);
       }
     }
-    final canRenderBaseColorTextures = uniqueTextures.length <= 1;
-    final texture = canRenderBaseColorTextures && uniqueTextures.isNotEmpty
+    final canRenderGpuMaterialData = uniqueTextures.length <= 1 &&
+        triangles.every((triangle) => triangle.alphaMode == 'OPAQUE');
+    final texture = canRenderGpuMaterialData && uniqueTextures.isNotEmpty
         ? uniqueTextures.single
         : null;
-    final texturedTriangle = canRenderBaseColorTextures
+    final texturedTriangle = canRenderGpuMaterialData
         ? triangles.cast<ProjectedMeshTriangle?>().firstWhere(
               (triangle) =>
                   triangle != null && hasValidTexture(triangle),
@@ -88,7 +89,7 @@ class GpuMeshVertexPacker {
     }
 
     for (final triangle in triangles) {
-      final useTexture = canRenderBaseColorTextures &&
+      final useTexture = canRenderGpuMaterialData &&
           hasValidTexture(triangle) &&
           texture != null &&
           identical(triangle.textureRgba, texture);
@@ -121,7 +122,7 @@ class GpuMeshVertexPacker {
         values.lengthInBytes,
       ),
       vertexCount: triangles.length * verticesPerTriangle,
-      canRenderBaseColorTextures: canRenderBaseColorTextures,
+      canRenderGpuMaterialData: canRenderGpuMaterialData,
       baseColorTextureRgba: texture,
       baseColorTextureWidth: textureWidth,
       baseColorTextureHeight: textureHeight,
@@ -135,7 +136,7 @@ class GpuMeshVertexData {
   const GpuMeshVertexData({
     required this.bytes,
     required this.vertexCount,
-    required this.canRenderBaseColorTextures,
+    required this.canRenderGpuMaterialData,
     this.baseColorTextureRgba,
     this.baseColorTextureWidth = 0,
     this.baseColorTextureHeight = 0,
@@ -144,12 +145,12 @@ class GpuMeshVertexData {
   static final empty = GpuMeshVertexData(
     bytes: Uint8List(0),
     vertexCount: 0,
-    canRenderBaseColorTextures: true,
+    canRenderGpuMaterialData: true,
   );
 
   final Uint8List bytes;
   final int vertexCount;
-  final bool canRenderBaseColorTextures;
+  final bool canRenderGpuMaterialData;
   final Uint8List? baseColorTextureRgba;
   final int baseColorTextureWidth;
   final int baseColorTextureHeight;
