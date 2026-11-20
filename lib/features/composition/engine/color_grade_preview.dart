@@ -144,7 +144,7 @@ class ColorGradePreview {
         ..add(0)
         ..add(bias.toDouble());
     }
-    matrix.addAll(const [0, 0, 0, 1, 0]);
+    matrix.addAll(const <double>[0, 0, 0, 1, 0]);
     return ColorFilter.matrix(matrix);
   }
 }
