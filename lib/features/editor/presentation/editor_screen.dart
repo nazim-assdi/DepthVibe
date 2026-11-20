@@ -317,7 +317,7 @@ class _EditorScreenState extends State<EditorScreen> {
           const DepthVibeBrandMark(size: 40),
           const Spacer(),
           if (MediaQuery.sizeOf(context).width > 700)
-            const Text('VIDEO STUDIO  /  PRO WORKSPACE', style: TextStyle(color: Color(0xFF8795AD), fontSize: 10, letterSpacing: 1)),
+            Text('VIDEO STUDIO  /  PRO WORKSPACE', style: TextStyle(color: palette.secondaryText, fontSize: 10, letterSpacing: 1)),
           const SizedBox(width: 14),
           _toolButton(
             icon: Icons.folder_open,
@@ -634,6 +634,7 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Widget _aspectSelector() {
     final current = _editor.project.aspect;
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Wrap(
       spacing: 6,
       runSpacing: 6,
@@ -643,10 +644,10 @@ class _EditorScreenState extends State<EditorScreen> {
           label: Text(aspect.label),
           selected: selected,
           onSelected: (_) => _editor.setAspect(aspect),
-          selectedColor: const Color(0xFF4958AF),
-          backgroundColor: const Color(0xFF1A2433),
-          labelStyle: TextStyle(fontSize: 11, color: selected ? Colors.white : const Color(0xFFB5C0D2)),
-          side: BorderSide(color: selected ? const Color(0xFF8694FF) : const Color(0xFF303B50)),
+          selectedColor: palette.accent,
+          backgroundColor: palette.panelRaised,
+          labelStyle: TextStyle(fontSize: 11, color: selected ? Colors.white : palette.primaryText),
+          side: BorderSide(color: selected ? palette.accent : palette.border),
           showCheckmark: false,
         );
       }).toList(),
@@ -694,23 +695,24 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Widget _buildTimeline({bool compact = false}) {
     final project = _editor.project;
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     final duration = project.sourceDurationMs;
     final max = duration > 0 ? duration.toDouble() : 1.0;
     return Container(
       height: compact ? 190 : 205,
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
-      decoration: const BoxDecoration(
-        color: Color(0xFF101722),
-        border: Border(top: BorderSide(color: Color(0xFF273247))),
+      decoration: BoxDecoration(
+        color: palette.toolbar,
+        border: Border(top: BorderSide(color: palette.border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Text('TIMELINE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.4, color: Color(0xFF8998B2))),
+              Text('TIMELINE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.4, color: palette.secondaryText)),
               const Spacer(),
-              Text('${_time(_position.inMilliseconds)} / ${_time(duration)}', style: const TextStyle(fontSize: 11, color: Color(0xFFB6C2D4))),
+              Text('${_time(_position.inMilliseconds)} / ${_time(duration)}', style: TextStyle(fontSize: 11, color: palette.primaryText)),
               const SizedBox(width: 8),
               IconButton(
                 tooltip: 'Add split marker at playhead',
@@ -728,17 +730,17 @@ class _EditorScreenState extends State<EditorScreen> {
           ),
           Row(
             children: [
-              const Icon(Icons.video_file_outlined, size: 16, color: Color(0xFF94A4C1)),
+              Icon(Icons.video_file_outlined, size: 16, color: palette.secondaryText),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   project.videoPath?.split(Platform.pathSeparator).last ?? 'No media loaded',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFFC3CCDA), fontSize: 11),
+                  style: TextStyle(color: palette.primaryText, fontSize: 11),
                 ),
               ),
-              Text('SPLIT MARKERS  ${project.splitMarkersMs.length}', style: const TextStyle(color: Color(0xFF8695AD), fontSize: 9, letterSpacing: 0.8)),
+              Text('SPLIT MARKERS  ${project.splitMarkersMs.length}', style: TextStyle(color: palette.secondaryText, fontSize: 9, letterSpacing: 0.8)),
             ],
           ),
           const SizedBox(height: 8),
@@ -789,16 +791,17 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   Widget _buildFooter() {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: const Color(0xFF090D13),
-      child: const Row(
+      color: palette.appBackground,
+      child: Row(
         children: [
-          Text('DEPTHVIBE', style: TextStyle(fontSize: 9, color: Color(0xFF66748C), letterSpacing: 1.5, fontWeight: FontWeight.w900)),
-          Spacer(),
-          Text('CROSS-PLATFORM VIDEO & 3D STUDIO', style: TextStyle(fontSize: 9, color: Color(0xFF66748C), letterSpacing: 0.8)),
-          Spacer(),
-          Text('N TECH', style: TextStyle(fontSize: 9, color: Color(0xFF9AA7BD), fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+          Text('DEPTHVIBE', style: TextStyle(fontSize: 9, color: palette.secondaryText, letterSpacing: 1.5, fontWeight: FontWeight.w900)),
+          const Spacer(),
+          Text('CROSS-PLATFORM VIDEO & 3D STUDIO', style: TextStyle(fontSize: 9, color: palette.secondaryText, letterSpacing: 0.8)),
+          const Spacer(),
+          Text('N TECH', style: TextStyle(fontSize: 9, color: palette.secondaryText, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
         ],
       ),
     );
