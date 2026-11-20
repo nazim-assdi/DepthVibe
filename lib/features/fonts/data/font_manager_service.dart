@@ -289,8 +289,8 @@ class FontManagerService extends ChangeNotifier {
   }) async {
     await initialize();
     if (family != null && family.isNotEmpty) {
-      final entry = _availableFonts.where((font) => font.family == family)
-          .firstOrNull;
+      final matches = _availableFonts.where((font) => font.family == family);
+      final entry = matches.isEmpty ? null : matches.first;
       final resolvedPath = path ?? entry?.path;
       if (resolvedPath != null) {
         await ensureFontLoaded(family: family, path: resolvedPath);
@@ -298,8 +298,8 @@ class FontManagerService extends ChangeNotifier {
     }
     for (final fallback in fallbackFamilies.toSet()) {
       if (fallback.isEmpty || _loadedFamilies.contains(fallback)) continue;
-      final entry = _availableFonts.where((font) => font.family == fallback)
-          .firstOrNull;
+      final matches = _availableFonts.where((font) => font.family == fallback);
+      final entry = matches.isEmpty ? null : matches.first;
       if (entry == null) continue;
       await ensureFontLoaded(family: entry.family, path: entry.path);
     }
