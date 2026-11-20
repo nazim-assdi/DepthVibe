@@ -314,10 +314,11 @@ class FontManagerService extends ChangeNotifier {
             FontCatalogEntry.fromJson(item.cast<String, Object?>()))
             .where((item) => item.family.isNotEmpty && item.path.isNotEmpty)
             .toList();
-        _importedFonts = [
-          for (final font in _importedFonts)
-            if (await File(font.path).exists()) font,
-        ];
+        final validFonts = <FontCatalogEntry>[];
+        for (final font in _importedFonts) {
+          if (await File(font.path).exists()) validFonts.add(font);
+        }
+        _importedFonts = validFonts;
       }
     } catch (_) {
       _importedFonts = <FontCatalogEntry>[];
