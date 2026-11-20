@@ -1280,7 +1280,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         break;
       case LayerKind.text:
         baseWidth = layer.textBoxWidth;
-        baseHeight = 180;
+        final content = layer.textContent ?? layer.name;
+        final approximateCharactersPerLine =
+            (baseWidth / (layer.textFontSize * 0.52))
+                .floor()
+                .clamp(1, 5000)
+                .toInt();
+        final estimatedLines = content.split('\n').fold<int>(
+          0,
+          (count, line) => count +
+              math.max(1, (line.length / approximateCharactersPerLine).ceil()),
+        );
+        baseHeight = math.max(
+          180.0,
+          estimatedLines * layer.textFontSize * layer.textLineHeight + 24,
+        ).toDouble();
         final fontScale = canvasSize.width / doc.width;
         final weightIndex = ((layer.textFontWeight.clamp(100, 900) / 100)
                     .round() - 1)
@@ -1291,7 +1305,6 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         final textColor = parsedColor == null
             ? Colors.white
             : Color(rawColor.length == 6 ? 0xFF000000 | parsedColor : parsedColor);
-        final content = layer.textContent ?? layer.name;
         final textAlign = switch (layer.textAlign) {
           'center' => TextAlign.center,
           'right' => TextAlign.right,
