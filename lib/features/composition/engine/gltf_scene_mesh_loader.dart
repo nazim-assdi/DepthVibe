@@ -44,6 +44,49 @@ class GltfSceneMeshLoader {
     return decodeDocument(document);
   }
 
+  ObjTextureMap? _loadTextureMap(
+    gltf.GltfDocument document, {
+    required int? textureIndex,
+    required int texCoord,
+    required gltf.GltfExtensions? extensions,
+  }) {
+    if (textureIndex == null ||
+        textureIndex < 0 ||
+        textureIndex >= document.textures.length) {
+      return null;
+    }
+    final source = document.textures[gltf.TextureIdx(textureIndex)].source;
+    if (source == null ||
+        source.value < 0 ||
+        source.value >= document.imageData.length) {
+      return null;
+    }
+
+    final encoded = document.imageData[gltf.ImageIdx(source.value)];
+    final decoded = img.decodeImage(encoded);
+    final transform = extensions?.get(gltf.khrTextureTransform);
+    return ObjTextureMap(
+      sourceBytes: encoded,
+      pixelsRgba: decoded == null
+          ? null
+          : Uint8List.fromList(
+              decoded.getBytes(order: img.ChannelOrder.rgba),
+            ),
+      width: decoded?.width ?? 0,
+      height: decoded?.height ?? 0,
+      texCoord: transform?.texCoord ?? texCoord,
+      offset: Offset(
+        transform?.offsetU ?? 0,
+        transform?.offsetV ?? 0,
+      ),
+      scale: Offset(
+        transform?.scaleU ?? 1,
+        transform?.scaleV ?? 1,
+      ),
+      rotationRadians: transform?.rotation ?? 0,
+    );
+  }
+
   ObjMesh decodeDocument(gltf.GltfDocument document) {
     if (document.asset.version.split('.').first != '2') {
       throw FormatException(
@@ -57,27 +100,41 @@ class GltfSceneMeshLoader {
       final material = entry.$2;
       final pbr = material.pbrMetallicRoughness;
       final factor = pbr?.baseColorFactor;
-      final textureIndex = pbr?.baseColorTexture?.index.value;
-      Uint8List? textureBytes;
-      if (textureIndex != null &&
-          textureIndex >= 0 &&
-          textureIndex < document.textures.length) {
-        final textureSource =
-            document.textures[gltf.TextureIdx(textureIndex)].source;
-        if (textureSource != null &&
-            textureSource.value >= 0 &&
-            textureSource.value < document.imageData.length) {
-          textureBytes = document.imageData[gltf.ImageIdx(textureSource.value)];
-        }
-      }
-      final decodedTexture = textureBytes == null
-          ? null
-          : img.decodeImage(textureBytes);
-      final textureRgba = decodedTexture == null
-          ? null
-          : Uint8List.fromList(
-              decodedTexture.getBytes(order: img.ChannelOrder.rgba),
-            );
+      final baseColorInfo = pbr?.baseColorTexture;
+      final metallicRoughnessInfo = pbr?.metallicRoughnessTexture;
+      final normalInfo = material.normalTexture;
+      final occlusionInfo = material.occlusionTexture;
+      final emissiveInfo = material.emissiveTexture;
+      final baseColorMap = _loadTextureMap(
+        document,
+        textureIndex: baseColorInfo?.index.value,
+        texCoord: baseColorInfo?.texCoord ?? 0,
+        extensions: baseColorInfo?.extensions,
+      );
+      final metallicRoughnessMap = _loadTextureMap(
+        document,
+        textureIndex: metallicRoughnessInfo?.index.value,
+        texCoord: metallicRoughnessInfo?.texCoord ?? 0,
+        extensions: metallicRoughnessInfo?.extensions,
+      );
+      final normalMap = _loadTextureMap(
+        document,
+        textureIndex: normalInfo?.index.value,
+        texCoord: normalInfo?.texCoord ?? 0,
+        extensions: normalInfo?.extensions,
+      );
+      final occlusionMap = _loadTextureMap(
+        document,
+        textureIndex: occlusionInfo?.index.value,
+        texCoord: occlusionInfo?.texCoord ?? 0,
+        extensions: occlusionInfo?.extensions,
+      );
+      final emissiveMap = _loadTextureMap(
+        document,
+        textureIndex: emissiveInfo?.index.value,
+        texCoord: emissiveInfo?.texCoord ?? 0,
+        extensions: emissiveInfo?.extensions,
+      );
       double component(int componentIndex, double fallback) =>
           factor != null && componentIndex < factor.length
               ? factor[componentIndex].toDouble()
@@ -90,16 +147,23 @@ class GltfSceneMeshLoader {
         alpha: component(3, 1).clamp(0.0, 1.0).toDouble(),
         metallicFactor: pbr?.metallicFactor ?? 1,
         roughnessFactor: pbr?.roughnessFactor ?? 1,
-        baseColorTextureBytes: textureBytes,
-        baseColorTextureRgba: textureRgba,
-        baseColorTextureWidth: decodedTexture?.width ?? 0,
-        baseColorTextureHeight: decodedTexture?.height ?? 0,
+        baseColorTextureBytes: baseColorMap?.sourceBytes,
+        baseColorTextureRgba: baseColorMap?.pixelsRgba,
+        baseColorTextureWidth: baseColorMap?.width ?? 0,
+        baseColorTextureHeight: baseColorMap?.height ?? 0,
         alphaCutoff: material.alphaCutoff,
         alphaMode: material.alphaMode.name,
         doubleSided: material.doubleSided,
         emissiveRed: emissive != null && emissive.isNotEmpty ? emissive[0] : 0,
         emissiveGreen: emissive != null && emissive.length > 1 ? emissive[1] : 0,
         emissiveBlue: emissive != null && emissive.length > 2 ? emissive[2] : 0,
+        baseColorTextureMap: baseColorMap,
+        metallicRoughnessTextureMap: metallicRoughnessMap,
+        normalTextureMap: normalMap,
+        occlusionTextureMap: occlusionMap,
+        emissiveTextureMap: emissiveMap,
+        normalScale: normalInfo?.scale ?? 1,
+        occlusionStrength: occlusionInfo?.strength ?? 1,
       );
     }
 
