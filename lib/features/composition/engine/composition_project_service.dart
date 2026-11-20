@@ -5,6 +5,7 @@ import 'package:archive/archive_io.dart';
 
 import '../domain/composition_models.dart';
 import 'composition_project_codec.dart';
+import '../../fonts/data/font_manager_service.dart';
 
 class CompositionProjectExportResult {
   const CompositionProjectExportResult({
@@ -44,6 +45,22 @@ class CompositionProjectService {
     CompositionDocument document, {
     required File outputFile,
   }) async {
+    final globalFamily = FontManagerService.instance.activeFamily;
+    final globalFontPath = FontManagerService.instance.activeFontPath;
+    final portableDocument = document.copyWith(
+      layers: document.layers.map((layer) {
+        if (layer.kind == LayerKind.text &&
+            layer.textFontFamily == null &&
+            globalFamily != null &&
+            globalFontPath != null) {
+          return layer.copyWith(
+            textFontFamily: globalFamily,
+            textFontAssetUri: globalFontPath,
+          );
+        }
+        return layer;
+      }).toList(),
+    );
     final staging = await Directory.systemTemp.createTemp('depthvibe_dvproj_export_');
     final missing = <String>[];
     final embeddedByPath = <String, String>{};
@@ -88,7 +105,7 @@ class CompositionProjectService {
         return relative;
       }
 
-      for (final layer in document.layers) {
+      for (final layer in portableDocument.layers) {
         await embed(layer.sourceUri);
         await embed(layer.sourceDocumentUri);
         await embed(layer.smartObjectSourceUri);
@@ -103,7 +120,7 @@ class CompositionProjectService {
         'version': CompositionProjectCodec.schemaVersion,
         'createdAt': DateTime.now().toUtc().toIso8601String(),
         'document': CompositionProjectCodec.encodeDocument(
-          document,
+          portableDocument,
           rewriteAssetUri: (uri) =>
               uri == null ? null : embeddedByPath[uri] ?? uri,
         ),
