@@ -85,7 +85,6 @@ class ColorWheelControl extends StatelessWidget {
           style: const TextStyle(
             color: Color(0xFF9DABC3),
             fontSize: 9,
-            fontFeatures: [FontFeature.tabularFigures()],
           ),
         ),
       ],
