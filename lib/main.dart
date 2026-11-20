@@ -6,11 +6,13 @@ import 'app/depthvibe_app.dart';
 import 'features/extensions/data/extension_manager_service.dart';
 import 'features/extensions/data/adobe_bridge_service.dart';
 import 'features/extensions/data/extension_marketplace_service.dart';
+import 'features/fonts/data/font_manager_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
   await FFmpegKitExtended.initialize();
+  await FontManagerService.instance.initialize();
   await ExtensionManagerService.instance.initialize();
   await AdobeBridgeService.instance.start();
   try {
