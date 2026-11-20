@@ -34,6 +34,7 @@ import '../engine/color_grade_preview.dart';
 import '../engine/cube_lut_validator.dart';
 import '../engine/motion_tracking_service.dart';
 import '../engine/transition_frame_validator.dart';
+import 'text_layer_content_editor.dart';
 import 'color_wheel_control.dart';
 import 'color_curve_editor.dart';
 import 'color_scopes_view.dart';
@@ -1671,17 +1672,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _panelHeader('MULTILINGUAL TYPOGRAPHY', Icons.text_fields),
-        TextFormField(
-          key: ValueKey<String>(layer.id + (layer.textContent ?? '')),
-          initialValue: layer.textContent ?? '',
-          maxLines: 4,
-          minLines: 2,
-          decoration: const InputDecoration(
-            labelText: 'Text content',
-            hintText: 'বাংলা, العربية, English, 中文, हिन्दी…',
-            alignLabelWithHint: true,
-          ),
-          onFieldSubmitted: (value) =>
+        TextLayerContentEditor(
+          key: ValueKey<String>(layer.id),
+          initialText: layer.textContent ?? '',
+          onSave: (value) =>
               _controller.updateTextLayer(textContent: value),
         ),
         const SizedBox(height: 10),
