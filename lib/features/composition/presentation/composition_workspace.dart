@@ -2480,11 +2480,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final playheadMs = _controller.document.playheadMs;
     final outputProfile = _controller.document.colorOutputProfile;
 
-    double value(String id) {
+    double value(EffectInstance activeGrade, String id) {
       final parameter = definition.parameters.firstWhere(
         (item) => item.id == id,
       );
-      return grade.parameterAt(
+      return activeGrade.parameterAt(
         id,
         playheadMs,
         fallback: parameter.defaultValue,
@@ -2492,14 +2492,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     }
 
     Widget gradeSlider({
+      required EffectInstance activeGrade,
       required String id,
       required String label,
       required double min,
       required double max,
       required bool keyframeable,
     }) {
-      final current = value(id);
-      final hasTrack = grade.keyframeTracks.any(
+      final current = value(activeGrade, id);
+      final hasTrack = activeGrade.keyframeTracks.any(
         (track) => track.property == id && track.enabled,
       );
       return Padding(
@@ -2530,7 +2531,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     visualDensity: VisualDensity.compact,
                     tooltip: 'Add ' + label + ' keyframe',
                     onPressed: () => _controller.addEffectKeyframe(
-                      grade.id,
+                      activeGrade.id,
                       id,
                     ),
                     icon: Icon(
@@ -2548,7 +2549,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               max: max,
               value: current,
               onChanged: (nextValue) => _controller.setEffectParameter(
-                grade.id,
+                activeGrade.id,
                 id,
                 nextValue,
                 keyframe: keyframeable && hasTrack,
@@ -2559,13 +2560,17 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       );
     }
 
-    Widget wheelCard(String title, String prefix) {
+    Widget wheelCard(
+      EffectInstance activeGrade,
+      String title,
+      String prefix,
+    ) {
       final ids = [
         prefix + '_r',
         prefix + '_g',
         prefix + '_b',
       ];
-      final hasWheelTrack = grade.keyframeTracks.any(
+      final hasWheelTrack = activeGrade.keyframeTracks.any(
         (track) => ids.contains(track.property) && track.enabled,
       );
       return SizedBox(
@@ -2600,7 +2605,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       tooltip: 'Animate ' + title + ' wheel',
                       onPressed: () {
                         for (final id in ids) {
-                          _controller.addEffectKeyframe(grade.id, id);
+                          _controller.addEffectKeyframe(activeGrade.id, id);
                         }
                       },
                       icon: Icon(
@@ -2615,24 +2620,24 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 ),
                 ColorWheelControl(
                   diameter: 112,
-                  red: value(prefix + '_r'),
-                  green: value(prefix + '_g'),
-                  blue: value(prefix + '_b'),
+                  red: value(activeGrade, prefix + '_r'),
+                  green: value(activeGrade, prefix + '_g'),
+                  blue: value(activeGrade, prefix + '_b'),
                   onChanged: (wheel) {
                     _controller.setEffectParameter(
-                      grade.id,
+                      activeGrade.id,
                       prefix + '_r',
                       wheel.red,
                       keyframe: hasWheelTrack,
                     );
                     _controller.setEffectParameter(
-                      grade.id,
+                      activeGrade.id,
                       prefix + '_g',
                       wheel.green,
                       keyframe: hasWheelTrack,
                     );
                     _controller.setEffectParameter(
-                      grade.id,
+                      activeGrade.id,
                       prefix + '_b',
                       wheel.blue,
                       keyframe: hasWheelTrack,
@@ -2643,6 +2648,126 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ),
           ),
         ),
+      );
+    }
+
+    Widget primaryGradeControls(EffectInstance activeGrade) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'PRIMARY WHEELS',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+                ),
+              ),
+              Switch(
+                value: activeGrade.enabled,
+                onChanged: (enabled) => _controller.setEffectEnabled(
+                  activeGrade.id,
+                  enabled,
+                ),
+              ),
+            ],
+          ),
+          const Text(
+            'Lift · Gamma · Gain · Offset — drag a wheel to shift RGB balance. The diamond creates keyframes for all three channels.',
+            style: TextStyle(fontSize: 10, color: Color(0xFF9DABC3)),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              wheelCard(activeGrade, 'Lift', 'lift'),
+              wheelCard(activeGrade, 'Gamma', 'gamma'),
+              wheelCard(activeGrade, 'Gain', 'gain'),
+              wheelCard(activeGrade, 'Offset', 'offset'),
+            ],
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () {
+                for (final prefix in const [
+                  'lift',
+                  'gamma',
+                  'gain',
+                  'offset',
+                ]) {
+                  for (final channel in const ['r', 'g', 'b']) {
+                    _controller.setEffectParameter(
+                      activeGrade.id,
+                      prefix + '_' + channel,
+                      0,
+                    );
+                  }
+                }
+                _controller.setEffectParameter(activeGrade.id, 'temperature', 0);
+                _controller.setEffectParameter(activeGrade.id, 'tint', 0);
+              },
+              icon: const Icon(Icons.restart_alt, size: 15),
+              label: const Text(
+                'Reset Wheels',
+                style: TextStyle(fontSize: 10),
+              ),
+            ),
+          ),
+          const Divider(color: Color(0xFF29354A)),
+          _panelHeader('PRIMARY CONTROLS', Icons.tune),
+          gradeSlider(
+            activeGrade: activeGrade,
+            id: 'contrast',
+            label: 'Contrast',
+            min: 0,
+            max: 3,
+            keyframeable: true,
+          ),
+          gradeSlider(
+            activeGrade: activeGrade,
+            id: 'brightness',
+            label: 'Exposure / Brightness',
+            min: -1,
+            max: 1,
+            keyframeable: true,
+          ),
+          gradeSlider(
+            activeGrade: activeGrade,
+            id: 'master_gamma',
+            label: 'Master Gamma',
+            min: 0.1,
+            max: 3,
+            keyframeable: true,
+          ),
+          gradeSlider(
+            activeGrade: activeGrade,
+            id: 'saturation',
+            label: 'Saturation',
+            min: 0,
+            max: 3,
+            keyframeable: true,
+          ),
+          const Divider(color: Color(0xFF29354A)),
+          _panelHeader('WHITE BALANCE', Icons.wb_sunny_outlined),
+          gradeSlider(
+            activeGrade: activeGrade,
+            id: 'temperature',
+            label: 'Temperature · Cool / Warm',
+            min: -1,
+            max: 1,
+            keyframeable: false,
+          ),
+          gradeSlider(
+            activeGrade: activeGrade,
+            id: 'tint',
+            label: 'Tint · Green / Magenta',
+            min: -1,
+            max: 1,
+            keyframeable: false,
+          ),
+        ],
       );
     }
 
@@ -2682,114 +2807,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             icon: const Icon(Icons.add),
             label: const Text('ADD PRIMARY COLOR GRADE'),
           )
-        else ...[
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'PRIMARY WHEELS',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
-                ),
-              ),
-              Switch(
-                value: grade.enabled,
-                onChanged: (enabled) => _controller.setEffectEnabled(
-                  grade.id,
-                  enabled,
-                ),
-              ),
-            ],
-          ),
-          const Text(
-            'Lift · Gamma · Gain · Offset — drag a wheel to shift RGB balance. The diamond creates keyframes for all three channels.',
-            style: TextStyle(fontSize: 10, color: Color(0xFF9DABC3)),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 7,
-            runSpacing: 7,
-            children: [
-              wheelCard('Lift', 'lift'),
-              wheelCard('Gamma', 'gamma'),
-              wheelCard('Gain', 'gain'),
-              wheelCard('Offset', 'offset'),
-            ],
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: () {
-                for (final prefix in const [
-                  'lift',
-                  'gamma',
-                  'gain',
-                  'offset',
-                ]) {
-                  for (final channel in const ['r', 'g', 'b']) {
-                    _controller.setEffectParameter(
-                      grade.id,
-                      prefix + '_' + channel,
-                      0,
-                    );
-                  }
-                }
-                _controller.setEffectParameter(grade.id, 'temperature', 0);
-                _controller.setEffectParameter(grade.id, 'tint', 0);
-              },
-              icon: const Icon(Icons.restart_alt, size: 15),
-              label: const Text(
-                'Reset Wheels',
-                style: TextStyle(fontSize: 10),
-              ),
-            ),
-          ),
-          const Divider(color: Color(0xFF29354A)),
-          _panelHeader('PRIMARY CONTROLS', Icons.tune),
-          gradeSlider(
-            id: 'contrast',
-            label: 'Contrast',
-            min: 0,
-            max: 3,
-            keyframeable: true,
-          ),
-          gradeSlider(
-            id: 'brightness',
-            label: 'Exposure / Brightness',
-            min: -1,
-            max: 1,
-            keyframeable: true,
-          ),
-          gradeSlider(
-            id: 'master_gamma',
-            label: 'Master Gamma',
-            min: 0.1,
-            max: 3,
-            keyframeable: true,
-          ),
-          gradeSlider(
-            id: 'saturation',
-            label: 'Saturation',
-            min: 0,
-            max: 3,
-            keyframeable: true,
-          ),
-          const Divider(color: Color(0xFF29354A)),
-          _panelHeader('WHITE BALANCE', Icons.wb_sunny_outlined),
-          gradeSlider(
-            id: 'temperature',
-            label: 'Temperature · Cool / Warm',
-            min: -1,
-            max: 1,
-            keyframeable: false,
-          ),
-          gradeSlider(
-            id: 'tint',
-            label: 'Tint · Green / Magenta',
-            min: -1,
-            max: 1,
-            keyframeable: false,
-          ),
-        ],
+        else
+          primaryGradeControls(grade),
         const Divider(color: Color(0xFF29354A)),
         _panelHeader('CUSTOM RGB CURVES', Icons.show_chart),
         if (curves == null)
@@ -2889,7 +2908,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ],
             onChanged: (mode) {
               if (mode != null) {
-                _controller.setEffectAssetInterpolation(lut!.id, mode);
+                _controller.setEffectAssetInterpolation(lut.id, mode);
               }
             },
           ),
