@@ -65,7 +65,7 @@ class _FontManagerDialogState extends State<FontManagerDialog> {
     try {
       final picked = await FilePicker.pickFile(
         type: FileType.custom,
-        allowedExtensions: const ['ttf', 'otf', 'ttc'],
+        allowedExtensions: const ['ttf', 'otf'],
       );
       final path = picked?.path;
       if (path == null) return;
@@ -165,7 +165,7 @@ class _FontManagerDialogState extends State<FontManagerDialog> {
                   FilledButton.icon(
                     onPressed: _working ? null : _importFont,
                     icon: const Icon(Icons.add, size: 17),
-                    label: const Text('Import TTF / OTF / TTC'),
+                    label: const Text('Import TTF / OTF'),
                   ),
                   const SizedBox(width: 6),
                   IconButton(
@@ -241,13 +241,20 @@ class _FontManagerDialogState extends State<FontManagerDialog> {
                                     fontFamily: _previewFamily == font.family ? font.family : null,
                                     fontFamilyFallback: _fonts.fallbackFamilies,
                                     fontSize: 15,
+                                    fontWeight: FontWeight.values[
+                                      ((FontManagerService.suggestedWeight(font.styleName) - 100) ~/ 100)
+                                          .clamp(0, 8)
+                                    ],
+                                    fontStyle: FontManagerService.isItalicStyle(font.styleName)
+                                        ? FontStyle.italic
+                                        : FontStyle.normal,
                                   ),
                                 ),
                                 Text(
                                   font.isImported ? 'Imported into DepthVibe' : font.path,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 9,
                                     color: Theme.of(context).extension<DepthVibePalette>()!.secondaryText,
                                   ),
