@@ -336,6 +336,10 @@ class AdobeInterchangeService {
   Number(d.height)||1080,1,Math.max(1,Number(d.durationMs)/1000),Number(d.frameRate)||30);
  var made={},warnings=[];
  function put(g,n,v){try{var p=g.property(n);if(p&&v!==undefined)p.setValue(v);}catch(_){}}
+ function layerVector(value,fallback,dimensions) {
+  var result=value?[value.x,value.y,value.z]:fallback;
+  return dimensions===3?result:result.slice(0,2);
+ }
  function interpolation(mode) {
   if(mode==="hold") return KeyframeInterpolationType.HOLD;
   if(mode==="cubicBezier" || mode==="bezier") return KeyframeInterpolationType.BEZIER;
@@ -406,26 +410,31 @@ class AdobeInterchangeService {
    else if(!l&&x.kind==="nullObject")l=comp.layers.addNull();
    else if(!l&&x.kind==="camera")l=comp.layers.addCamera(x.name,[d.width/2,d.height/2]);
    else if(!l&&x.kind==="light")l=comp.layers.addLight(x.name,[d.width/2,d.height/2]);
-   else if(!l){l=comp.layers.addSolid([0.16,0.18,0.24],x.name,d.width,d.height,1,Math.max(1,x.durationMs/1000));warnings.push(x.name+": placeholder; relink media.");}
+   else if(!l){l=comp.layers.addSolid([0.16,0.18,0.24],x.name,d.width,d.height,1,Math.max(1,x.durationMs/1000));warnings.push(x.name+": editable solid placeholder; relink media.");}
   }catch(e){warnings.push(x.name+": layer skipped: "+String(e));continue;}
   l.name=x.name;l.startTime=Number(x.startMs)/1000;l.inPoint=Number(x.startMs)/1000;
   l.outPoint=Math.min(comp.duration,(Number(x.startMs)+Number(x.durationMs))/1000);
   l.enabled=x.enabled!==false;l.solo=x.solo===true;l.locked=x.locked===true;
-  var t=l.property("ADBE Transform Group"),tr=x.transform||{};
-  if(t){if(tr.position)put(t,"ADBE Position",[tr.position.x,tr.position.y,tr.position.z]);
-   if(tr.anchor)put(t,"ADBE Anchor Point",[tr.anchor.x,tr.anchor.y,tr.anchor.z]);
-   if(tr.scale)put(t,"ADBE Scale",[tr.scale.x,tr.scale.y,tr.scale.z]);
-   if(tr.rotation)put(t,"ADBE Rotate Z",tr.rotation.z);put(t,"ADBE Opacity",tr.opacity);}
-  try { if(x.interchangeMetadata && typeof x.interchangeMetadata.threeDLayer==="boolean") l.threeDLayer=x.interchangeMetadata.threeDLayer; } catch(_){}
-  var layerTracks=x.keyframeTracks||[],dimensions=(x.interchangeMetadata&&x.interchangeMetadata.threeDLayer)?3:2;
-  if(t){
-   applyVectorTracks(t.property("ADBE Position"),layerTracks,"position",tr.position?[tr.position.x,tr.position.y,tr.position.z]:[d.width/2,d.height/2,0],dimensions);
-   applyVectorTracks(t.property("ADBE Anchor Point"),layerTracks,"anchor",tr.anchor?[tr.anchor.x,tr.anchor.y,tr.anchor.z]:[0,0,0],dimensions);
-   applyVectorTracks(t.property("ADBE Scale"),layerTracks,"scale",tr.scale?[tr.scale.x,tr.scale.y,tr.scale.z]:[100,100,100],dimensions);
-   applyScalarTrack(t.property("ADBE Rotate Z"),trackByName(layerTracks,"rotation.z"));
-   applyScalarTrack(t.property("ADBE Opacity"),trackByName(layerTracks,"opacity"));
-  }
-  made[x.id]=l;var parade=l.property("ADBE Effect Parade");
+  var layerMeta=x.interchangeMetadata||{},is3D=(x.kind==="camera"||x.kind==="light"||layerMeta.threeDLayer===true);
+   try { if(typeof layerMeta.threeDLayer==="boolean"||is3D) l.threeDLayer=is3D; } catch(_){}
+   var dimensions=is3D?3:2,layerTracks=x.keyframeTracks||[],tr=x.transform||{};
+   var t=l.property("ADBE Transform Group");
+   if(t){
+    if(tr.position)put(t,"ADBE Position",layerVector(tr.position,[d.width/2,d.height/2,0],dimensions));
+    if(tr.anchor)put(t,"ADBE Anchor Point",layerVector(tr.anchor,[0,0,0],dimensions));
+    if(tr.scale)put(t,"ADBE Scale",layerVector(tr.scale,[100,100,100],dimensions));
+    if(tr.rotation)put(t,"ADBE Rotate Z",tr.rotation.z);
+    put(t,"ADBE Opacity",tr.opacity);
+    applyVectorTracks(t.property("ADBE Position"),layerTracks,"position",
+      tr.position?[tr.position.x,tr.position.y,tr.position.z]:[d.width/2,d.height/2,0],dimensions);
+    applyVectorTracks(t.property("ADBE Anchor Point"),layerTracks,"anchor",
+      tr.anchor?[tr.anchor.x,tr.anchor.y,tr.anchor.z]:[0,0,0],dimensions);
+    applyVectorTracks(t.property("ADBE Scale"),layerTracks,"scale",
+      tr.scale?[tr.scale.x,tr.scale.y,tr.scale.z]:[100,100,100],dimensions);
+    applyScalarTrack(t.property("ADBE Rotate Z"),trackByName(layerTracks,"rotation.z"));
+    applyScalarTrack(t.property("ADBE Opacity"),trackByName(layerTracks,"opacity"));
+   }
+   made[x.id]=l;var parade=l.property("ADBE Effect Parade");
   if(parade&&x.effects)for(var e=0;e<x.effects.length;e++){
    var ef=x.effects[e],mn=fx(ef.effectId);
    try{if(!mn||!parade.canAddProperty(mn)){warnings.push(x.name+": unsupported "+ef.name);continue;}
