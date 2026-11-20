@@ -277,6 +277,7 @@ class CompositionController extends ChangeNotifier {
     String? textAlign,
     double? textBoxWidth,
     bool clearTextFont = false,
+    bool clearTextFontAsset = false,
   }) {
     final layer = selectedLayer;
     if (layer == null || layer.kind != LayerKind.text) return;
@@ -294,6 +295,7 @@ class CompositionController extends ChangeNotifier {
       textAlign: textAlign,
       textBoxWidth: textBoxWidth,
       clearTextFont: clearTextFont,
+      clearTextFontAsset: clearTextFontAsset,
     ));
   }
 
