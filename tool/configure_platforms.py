@@ -191,16 +191,16 @@ def configure_linux_branding() -> None:
 
     desktop = linux / "depthvibe.desktop"
     desktop.write_text(
-        "[Desktop Entry]\\n"
-        "Type=Application\\n"
-        "Name=DepthVibe\\n"
-        "GenericName=Video and 3D Creative Studio\\n"
-        "Comment=Video, motion-design and 3D creative studio\\n"
-        "Exec=depthvibe\\n"
-        "Icon=depthvibe\\n"
-        "Terminal=false\\n"
-        "Categories=AudioVideo;Video;Graphics;\\n"
-        "StartupWMClass=depthvibe\\n",
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name=DepthVibe\n"
+        "GenericName=Video and 3D Creative Studio\n"
+        "Comment=Video, motion-design and 3D creative studio\n"
+        "Exec=depthvibe\n"
+        "Icon=depthvibe\n"
+        "Terminal=false\n"
+        "Categories=AudioVideo;Video;Graphics;\n"
+        "StartupWMClass=depthvibe\n",
         encoding="utf-8",
     )
 
@@ -221,8 +221,8 @@ def configure_linux_branding() -> None:
         if icon_install not in text:
             additions.append(icon_install)
         if additions:
-            text = text.rstrip() + "\\n\\n# DepthVibe launcher branding\\n"
-            text += "\\n".join(additions) + "\\n"
+            text = text.rstrip() + "\n\n# DepthVibe launcher branding\n"
+            text += "\n".join(additions) + "\n"
             cmake.write_text(text, encoding="utf-8")
 
     app_source = linux / "runner" / "my_application.cc"
@@ -231,7 +231,7 @@ def configure_linux_branding() -> None:
         marker = 'gtk_window_set_title(window, "DepthVibe");'
         icon_call = 'gtk_window_set_icon_name(window, "depthvibe");'
         if marker in text and icon_call not in text:
-            text = text.replace(marker, marker + "\\n  " + icon_call, 1)
+            text = text.replace(marker, marker + "\n  " + icon_call, 1)
             app_source.write_text(text, encoding="utf-8")
 
 
@@ -242,8 +242,8 @@ def ensure_windows_icon_resource() -> None:
     text = resource.read_text(encoding="utf-8")
     if "IDI_APP_ICON ICON" not in text and "app_icon.ico" not in text:
         text = text.rstrip() + (
-            "\\n\\n#define IDI_APP_ICON 101\\n"
-            'IDI_APP_ICON ICON "resources\\\\app_icon.ico"\\n'
+            "\n\n#define IDI_APP_ICON 101\n"
+            'IDI_APP_ICON ICON "resources\\\\app_icon.ico"\n'
         )
         resource.write_text(text, encoding="utf-8")
 
