@@ -87,7 +87,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
           ' -frames:v 1 -vf scale=960:540:force_original_aspect_ratio=decrease,'
           'pad=960:540:(ow-iw)/2:(oh-ih)/2 -an ' +
           _quoteFfmpeg(frame.path);
-      final session = await FFmpegKit.execute(command);
+      final session = await FFmpegKit.execute(command).timeout(
+        const Duration(seconds: 12),
+        onTimeout: () {
+          final activeSessions = FFmpegKit.getFFmpegSessions()
+              .where((running) => running.getCommand().contains(frame.path))
+              .toList();
+          for (final running in activeSessions) {
+            running.cancel();
+          }
+          throw TimeoutException(
+            'Decoding the current color preview frame exceeded 12 seconds.',
+          );
+        },
+      );
       if (!ReturnCode.isSuccess(session.getReturnCode()) ||
           !await frame.exists() ||
           await frame.length() == 0) {
