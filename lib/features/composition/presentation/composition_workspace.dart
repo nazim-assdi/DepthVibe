@@ -12,6 +12,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../application/composition_controller.dart';
+import '../../fonts/data/font_manager_service.dart';
+import '../../fonts/presentation/font_manager_dialog.dart';
 import '../data/effect_catalog.dart';
 import '../../extensions/data/extension_manager_service.dart';
 import '../../extensions/data/adobe_bridge_service.dart';
@@ -216,10 +218,49 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     if (mounted) setState(() {});
   }
 
+  Future<void> _openFontManager() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => const FontManagerDialog(),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _applyLayerFont(FontCatalogEntry? font) async {
+    if (font == null) {
+      _controller.updateTextLayer(clearTextFont: true);
+      return;
+    }
+    try {
+      await FontManagerService.instance.ensureFontLoaded(
+        family: font.family,
+        path: font.path,
+      );
+      _controller.updateTextLayer(
+        textFontFamily: font.family,
+        textFontAssetUri: font.path,
+      );
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Font could not be loaded: $error');
+    }
+  }
+
   void _onCompositionChanged() {
     _documentRevision++;
     _recoveryDirty = true;
     _autosaveStatus = 'Unsaved changes';
+    final layer = _controller.selectedLayer;
+    if (layer != null && layer.kind == LayerKind.text &&
+        layer.textFontFamily != null && layer.textFontAssetUri != null) {
+      unawaited(FontManagerService.instance.ensureFontLoaded(
+        family: layer.textFontFamily!,
+        path: layer.textFontAssetUri!,
+      ).then<void>(
+        (_) { if (mounted) setState(() {}); },
+        onError: (Object _) {},
+      ));
+    }
   }
 
   Future<Directory> _recoveryDirectory() async {
@@ -657,6 +698,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     if (!mounted) return;
     setState(() {
       _panel = switch (kind) {
+        LayerKind.text => 'Typography',
         LayerKind.shape => 'Shape',
         LayerKind.camera || LayerKind.light || LayerKind.threeDModel => '3D',
         LayerKind.nullObject => 'Parent',
@@ -860,6 +902,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     ? null
                     : _relinkMissingMedia,
                 icon: const Icon(Icons.link),
+              ),
+              IconButton(
+                tooltip: 'Open global Font Manager',
+                onPressed: _openFontManager,
+                icon: const Icon(Icons.font_download_outlined),
               ),
               IconButton(
                 tooltip: 'Import Photoshop PSD / PSB layers',
@@ -1231,17 +1278,52 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         );
         break;
       case LayerKind.text:
-        baseWidth = 320;
-        baseHeight = 80;
+        baseWidth = layer.textBoxWidth;
+        baseHeight = 180;
+        final fontScale = canvasSize.width / doc.width;
+        final weightIndex = ((layer.textFontWeight.clamp(100, 900) / 100)
+                    .round() - 1)
+                .clamp(0, 8)
+                .toInt();
+        final rawColor = layer.textColor.replaceFirst('#', '');
+        final parsedColor = int.tryParse(rawColor, radix: 16);
+        final textColor = parsedColor == null
+            ? Colors.white
+            : Color(rawColor.length == 6 ? 0xFF000000 | parsedColor : parsedColor);
+        final content = layer.textContent ?? layer.name;
+        final textAlign = switch (layer.textAlign) {
+          'center' => TextAlign.center,
+          'right' => TextAlign.right,
+          'justify' => TextAlign.justify,
+          _ => TextAlign.left,
+        };
+        final textDirection = RegExp(r'[\u0590-\u08FF\uFB1D-\uFEFF]')
+                .hasMatch(content)
+            ? TextDirection.rtl
+            : TextDirection.ltr;
         visual = Align(
           alignment: Alignment.centerLeft,
-          child: Text(
-            layer.textContent ?? layer.name,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 26 * canvasSize.width / doc.width,
-              fontWeight: FontWeight.w800,
-              shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
+          child: SizedBox(
+            width: baseWidth * fontScale,
+            child: Text(
+              content,
+              textAlign: textAlign,
+              textDirection: textDirection,
+              softWrap: true,
+              style: TextStyle(
+                color: textColor,
+                fontFamily: layer.textFontFamily ?? FontManagerService.instance.activeFamily,
+                fontFamilyFallback: [
+                  ...layer.textFontFallback,
+                  ...FontManagerService.instance.fallbackFamilies,
+                ],
+                fontSize: layer.textFontSize * fontScale,
+                fontWeight: FontWeight.values[weightIndex],
+                fontStyle: layer.textItalic ? FontStyle.italic : FontStyle.normal,
+                letterSpacing: layer.textLetterSpacing * fontScale,
+                height: layer.textLineHeight,
+                shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
+              ),
             ),
           ),
         );
@@ -1421,7 +1503,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                for (final panel in const ['Layers', 'Timing', 'Transform', 'Color', 'Animation', 'Shape', 'Effects', 'Masks', 'Audio', 'Bus Mixer', 'Tracking', 'Transitions', 'Parent', '3D'])
+                for (final panel in const ['Layers', 'Typography', 'Timing', 'Transform', 'Color', 'Animation', 'Shape', 'Effects', 'Masks', 'Audio', 'Bus Mixer', 'Tracking', 'Transitions', 'Parent', '3D'])
                   TextButton(
                     onPressed: () => setState(() => _panel = panel),
                     child: Text(panel, style: TextStyle(fontSize: 10, fontWeight: _panel == panel ? FontWeight.w900 : FontWeight.normal)),
@@ -1450,6 +1532,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   Widget _panelContent(CompositionLayer layer) {
     switch (_panel) {
+      case 'Typography':
+        return _buildTypographyPanel(layer);
       case 'Timing':
         return _buildTimingPanel(layer);
       case 'Transform':
@@ -1543,6 +1627,217 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           onPressed: () => _addKeyframe('position.x'),
           icon: const Icon(Icons.key, size: 16),
           label: const Text('Add Position Keyframe'),
+        ),
+      ],
+    );
+  }
+
+
+  Widget _buildTypographyPanel(CompositionLayer layer) {
+    if (layer.kind != LayerKind.text) {
+      return const Center(
+        child: Text('Select a Text layer to edit multilingual typography.'),
+      );
+    }
+    final manager = FontManagerService.instance;
+    final fonts = manager.fonts;
+    final selectedFamily = layer.textFontFamily ?? '';
+    final colorText = layer.textColor;
+    final normalizedWeight = (layer.textFontWeight / 100).round()
+        .clamp(1, 9) * 100;
+
+    Widget numericField(
+      String label,
+      double value,
+      ValueChanged<double> onSubmit, {
+      bool integer = false,
+    }) {
+      return SizedBox(
+        width: 140,
+        child: TextFormField(
+          key: ValueKey<String>(layer.id + label + value.toString()),
+          initialValue: integer ? value.round().toString() : value.toString(),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(labelText: label, isDense: true),
+          onFieldSubmitted: (raw) {
+            final parsed = double.tryParse(raw);
+            if (parsed != null && parsed.isFinite) onSubmit(parsed);
+          },
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _panelHeader('MULTILINGUAL TYPOGRAPHY', Icons.text_fields),
+        TextFormField(
+          key: ValueKey<String>(layer.id + (layer.textContent ?? '')),
+          initialValue: layer.textContent ?? '',
+          maxLines: 4,
+          minLines: 2,
+          decoration: const InputDecoration(
+            labelText: 'Text content',
+            hintText: 'বাংলা, العربية, English, 中文, हिन्दी…',
+            alignLabelWithHint: true,
+          ),
+          onFieldSubmitted: (value) =>
+              _controller.updateTextLayer(textContent: value),
+        ),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String>(
+          initialValue: fonts.any((font) => font.family == selectedFamily)
+              ? selectedFamily
+              : '',
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Font family'),
+          items: [
+            const DropdownMenuItem(
+              value: '',
+              child: Text('App default / automatic fallback'),
+            ),
+            for (final font in fonts)
+              DropdownMenuItem(
+                value: font.family,
+                child: Text(
+                  font.displayName + (font.isImported ? ' · Imported' : ' · System'),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: (value) {
+            if (value == null || value.isEmpty) {
+              _applyLayerFont(null);
+            } else {
+              final font = fonts.firstWhere(
+                (item) => item.family == value,
+              );
+              _applyLayerFont(font);
+            }
+          },
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _openFontManager,
+          icon: const Icon(Icons.library_books_outlined, size: 16),
+          label: const Text('Browse, import and preview world fonts'),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            numericField(
+              'Font size',
+              layer.textFontSize,
+              (value) => _controller.updateTextLayer(
+                textFontSize: value.clamp(1, 2000).toDouble(),
+              ),
+            ),
+            numericField(
+              'Letter spacing',
+              layer.textLetterSpacing,
+              (value) => _controller.updateTextLayer(
+                textLetterSpacing: value.clamp(-100, 500).toDouble(),
+              ),
+            ),
+            numericField(
+              'Line height',
+              layer.textLineHeight,
+              (value) => _controller.updateTextLayer(
+                textLineHeight: value.clamp(0.1, 10).toDouble(),
+              ),
+            ),
+            numericField(
+              'Text box width',
+              layer.textBoxWidth,
+              (value) => _controller.updateTextLayer(
+                textBoxWidth: value.clamp(1, 20000).toDouble(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<int>(
+          initialValue: normalizedWeight,
+          decoration: const InputDecoration(labelText: 'Font weight'),
+          items: [
+            for (var weight = 100; weight <= 900; weight += 100)
+              DropdownMenuItem(
+                value: weight,
+                child: Text(
+                  weight.toString() +
+                      (weight == 400 ? ' · Regular' : weight == 700 ? ' · Bold' : ''),
+                ),
+              ),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              _controller.updateTextLayer(textFontWeight: value);
+            }
+          },
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Italic'),
+          value: layer.textItalic,
+          onChanged: (value) =>
+              _controller.updateTextLayer(textItalic: value),
+        ),
+        TextFormField(
+          key: ValueKey<String>(layer.id + 'color' + colorText),
+          initialValue: colorText,
+          decoration: const InputDecoration(
+            labelText: 'Text color · #AARRGGBB / #RRGGBB',
+            isDense: true,
+          ),
+          onFieldSubmitted: (value) {
+            final parsed = value.trim();
+            if (RegExp(r'^#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$')
+                .hasMatch(parsed)) {
+              _controller.updateTextLayer(textColor: parsed.toUpperCase());
+            }
+          },
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          initialValue: const {'left', 'center', 'right', 'justify'}
+                  .contains(layer.textAlign)
+              ? layer.textAlign
+              : 'left',
+          decoration: const InputDecoration(labelText: 'Text alignment'),
+          items: const [
+            DropdownMenuItem(value: 'left', child: Text('Left')),
+            DropdownMenuItem(value: 'center', child: Text('Center')),
+            DropdownMenuItem(value: 'right', child: Text('Right')),
+            DropdownMenuItem(value: 'justify', child: Text('Justify')),
+          ],
+          onChanged: (value) {
+            if (value != null) _controller.updateTextLayer(textAlign: value);
+          },
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          key: ValueKey<String>(layer.id + 'fallback' + layer.textFontFallback.join(',')),
+          initialValue: layer.textFontFallback.join(', '),
+          maxLines: 2,
+          decoration: const InputDecoration(
+            labelText: 'Layer glyph fallback families',
+            hintText: 'Noto Sans Bengali, Noto Naskh Arabic, Noto Sans CJK SC',
+          ),
+          onFieldSubmitted: (value) => _controller.updateTextLayer(
+            textFontFallback: value
+                .split(RegExp(r'[,;\n]'))
+                .map((item) => item.trim())
+                .where((item) => item.isNotEmpty)
+                .take(32)
+                .toList(),
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'TTF/OTF fonts can be imported and embedded in .dvproj. Missing glyphs are resolved through the selected fallback chain and then the operating system.',
+          style: TextStyle(fontSize: 10, color: Color(0xFF91A2BA)),
         ),
       ],
     );
