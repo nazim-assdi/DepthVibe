@@ -243,7 +243,7 @@ class _FontManagerDialogState extends State<FontManagerDialog> {
                                     fontSize: 15,
                                     fontWeight: FontWeight.values[
                                       ((FontManagerService.suggestedWeight(font.styleName) - 100) ~/ 100)
-                                          .clamp(0, 8)
+                                          .clamp(0, 8).toInt()
                                     ],
                                     fontStyle: FontManagerService.isItalicStyle(font.styleName)
                                         ? FontStyle.italic
