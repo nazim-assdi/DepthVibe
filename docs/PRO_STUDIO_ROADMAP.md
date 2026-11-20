@@ -1,8 +1,8 @@
 ### GLB / glTF scene import and rendering
 
-- Implemented: active-scene traversal, nested node transforms, POSITION / NORMAL / TEXCOORD_0, decoded base-colour raster textures, perspective-correct UV interpolation, repeat + bilinear sampling, alpha MASK / BLEND handling, and timeline-selected translation / rotation / scale clips.
-- Textured preview and frame export use the CPU raster path; the current flat-colour WGSL pipeline falls back for textured meshes rather than silently dropping their maps.
-- Remaining: GPU texture/sampler bindings, normal / occlusion / metallic-roughness maps, KHR_texture_transform, skinning / inverse bind matrices, morph-target deformation and complete PBR parity.
+- Implemented: active-scene traversal, nested node transforms, POSITION / NORMAL / TEXCOORD_0, decoded base-colour, metallic-roughness, normal, occlusion and emissive image payloads, metallic/roughness factors, alpha MASK / BLEND metadata, and timeline-selected translation / rotation / scale clips.
+- CPU preview and frame export sample the base-colour map with perspective-correct UVs, repeat + bilinear sampling, and KHR_texture_transform when it targets UV0. The other four maps and their UV/strength metadata are decoded and retained, but are not yet applied to CPU shading.
+- Remaining: GPU texture/sampler bindings, CPU/GPU metallic-roughness BRDF, normal/occlusion/emissive map shading, non-zero UV set import, glTF sampler wrap/filter modes, skinning / inverse bind matrices, morph-target deformation and complete PBR parity.
 
 # DepthVibe Professional Studio Roadmap
 
@@ -251,8 +251,8 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 
 ### Current GLTF / GPU rendering limits
 
-- Base-colour texture bytes and UV0 are imported and retained, but texture images are not yet uploaded as GPU textures or sampled in the WGSL fragment shader. The current GPU shader still receives pre-shaded vertex colour; full UV texture sampling and material batching remain pending.
-- Metallic/roughness values and alpha modes are retained as material data; a full per-pixel metallic-roughness BRDF, normal/occlusion/emissive map sampling, alpha mask/blend parity, and GPU light evaluation remain pending.
+- All five core glTF texture slots (base colour, metallic-roughness, normal, occlusion and emissive) are now decoded into reusable RGBA material payloads. The CPU preview/export path samples only base colour today; KHR_texture_transform is applied for base-colour UV0. Auxiliary maps are retained for the next shading increment, not yet used in lighting.
+- The WebGPU vertex-colour shader still receives CPU-projected, pre-shaded colours; no source texture is uploaded or sampled by WGSL yet. Metallic/roughness factors are retained, but per-pixel metallic-roughness BRDF, normal/occlusion/emissive map shading, non-zero UV sets, sampler state, alpha mask/blend parity and GPU light evaluation remain pending.
 - Node TRS animation is evaluated for preview/export, but skeletal skinning, inverse-bind matrices, joint weights, morph targets and weights animation are not deformed/rendered yet.
 
 
@@ -270,3 +270,12 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 - Point/spot maps are software cube/perspective maps rebuilt from the current mesh on scene updates. They are not yet GPU shadow render passes, cached across static frames, cascaded, or filtered with variance/PCSS methods.
 - The thin-lens CoC is physically parameterized, but the current bounded screen-space gather is not a full lens/bokeh renderer: polygonal aperture blades, anamorphic bokeh, chromatic aberration, sensor clipping and temporal accumulation remain future work.
 - Area lighting uses low-discrepancy deterministic samples and a central point-shadow map for visibility. Per-sample area-source shadow maps, multiple-scattering integration and a complete energy-conserving PBR BRDF remain outstanding.
+
+
+### glTF PBR texture ingestion increment — 20 November 2026
+
+- Added a reusable ObjTextureMap payload containing original encoded bytes, decoded RGBA pixels, dimensions, selected texture-coordinate set and KHR texture-transform parameters.
+- The scene loader now resolves and decodes base-colour, metallic-roughness, normal, occlusion and emissive texture slots. Normal scale and occlusion strength are retained alongside the existing metallic/roughness and emissive factors.
+- Base-colour UV0 applies KHR_texture_transform in the CPU projection path. Texture-coordinate set overrides other than UV0 are preserved as metadata but are not sampled because only TEXCOORD_0 is imported at present.
+- Added loader fixture assertions for all five decoded maps, normal/AO strengths and UV transform math.
+- Explicit limit: this is material ingestion plus base-colour UV transform, not complete PBR shading. Metallic-roughness, normal, occlusion and emissive maps are not yet applied to the CPU lighting equation or uploaded to the WebGPU shader. CI for this increment is pending at the time of this commit; no platform package is claimed as verified.
