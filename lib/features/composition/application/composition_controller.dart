@@ -140,6 +140,7 @@ class CompositionController extends ChangeNotifier {
         _ => '${kind.name[0].toUpperCase()}${kind.name.substring(1)} ${_nextId - 1}',
       },
       kind: kind,
+      textContent: kind == LayerKind.text ? 'Your text' : null,
       durationMs: duration,
       transform: const LayerTransform(),
       shapeStyle: kind == LayerKind.shape ? const ShapeStyle() : null,
@@ -260,6 +261,40 @@ class CompositionController extends ChangeNotifier {
     final layer = selectedLayer;
     if (layer == null) return;
     _replace(layer.copyWith(blendMode: mode));
+  }
+
+  void updateTextLayer({
+    String? textContent,
+    String? textFontFamily,
+    String? textFontAssetUri,
+    List<String>? textFontFallback,
+    double? textFontSize,
+    int? textFontWeight,
+    bool? textItalic,
+    String? textColor,
+    double? textLetterSpacing,
+    double? textLineHeight,
+    String? textAlign,
+    double? textBoxWidth,
+    bool clearTextFont = false,
+  }) {
+    final layer = selectedLayer;
+    if (layer == null || layer.kind != LayerKind.text) return;
+    _replace(layer.copyWith(
+      textContent: textContent,
+      textFontFamily: textFontFamily,
+      textFontAssetUri: textFontAssetUri,
+      textFontFallback: textFontFallback,
+      textFontSize: textFontSize,
+      textFontWeight: textFontWeight,
+      textItalic: textItalic,
+      textColor: textColor,
+      textLetterSpacing: textLetterSpacing,
+      textLineHeight: textLineHeight,
+      textAlign: textAlign,
+      textBoxWidth: textBoxWidth,
+      clearTextFont: clearTextFont,
+    ));
   }
 
   void selectLayer(String? id) {
