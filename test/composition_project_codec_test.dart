@@ -210,10 +210,13 @@ void main() {
     expect(video.sourceDocumentUri, '/media/source.psd');
     expect(video.blendMode, LayerBlendMode.softLight);
     expect(video.parentId, 'null_2');
-    expect(video.transform.position, const Vector3(1200, 900, 3));
+    expect(video.transform.position.x, 1200);
+    expect(video.transform.position.y, 900);
+    expect(video.transform.position.z, 3);
     expect(video.masks.single.shape, MaskShape.bezier);
     expect(video.masks.single.vertices.first.smooth, isTrue);
-    expect(video.masks.single.vertices.first.outHandle, const Vector2(0.06, 0.03));
+    expect(video.masks.single.vertices.first.outHandle.x, 0.06);
+    expect(video.masks.single.vertices.first.outHandle.y, 0.03);
     expect(video.masks.single.keyframeTracks.single.keyframes, hasLength(2));
     expect(video.effects.first.enabled, isFalse);
     expect(video.effects.first.parameters['contrast'], 1.4);
