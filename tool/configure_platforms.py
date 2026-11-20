@@ -183,4 +183,71 @@ update_plist(ROOT / "macos/Runner/Info.plist", {
 for name in ("DebugProfile.entitlements", "Release.entitlements"):
     add_camera_entitlements(ROOT / "macos/Runner/" / name)
 replace_deployment_target(ROOT / "ios/Runner.xcodeproj/project.pbxproj", "ios", "14.0")
+
+def configure_linux_branding() -> None:
+    linux = ROOT / "linux"
+    if not linux.exists():
+        return
+
+    desktop = linux / "depthvibe.desktop"
+    desktop.write_text(
+        "[Desktop Entry]\\n"
+        "Type=Application\\n"
+        "Name=DepthVibe\\n"
+        "GenericName=Video and 3D Creative Studio\\n"
+        "Comment=Video, motion-design and 3D creative studio\\n"
+        "Exec=depthvibe\\n"
+        "Icon=depthvibe\\n"
+        "Terminal=false\\n"
+        "Categories=AudioVideo;Video;Graphics;\\n"
+        "StartupWMClass=depthvibe\\n",
+        encoding="utf-8",
+    )
+
+    cmake = linux / "CMakeLists.txt"
+    if cmake.exists():
+        text = cmake.read_text(encoding="utf-8")
+        desktop_install = (
+            'install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/depthvibe.desktop" '
+            'DESTINATION "share/applications")'
+        )
+        icon_install = (
+            'install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/icons/hicolor/" '
+            'DESTINATION "share/icons/hicolor")'
+        )
+        additions = []
+        if desktop_install not in text:
+            additions.append(desktop_install)
+        if icon_install not in text:
+            additions.append(icon_install)
+        if additions:
+            text = text.rstrip() + "\\n\\n# DepthVibe launcher branding\\n"
+            text += "\\n".join(additions) + "\\n"
+            cmake.write_text(text, encoding="utf-8")
+
+    app_source = linux / "runner" / "my_application.cc"
+    if app_source.exists():
+        text = app_source.read_text(encoding="utf-8")
+        marker = 'gtk_window_set_title(window, "DepthVibe");'
+        icon_call = 'gtk_window_set_icon_name(window, "depthvibe");'
+        if marker in text and icon_call not in text:
+            text = text.replace(marker, marker + "\\n  " + icon_call, 1)
+            app_source.write_text(text, encoding="utf-8")
+
+
+def ensure_windows_icon_resource() -> None:
+    resource = ROOT / "windows" / "runner" / "Runner.rc"
+    if not resource.exists():
+        return
+    text = resource.read_text(encoding="utf-8")
+    if "IDI_APP_ICON ICON" not in text and "app_icon.ico" not in text:
+        text = text.rstrip() + (
+            "\\n\\n#define IDI_APP_ICON 101\\n"
+            'IDI_APP_ICON ICON "resources\\\\app_icon.ico"\\n'
+        )
+        resource.write_text(text, encoding="utf-8")
+
+
 replace_deployment_target(ROOT / "macos/Runner.xcodeproj/project.pbxproj", "macos", "13.0")
+configure_linux_branding()
+ensure_windows_icon_resource()
