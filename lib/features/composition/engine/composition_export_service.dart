@@ -474,8 +474,8 @@ class CompositionExportService {
       }
 
       const padding = 8;
-      final imageWidth = math.max(1, painter.width.ceil() + padding * 2);
-      final imageHeight = math.max(1, painter.height.ceil() + padding * 2);
+      final imageWidth = math.max(1, painter.width.ceil() + padding * 2).toInt();
+      final imageHeight = math.max(1, painter.height.ceil() + padding * 2).toInt();
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(
         recorder,
