@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'app/depthvibe_app.dart';
+import 'app/depthvibe_settings.dart';
 import 'features/extensions/data/extension_manager_service.dart';
 import 'features/extensions/data/adobe_bridge_service.dart';
 import 'features/extensions/data/extension_marketplace_service.dart';
@@ -15,6 +16,7 @@ Future<void> main() async {
   MediaKit.ensureInitialized();
   await FFmpegKitExtended.initialize();
   await FontManagerService.instance.initialize();
+  await DepthVibeSettingsService.instance.initialize();
   await ExtensionManagerService.instance.initialize();
   await AdobeBridgeService.instance.start();
   try {
