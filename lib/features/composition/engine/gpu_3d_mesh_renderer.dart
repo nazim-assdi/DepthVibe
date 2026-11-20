@@ -9,14 +9,21 @@ import 'package:nitro_webgpu/nitro_webgpu.dart';
 /// shared CPU scene evaluator before vertices are uploaded.
 class Gpu3dMeshRenderer {
   static const _shader = r'''
+@group(0) @binding(0) var baseColorSampler: sampler;
+@group(0) @binding(1) var baseColorTexture: texture_2d<f32>;
+
 struct VertexInput {
   @location(0) position: vec3<f32>,
   @location(1) color: vec4<f32>,
+  @location(2) uv: vec2<f32>,
+  @location(3) texturePresent: f32,
 };
 
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
   @location(0) color: vec4<f32>,
+  @location(1) uv: vec2<f32>,
+  @location(2) texturePresent: f32,
 };
 
 @vertex
@@ -24,18 +31,35 @@ fn vs_main(input: VertexInput) -> VertexOutput {
   var output: VertexOutput;
   output.position = vec4<f32>(input.position, 1.0);
   output.color = input.color;
+  output.uv = input.uv;
+  output.texturePresent = input.texturePresent;
   return output;
 }
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-  return input.color;
+  var surfaceColor = input.color;
+  if (input.texturePresent > 0.5) {
+    surfaceColor *= textureSample(
+      baseColorTexture,
+      baseColorSampler,
+      fract(input.uv)
+    );
+  }
+  return surfaceColor;
 }
 ''';
 
   GpuShaderModule? _module;
   GpuRenderPipeline? _pipeline;
   GpuBuffer? _vertices;
+  GpuTexture? _baseColorTexture;
+  GpuTextureView? _baseColorView;
+  GpuSampler? _baseColorSampler;
+  GpuBindGroup? _materialBindGroup;
+  Uint8List? _uploadedTextureBytes;
+  int _baseColorWidth = 0;
+  int _baseColorHeight = 0;
   GpuTexture? _depthTexture;
   GpuTextureView? _depthView;
   GpuTexture? _msaaTexture;
@@ -54,11 +78,20 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     required GpuRenderTarget target,
     required Uint8List vertices,
     required int vertexCount,
+    Uint8List? baseColorTextureRgba,
+    int baseColorTextureWidth = 0,
+    int baseColorTextureHeight = 0,
   }) async {
     if (_disposed) throw StateError('GPU mesh renderer is disposed.');
     if (target.width <= 0 || target.height <= 0) return;
 
     await _ensurePipeline(device, target.targetFormat);
+    await _ensureBaseColorBinding(
+      device,
+      baseColorTextureRgba: baseColorTextureRgba,
+      width: baseColorTextureWidth,
+      height: baseColorTextureHeight,
+    );
     await _ensureAttachments(device, target);
     _uploadVertices(device, vertices, vertexCount);
 
@@ -82,6 +115,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
       label: 'DepthVibe 3D Z-buffer pass',
     );
     pass.setPipeline(_pipeline!);
+    if (_materialBindGroup != null) {
+      pass.setBindGroup(0, _materialBindGroup!);
+    }
     if (_vertexCount > 0 && _vertices != null) {
       pass.setVertexBuffer(0, _vertices!);
       pass.draw(_vertexCount);
@@ -98,6 +134,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     _pipeline?.dispose();
     _pipeline = null;
+    _materialBindGroup?.dispose();
+    _materialBindGroup = null;
     _module ??= await device.createShaderModule(
       _shader,
       label: 'DepthVibe WGSL mesh shader',
@@ -158,6 +196,72 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     _releaseAttachments();
   }
 
+  Future<void> _ensureBaseColorBinding(
+    GpuDevice device, {
+    required Uint8List? baseColorTextureRgba,
+    required int width,
+    required int height,
+  }) async {
+    final hasValidTexture = baseColorTextureRgba != null &&
+        width > 0 &&
+        height > 0 &&
+        baseColorTextureRgba.length == width * height * 4;
+    final pixels = hasValidTexture ? baseColorTextureRgba : _whitePixel;
+    final textureWidth = hasValidTexture ? width : 1;
+    final textureHeight = hasValidTexture ? height : 1;
+
+    final needsUpload = _baseColorTexture == null ||
+        !identical(_uploadedTextureBytes, pixels) ||
+        _baseColorWidth != textureWidth ||
+        _baseColorHeight != textureHeight;
+    if (needsUpload) {
+      _materialBindGroup?.dispose();
+      _materialBindGroup = null;
+      _baseColorView?.dispose();
+      _baseColorView = null;
+      _baseColorTexture?.dispose();
+      _baseColorTexture = device.createTexture(
+        width: textureWidth,
+        height: textureHeight,
+        format: GpuTextureFormat.rgba8Unorm,
+        usage: GpuTextureUsage.textureBinding | GpuTextureUsage.copyDst,
+        label: 'DepthVibe glTF base-colour map',
+      );
+      device.queue.writeTexture(_baseColorTexture!, pixels);
+      _baseColorView = _baseColorTexture!.createView(
+        label: 'DepthVibe base-colour texture view',
+      );
+      _uploadedTextureBytes = pixels;
+      _baseColorWidth = textureWidth;
+      _baseColorHeight = textureHeight;
+    }
+
+    _baseColorSampler ??= device.createSampler(
+      magFilter: GpuFilterMode.linear,
+      minFilter: GpuFilterMode.linear,
+      addressMode: GpuAddressMode.repeat,
+      label: 'DepthVibe glTF repeat-linear sampler',
+    );
+
+    if (_materialBindGroup == null) {
+      final layout = _pipeline!.getBindGroupLayout(0);
+      try {
+        _materialBindGroup = device.createBindGroup(
+          layout: layout,
+          entries: [
+            GpuSamplerBinding(binding: 0, sampler: _baseColorSampler!),
+            GpuTextureBinding(binding: 1, view: _baseColorView!),
+          ],
+          label: 'DepthVibe base-colour material bindings',
+        );
+      } finally {
+        layout.dispose();
+      }
+    }
+  }
+
+  static final Uint8List _whitePixel = Uint8List.fromList([255, 255, 255, 255]);
+
   Future<void> _ensureAttachments(
     GpuDevice device,
     GpuRenderTarget target,
@@ -189,7 +293,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
           cullMode: GpuCullMode.none,
           vertexBuffers: const [
             GpuVertexLayout(
-              arrayStride: 28,
+              arrayStride: 40,
               attributes: [
                 GpuVertexAttr(
                   format: GpuVertexFormat.float32x3,
@@ -200,6 +304,16 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                   format: GpuVertexFormat.float32x4,
                   offset: 12,
                   shaderLocation: 1,
+                ),
+                GpuVertexAttr(
+                  format: GpuVertexFormat.float32x2,
+                  offset: 28,
+                  shaderLocation: 2,
+                ),
+                GpuVertexAttr(
+                  format: GpuVertexFormat.float32,
+                  offset: 36,
+                  shaderLocation: 3,
                 ),
               ],
             ),
@@ -287,6 +401,14 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     if (_disposed) return;
     _disposed = true;
     _releaseAttachments();
+    _materialBindGroup?.dispose();
+    _materialBindGroup = null;
+    _baseColorView?.dispose();
+    _baseColorView = null;
+    _baseColorTexture?.dispose();
+    _baseColorTexture = null;
+    _baseColorSampler?.dispose();
+    _baseColorSampler = null;
     _vertices?.dispose();
     _vertices = null;
     _pipeline?.dispose();
