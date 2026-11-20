@@ -639,6 +639,25 @@ class CompositionController extends ChangeNotifier {
     ));
   }
 
+  void setEffectAssetUri(String effectInstanceId, String? assetUri) {
+    final layer = selectedLayer;
+    if (layer == null) return;
+    _replace(layer.copyWith(
+      effects: layer.effects.map((effect) {
+        if (effect.id != effectInstanceId) return effect;
+        return effect.copyWith(
+          assetUri: assetUri,
+          clearAssetUri: assetUri == null,
+        );
+      }).toList(),
+    ));
+  }
+
+  void setColorOutputProfile(ColorOutputProfile profile) {
+    _document = _document.copyWith(colorOutputProfile: profile);
+    notifyListeners();
+  }
+
   void setEffectParameter(
     String effectInstanceId,
     String parameterId,
