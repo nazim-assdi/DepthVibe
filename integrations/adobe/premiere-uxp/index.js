@@ -118,7 +118,7 @@ async function exportPremiereXml() {
   if (!file) return;
   await file.write(result.content);
   showResult({ filename: result.filename, format: result.format,
-    note: "Import via Premiere Pro > File > Import. This XML carries clip timing/media references, not effect-filter nodes." });
+    note: "Import via Premiere Pro > File > Import. This XML carries clip timing/media references and supported static Gaussian Blur filters; other effect filters are reported as unsupported." });
   setStatus("Premiere interchange XML saved.");
 }
 
