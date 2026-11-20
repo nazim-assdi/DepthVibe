@@ -868,6 +868,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       builder: (context, _) {
         final doc = _controller.document;
         final layer = _selected;
+        final palette = Theme.of(context).extension<DepthVibePalette>()!;
         return Scaffold(
           appBar: AppBar(
             title: const Row(
