@@ -16,9 +16,32 @@ class CompositionController extends ChangeNotifier {
 
   CompositionDocument _document;
   int _nextId = 1;
+  static const maxUndoHistory = 80;
+  final List<CompositionDocument> _undoHistory = [];
+  final List<CompositionDocument> _redoHistory = [];
 
   CompositionDocument get document => _document;
   CompositionLayer? get selectedLayer => _document.selectedLayer;
+  bool get canUndo => _undoHistory.isNotEmpty;
+  bool get canRedo => _redoHistory.isNotEmpty;
+  int get undoHistoryLength => _undoHistory.length;
+
+  void undo() {
+    if (_undoHistory.isEmpty) return;
+    _redoHistory.add(_document);
+    _document = _undoHistory.removeLast();
+    notifyListeners();
+  }
+
+  void redo() {
+    if (_redoHistory.isEmpty) return;
+    _undoHistory.add(_document);
+    if (_undoHistory.length > maxUndoHistory) {
+      _undoHistory.removeAt(0);
+    }
+    _document = _redoHistory.removeLast();
+    notifyListeners();
+  }
 
   String _id(String prefix) => '${prefix}_${_nextId++}';
   int _frameAlignedTransitionStart(int milliseconds) {
@@ -39,7 +62,18 @@ class CompositionController extends ChangeNotifier {
       );
 
 
-  void _set(CompositionDocument next) {
+  void _set(
+    CompositionDocument next, {
+    bool recordHistory = true,
+  }) {
+    if (identical(next, _document)) return;
+    if (recordHistory) {
+      _undoHistory.add(_document);
+      if (_undoHistory.length > maxUndoHistory) {
+        _undoHistory.removeAt(0);
+      }
+      _redoHistory.clear();
+    }
     _document = next;
     notifyListeners();
   }
@@ -68,6 +102,8 @@ class CompositionController extends ChangeNotifier {
   }
 
   void replaceDocument(CompositionDocument document) {
+    _undoHistory.clear();
+    _redoHistory.clear();
     _document = document;
     var next = 1;
     final identifiers = <String>[
@@ -228,7 +264,10 @@ class CompositionController extends ChangeNotifier {
 
   void selectLayer(String? id) {
     if (id != null && !_document.layers.any((layer) => layer.id == id)) return;
-    _set(_document.copyWith(selectedLayerId: id));
+    _set(
+      _document.copyWith(selectedLayerId: id),
+      recordHistory: false,
+    );
   }
 
   void removeSelectedLayer() {
@@ -668,6 +707,7 @@ class CompositionController extends ChangeNotifier {
           effectId: effectId,
           name: definition.name,
           parameters: parameters,
+          assetUri: definition.assetUri,
         ),
       ],
     ));
@@ -722,8 +762,7 @@ class CompositionController extends ChangeNotifier {
   }
 
   void setColorOutputProfile(ColorOutputProfile profile) {
-    _document = _document.copyWith(colorOutputProfile: profile);
-    notifyListeners();
+    _set(_document.copyWith(colorOutputProfile: profile));
   }
 
   void applyColorGradePreset(
@@ -1050,9 +1089,12 @@ class CompositionController extends ChangeNotifier {
   }
 
   void setPlayhead(int timeMs) {
-    _set(_document.copyWith(
-      playheadMs: timeMs.clamp(0, _document.durationMs).toInt(),
-    ));
+    _set(
+      _document.copyWith(
+        playheadMs: timeMs.clamp(0, _document.durationMs).toInt(),
+      ),
+      recordHistory: false,
+    );
   }
 
   void setLayerTiming(

@@ -13,6 +13,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../application/composition_controller.dart';
 import '../data/effect_catalog.dart';
+import '../../extensions/data/extension_manager_service.dart';
 import '../data/photoshop_import_service.dart';
 import '../domain/composition_models.dart';
 import '../domain/color_grade_preset.dart';
@@ -199,6 +200,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _controller.addListener(_onCompositionChanged);
+    ExtensionManagerService.instance.addListener(_onExtensionsChanged);
     _recoveryTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => _autosaveIfNeeded(),
@@ -206,6 +208,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_checkForCrashRecovery());
     });
+  }
+
+  void _onExtensionsChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onCompositionChanged() {
@@ -783,6 +789,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   void dispose() {
     _recoveryTimer?.cancel();
     _controller.removeListener(_onCompositionChanged);
+    ExtensionManagerService.instance.removeListener(_onExtensionsChanged);
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_autosaveIfNeeded());
     _controller.dispose();
@@ -806,6 +813,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: 'Undo',
+                onPressed: _controller.canUndo ? _controller.undo : null,
+                icon: const Icon(Icons.undo),
+              ),
+              IconButton(
+                tooltip: 'Redo',
+                onPressed: _controller.canRedo ? _controller.redo : null,
+                icon: const Icon(Icons.redo),
+              ),
               IconButton(
                 tooltip: 'Open .dvproj project',
                 onPressed: _projectBusy || _rendering
@@ -1924,7 +1941,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
   Widget _buildEffectsPanel(CompositionLayer layer) {
-    final filtered = EffectCatalog.all
+    final filtered = EffectCatalog.allEffects
         .where((effect) => _effectCategory == 'All' || effect.category == _effectCategory)
         .toList();
     return Column(

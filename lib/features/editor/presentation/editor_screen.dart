@@ -8,6 +8,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../features/composition/presentation/composition_workspace.dart';
+import '../../../features/extensions/presentation/extension_manager_screen.dart';
 import '../../../features/media/data/media_picker_service.dart';
 import '../../../features/media/presentation/camera_capture_screen.dart';
 import '../application/editor_controller.dart';
@@ -74,6 +75,14 @@ class _EditorScreenState extends State<EditorScreen> {
       _position = Duration.zero;
       _status = 'Media loaded';
     });
+  }
+
+  void _openExtensions() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const ExtensionManagerScreen(),
+      ),
+    );
   }
 
   Future<void> _recordVideo() async {
@@ -318,6 +327,18 @@ class _EditorScreenState extends State<EditorScreen> {
             onPressed: _exporting ? null : _recordVideo,
           ),
           const SizedBox(width: 8),
+          if (MediaQuery.sizeOf(context).width > 720)
+            _toolButton(
+              icon: Icons.extension,
+              label: 'Extensions',
+              onPressed: _openExtensions,
+            )
+          else
+            IconButton(
+              tooltip: 'Extensions',
+              onPressed: _openExtensions,
+              icon: const Icon(Icons.extension),
+            ),
           _toolButton(
             icon: Icons.layers,
             label: 'Compositor',

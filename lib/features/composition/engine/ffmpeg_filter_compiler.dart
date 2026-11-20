@@ -23,13 +23,14 @@ class FfmpegFilterCompiler {
             fallback: parameter.defaultValue,
           ),
       };
+      final rendererId = definition.rendererId ?? definition.id;
       final filter = _compileAnimatedColorEffect(
-            definition.id,
+            rendererId,
             effect,
             definition,
             animationCompiler,
           ) ??
-          _compileEffect(definition.id, values);
+          _compileEffect(rendererId, values);
       if (filter != null && filter.isNotEmpty) filters.add(filter);
     }
     return filters;

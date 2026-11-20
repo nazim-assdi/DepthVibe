@@ -24,6 +24,9 @@ class EffectDefinition {
     required this.description,
     required this.parameters,
     required this.ffmpegFilter,
+    this.rendererId,
+    this.extensionId,
+    this.assetUri,
   });
 
   final String id;
@@ -34,6 +37,9 @@ class EffectDefinition {
 
   /// Empty means the effect needs a GPU/custom render pass, not that it is absent.
   final String ffmpegFilter;
+  final String? rendererId;
+  final String? extensionId;
+  final String? assetUri;
 }
 
 class EffectCatalog {
@@ -345,15 +351,47 @@ class EffectCatalog {
     ),
   ];
 
-  static List<EffectDefinition> get allEffects => List.unmodifiable(all);
+  static final Map<String, EffectDefinition> _extensionEffects = {};
 
-  static EffectDefinition? find(String id) {
+  /// Extensions can alias audited host renderers, but cannot provide code or
+  /// arbitrary FFmpeg filter strings.
+  static const Set<String> extensionSafeRendererIds = {
+    'brightness', 'contrast', 'saturation', 'gamma',
+    'gaussian_blur', 'box_blur', 'sharpen', 'vignette',
+    'film_grain', 'pixelate', 'threshold', 'invert', 'grayscale',
+    'chromatic_aberration', 'edge_detect', 'mirror', 'flip',
+    'motion_blur', 'lens_distortion', 'chroma_key', 'luma_key',
+    'stabilize', 'posterize', 'color_balance', 'color_curves',
+    'color_lut', 'color_grade',
+  };
+
+  static List<EffectDefinition> get allEffects =>
+      List.unmodifiable([...all, ..._extensionEffects.values]);
+
+  static void setExtensionEffects(Iterable<EffectDefinition> effects) {
+    _extensionEffects.clear();
+    for (final effect in effects) {
+      if (all.any((item) => item.id == effect.id) ||
+          _extensionEffects.containsKey(effect.id) ||
+          effect.extensionId == null ||
+          effect.rendererId == null ||
+          !extensionSafeRendererIds.contains(effect.rendererId)) {
+        throw ArgumentError('Invalid or duplicate extension effect: ' + effect.id);
+      }
+      _extensionEffects[effect.id] = effect;
+    }
+  }
+
+  static EffectDefinition? findBuiltin(String id) {
     for (final effect in all) {
       if (effect.id == id) return effect;
     }
     return null;
   }
 
+  static EffectDefinition? find(String id) =>
+      findBuiltin(id) ?? _extensionEffects[id];
+
   static List<String> get categories =>
-      all.map((item) => item.category).toSet().toList()..sort();
+      allEffects.map((item) => item.category).toSet().toList()..sort();
 }

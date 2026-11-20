@@ -61,3 +61,15 @@ Status describes working source paths, not release-ready feature parity. A model
 ## Release gate
 
 A capability is complete only when it has a project model, working controls, real-time preview, final export implementation, automated tests and physical-device/platform validation. 2D filter-based compositing and true 3D scene rendering are treated as separate render backends.
+
+
+## Extension system and editing reliability update — 20 November 2026
+
+- [x] Declarative .dvext package validation, installation and local registry.
+- [x] Extension enable/disable/uninstall controls.
+- [x] Effect library registration backed by audited host renderer operations.
+- [x] Bundled .cube LUT package assets with safe extraction rules.
+- [x] Bounded composition Undo/Redo controls.
+- [ ] Extension marketplace, publisher signatures and versioned in-app updates.
+- [ ] General extension SDK for reviewed native/GPU algorithms and richer panels.
+- [ ] Undo transaction grouping for continuous drag/slider gestures and durable history snapshots.

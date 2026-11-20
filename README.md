@@ -29,6 +29,12 @@ DepthVibe is being developed as a combined nonlinear editor (NLE) and layer comp
 - Portable `.dvproj` packages save the complete composition (layers, transforms, masks, effects, keyframes, transitions, audio buses and HDR output profile) with linked local media assets. Project autosave recovery snapshots run every 30 seconds when the document has unsaved changes; crash recovery offers a restore prompt, manual saves keep up to 10 previous versions, and missing local media can be relinked across all references. Recovery snapshots retain local asset paths; use `.dvproj` Save to embed assets for transfer to another device.
 - GLB/GLTF scene import retains node hierarchy, UV0, normals, animation, metallic/roughness factors and decoded base-colour, metallic-roughness, normal, occlusion and emissive texture payloads. CPU preview samples base colour and applies KHR_texture_transform on UV0; auxiliary PBR maps are imported but not yet shaded.
 
+## Extension system
+
+DepthVibe includes a cross-platform Extension Manager for installing, enabling, disabling and uninstalling declarative .dvext packages. Version 1 packages add named effects backed by audited host renderer operations and may bundle validated .cube LUT assets. Extension effects appear in the Compositor effect library, keep their namespaced IDs and parameters in .dvproj projects, and use the same allow-listed FFmpeg implementation as their host renderer. Packages cannot execute third-party Dart/JavaScript/native code or inject arbitrary FFmpeg commands. See [docs/EXTENSIONS.md](docs/EXTENSIONS.md) and [the sample extension](examples/extensions/cinematic-starter/manifest.json).
+
+Compositor editing also has bounded in-memory Undo/Redo history (80 document states). Playhead scrubbing and layer selection do not create history entries; opening a different project resets the history.
+
 ## Renderer boundaries
 
 The current final-render path is a CPU/native FFmpeg 2D compositor, not a complete GPU scene renderer. It renders animated 2D transforms, basic layer mattes, blend compositing, supported transitions and audio tracks. Polygon Bézier handles are not yet a true vector path renderer. Audio effects racks, waveform editing, source clip trimming UI in the composition timeline, and animated effect parameter expressions remain to be built.

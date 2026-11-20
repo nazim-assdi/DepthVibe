@@ -1,0 +1,33 @@
+{
+  "format": "DepthVibe.Extension",
+  "schemaVersion": 1,
+  "id": "com.ntech.cinematic-starter",
+  "name": "Cinematic Starter",
+  "version": "1.0.0",
+  "author": "N Tech",
+  "description": "A starter pack of warm, soft and cinematic effect presets.",
+  "effects": [
+    {
+      "id": "warm-film",
+      "name": "Warm Film",
+      "category": "Creative Looks",
+      "description": "A warm color balance with restrained blue shadows.",
+      "operation": "color_balance",
+      "defaults": {
+        "red": 0.12,
+        "green": 0.02,
+        "blue": -0.08
+      }
+    },
+    {
+      "id": "soft-focus",
+      "name": "Soft Focus",
+      "category": "Creative Looks",
+      "description": "A gentle Gaussian softening effect.",
+      "operation": "gaussian_blur",
+      "defaults": {
+        "sigma": 1.2
+      }
+    }
+  ]
+}

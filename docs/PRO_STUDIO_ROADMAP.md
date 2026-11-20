@@ -312,3 +312,14 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 - **Verification gate:** these are local FFmpeg smoke checks and committed integration tests. The latest GitHub Actions run must complete successfully before this increment is marked CI-verified or a platform build is described as passing.
 
 **Remaining colour work:** continuous real-time playback grading, a shared render graph for preview/export, GPU preview, scopes including curves/LUT/HDR pipeline output, animated curves, shot matching, LUT export/library management, scene-referred HDR input/output, 10/12-bit intermediate precision, chroma/gamut monitoring and HDR mastering metadata.
+
+
+## Implementation Update — Extension manager and editing reliability (20 November 2026)
+
+- Added .dvext declarative package installation, local package registry, enable/disable and uninstall.
+- Extension effect aliases use a strict allow-list of audited host renderer operations. Bundled assets are restricted to .cube LUT files under assets/.
+- Extension effect IDs and parameter values are persisted in .dvproj; the same host FFmpeg compiler evaluates enabled extension effects.
+- Added bounded in-memory composition Undo/Redo (80 states). Selection and playhead scrubbing do not create history entries; opening a different project resets the history.
+- Extension package limits, authoring instructions and security boundaries are documented in docs/EXTENSIONS.md.
+
+The extension manager is a data-only v1, not a general-purpose runtime for arbitrary third-party Dart, JavaScript, native code, shaders or FFmpeg command strings. New rendering algorithms still require a reviewed host renderer implementation and tests.
