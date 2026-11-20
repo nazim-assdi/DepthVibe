@@ -288,3 +288,12 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 - The GPU route currently accepts opaque meshes that share one decoded base-colour image. Multiple distinct images, alpha MASK/BLEND and unsupported UV sets stay on the CPU route rather than being rendered with the wrong material.
 - Vertex projection, parent/node transforms and light shading are still CPU evaluated; GPU shading currently multiplies the CPU-lit colour by base-colour texture output. A metallic-roughness BRDF, normal mapping, occlusion/emissive lighting, material batching/texture arrays, sampler-specific source modes, GPU-side lights/shadows and full alpha parity remain outstanding.
 - Added vertex-packer tests for UV payloads, a shared texture, multi-image fallback, alpha-mode fallback and perspective/orthographic depth indexing. CI for the final commit must still pass before this increment is release-verified.
+
+
+### Primary color page increment — 20 November 2026
+
+- Added a dedicated **Color** page to the selected-layer inspector, with four interactive Lift, Gamma, Gain and Offset wheels. The wheel emits bounded RGB channel-balance values and supports drag-to-grade plus a Reset Wheels action.
+- Added Temperature/Tint, Contrast, Exposure/Brightness, Master Gamma and Saturation controls. Grade data is persisted in a regular EffectInstance, so it follows the existing project serialization and undo/redo path.
+- FFmpeg export maps Lift/Gamma/Gain tonal ranges and Offset/Temperature/Tint to the documented `colorbalance` options with lightness preservation. Contrast, brightness, master gamma and saturation compile to `eq` expressions evaluated on every output frame; those scalar controls can use effect keyframes.
+- Added regression coverage for tonal-wheel mapping, global offset/white-balance math and animated scalar grading expressions.
+- **Explicit limits:** grading is currently applied in FFmpeg export, not in the live canvas preview. Primary wheels and white-balance adjustments are static (not keyframed). Waveform/RGB parade/vectorscope scopes, LUT import/export, custom curves, HDR/10-bit color management, shot matching and GPU color preview are still pending. This is a primary color-grading foundation, not full DaVinci Resolve parity.
