@@ -19,6 +19,7 @@ class _FontManagerDialogState extends State<FontManagerDialog> {
   String _query = '';
   String? _notice;
   bool _working = false;
+  String? _previewFamily;
 
   static const _preview =
       'DepthVibe  •  English  •  বাংলা  •  العربية  •  हिन्दी  •  اردو  •  中文  •  日本語  •  ไทย  •  Français  •  Ελληνικά  •  😀';
@@ -43,6 +44,18 @@ class _FontManagerDialogState extends State<FontManagerDialog> {
       _notice = 'Font scan failed: ' + error.toString();
     } finally {
       if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _previewFont(FontCatalogEntry font) async {
+    try {
+      await _fonts.ensureFontLoaded(family: font.family, path: font.path);
+      if (mounted) setState(() {
+        _previewFamily = font.family;
+        _notice = 'Previewing ' + font.displayName;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Preview failed: ' + error.toString());
     }
   }
 
@@ -223,7 +236,7 @@ class _FontManagerDialogState extends State<FontManagerDialog> {
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontFamily: font.family,
+                                    fontFamily: _previewFamily == font.family ? font.family : null,
                                     fontFamilyFallback: _fonts.fallbackFamilies,
                                     fontSize: 15,
                                   ),
@@ -243,6 +256,15 @@ class _FontManagerDialogState extends State<FontManagerDialog> {
                             trailing: Wrap(
                               spacing: 3,
                               children: [
+                                IconButton(
+                                  tooltip: 'Load and preview this font',
+                                  onPressed: () => _previewFont(font),
+                                  icon: Icon(
+                                    _previewFamily == font.family
+                                        ? Icons.visibility
+                                        : Icons.visibility_outlined,
+                                  ),
+                                ),
                                 if (active)
                                   const Padding(
                                     padding: EdgeInsets.all(10),
