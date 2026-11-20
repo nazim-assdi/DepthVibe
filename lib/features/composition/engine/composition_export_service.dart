@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
+import 'package:flutter/painting.dart';
 import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../domain/composition_models.dart';
+import '../../fonts/data/font_manager_service.dart';
 import 'audio_bus_compiler.dart';
 import 'audio_equalizer_compiler.dart';
 import 'ffmpeg_animation_compiler.dart';
@@ -71,6 +74,7 @@ class CompositionExportService {
       LayerKind.image,
       LayerKind.photoshopLayer,
       LayerKind.threeDModel,
+      LayerKind.text,
     };
     final anySolo = document.layers.any((layer) =>
         layer.enabled &&
@@ -88,7 +92,9 @@ class CompositionExportService {
     final skipped = <String>[];
 
     for (final layer in enabled) {
-      if (visualKinds.contains(layer.kind)) {
+      if (layer.kind == LayerKind.text) {
+        visualLayers.add(layer);
+      } else if (visualKinds.contains(layer.kind)) {
         final path = layer.sourceUri;
         if (path == null || path.isEmpty || !await File(path).exists()) {
           skipped.add(layer.name);
@@ -140,6 +146,10 @@ class CompositionExportService {
       outputDirectory.path + Platform.pathSeparator + '.mesh-render-' +
       DateTime.now().microsecondsSinceEpoch.toString(),
     );
+    final textTempDirectory = Directory(
+      outputDirectory.path + Platform.pathSeparator + '.text-render-' +
+      DateTime.now().microsecondsSinceEpoch.toString(),
+    );
 
     try {
       final meshVideoPaths = await _prepareMeshLayerVideos(
@@ -148,12 +158,18 @@ class CompositionExportService {
         meshTempDirectory,
         onProgress: onProgress,
       );
+      final textImagePaths = await _prepareTextLayerImages(
+        document,
+        visualLayers.where((layer) => layer.kind == LayerKind.text).toList(),
+        textTempDirectory,
+      );
       final command = await _buildCommand(
         document,
         visualLayers,
         audioLayers,
         output.path,
         meshVideoPaths: meshVideoPaths,
+        textImagePaths: textImagePaths,
       );
       final completion = Completer<void>();
       final start = FFmpegKit.executeAsync(
@@ -186,6 +202,9 @@ class CompositionExportService {
       if (await meshTempDirectory.exists()) {
         await meshTempDirectory.delete(recursive: true);
       }
+      if (await textTempDirectory.exists()) {
+        await textTempDirectory.delete(recursive: true);
+      }
       onProgress?.call(1);
       return CompositionExportResult(
         file: output,
@@ -196,6 +215,9 @@ class CompositionExportService {
       if (await output.exists()) await output.delete();
       if (await meshTempDirectory.exists()) {
         await meshTempDirectory.delete(recursive: true);
+      }
+      if (await textTempDirectory.exists()) {
+        await textTempDirectory.delete(recursive: true);
       }
       rethrow;
     }
@@ -375,12 +397,119 @@ class CompositionExportService {
     await completion.future.timeout(const Duration(hours: 3));
   }
 
+
+  Future<Map<String, String>> _prepareTextLayerImages(
+    CompositionDocument document,
+    List<CompositionLayer> textLayers,
+    Directory directory,
+  ) async {
+    if (textLayers.isEmpty) return const <String, String>{};
+    await directory.create(recursive: true);
+    final result = <String, String>{};
+    final fontManager = FontManagerService.instance;
+
+    for (var index = 0; index < textLayers.length; index++) {
+      final layer = textLayers[index];
+      final family = layer.textFontFamily ?? fontManager.activeFamily;
+      final fontPath = layer.textFontAssetUri ??
+          (layer.textFontFamily == null ? fontManager.activeFontPath : null);
+      if (family != null && fontPath != null) {
+        try {
+          await fontManager.ensureFontLoaded(family: family, path: fontPath);
+        } catch (_) {
+          // Continue with the saved fallback list and OS font fallback.
+        }
+      }
+
+      final content = layer.textContent ?? layer.name;
+      final rawColor = layer.textColor.replaceFirst('#', '');
+      final parsedColor = int.tryParse(rawColor, radix: 16);
+      final color = parsedColor == null
+          ? const Color(0xFFFFFFFF)
+          : Color(rawColor.length == 6 ? 0xFF000000 | parsedColor : parsedColor);
+      final weightIndex = ((layer.textFontWeight.clamp(100, 900) / 100)
+                  .round() - 1)
+              .clamp(0, 8)
+              .toInt();
+      final maxWidth = layer.textBoxWidth
+          .clamp(1.0, math.max(1.0, document.width * 4.0))
+          .toDouble();
+      final direction = RegExp(r'[\u0590-\u08FF\uFB1D-\uFEFF]')
+              .hasMatch(content)
+          ? TextDirection.rtl
+          : TextDirection.ltr;
+      final alignment = switch (layer.textAlign) {
+        'center' => TextAlign.center,
+        'right' => TextAlign.right,
+        'justify' => TextAlign.justify,
+        _ => TextAlign.left,
+      };
+      final painter = TextPainter(
+        text: TextSpan(
+          text: content,
+          style: TextStyle(
+            color: color,
+            fontFamily: family,
+            fontFamilyFallback: [
+              ...layer.textFontFallback,
+              ...fontManager.fallbackFamilies,
+            ],
+            fontSize: layer.textFontSize.clamp(1.0, 2000.0).toDouble(),
+            fontWeight: FontWeight.values[weightIndex],
+            fontStyle: layer.textItalic ? FontStyle.italic : FontStyle.normal,
+            letterSpacing: layer.textLetterSpacing.clamp(-100.0, 500.0).toDouble(),
+            height: layer.textLineHeight.clamp(0.1, 10.0).toDouble(),
+          ),
+        ),
+        textAlign: alignment,
+        textDirection: direction,
+      );
+      painter.layout(maxWidth: maxWidth);
+      if (painter.computeLineMetrics().length > 4000) {
+        painter.dispose();
+        throw StateError('Text layer ' + layer.name + ' exceeds the 4000-line render limit.');
+      }
+
+      const padding = 8;
+      final imageWidth = math.max(1, painter.width.ceil() + padding * 2);
+      final imageHeight = math.max(1, painter.height.ceil() + padding * 2);
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(
+        recorder,
+        ui.Rect.fromLTWH(0, 0, imageWidth.toDouble(), imageHeight.toDouble()),
+      );
+      painter.paint(canvas, const ui.Offset(8, 8));
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(imageWidth, imageHeight);
+      picture.dispose();
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      painter.dispose();
+      if (byteData == null) {
+        throw StateError('Could not encode text layer ' + layer.name + ' as PNG.');
+      }
+
+      final png = byteData.buffer.asUint8List(
+        byteData.offsetInBytes,
+        byteData.lengthInBytes,
+      );
+      final file = File(
+        directory.path + Platform.pathSeparator +
+            'text_' + index.toString().padLeft(4, '0') + '.png',
+      );
+      await file.writeAsBytes(png, flush: true);
+      result[layer.id] = file.path;
+    }
+    return result;
+  }
+
   Future<String> _buildCommand(
     CompositionDocument document,
     List<CompositionLayer> visualLayers,
     List<CompositionLayer> audioLayers,
     String outputPath, {
     required Map<String, String> meshVideoPaths,
+    required Map<String, String> textImagePaths,
   }) async {
     final total = (document.durationMs / 1000).toStringAsFixed(3);
     final width = document.width;
@@ -393,7 +522,8 @@ class CompositionExportService {
             layer.kind == LayerKind.video ||
             layer.kind == LayerKind.image ||
             layer.kind == LayerKind.photoshopLayer ||
-            layer.kind == LayerKind.threeDModel)
+            layer.kind == LayerKind.threeDModel ||
+            layer.kind == LayerKind.text)
         .toList();
     final mediaInputIndices = <String, int>{
       for (var index = 0; index < mediaLayers.length; index++)
@@ -447,6 +577,14 @@ class CompositionExportService {
         continue;
       }
       final duration = (layer.durationMs / 1000).toStringAsFixed(3);
+      if (layer.kind == LayerKind.text) {
+        final textImage = textImagePaths[layer.id];
+        if (textImage == null) {
+          throw StateError('Text layer ' + layer.name + ' has no rasterized text image.');
+        }
+        buffer.write('-loop 1 -t ' + duration + ' -i ' + _quote(textImage) + ' ');
+        continue;
+      }
       final source = _quote(layer.sourceUri!);
       if (layer.kind == LayerKind.image ||
           layer.kind == LayerKind.photoshopLayer) {
