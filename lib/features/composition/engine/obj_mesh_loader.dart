@@ -5,6 +5,49 @@ import 'dart:ui';
 
 import '../domain/composition_models.dart';
 
+class ObjTextureMap {
+  const ObjTextureMap({
+    this.sourceBytes,
+    this.pixelsRgba,
+    this.width = 0,
+    this.height = 0,
+    this.texCoord = 0,
+    this.offset = Offset.zero,
+    this.scale = const Offset(1, 1),
+    this.rotationRadians = 0,
+  });
+
+  /// Original encoded PNG/JPEG/WebP image data when available.
+  final Uint8List? sourceBytes;
+
+  /// Decoded row-major RGBA8 pixels for deterministic CPU sampling.
+  final Uint8List? pixelsRgba;
+  final int width;
+  final int height;
+  final int texCoord;
+  final Offset offset;
+  final Offset scale;
+  final double rotationRadians;
+
+  bool get hasValidPixels =>
+      pixelsRgba != null &&
+      width > 0 &&
+      height > 0 &&
+      pixelsRgba!.length == width * height * 4;
+
+  /// Applies KHR_texture_transform in the glTF-defined scale/rotate/offset order.
+  Offset transformUv(Offset uv) {
+    final scaledU = uv.dx * scale.dx;
+    final scaledV = uv.dy * scale.dy;
+    final cosine = math.cos(rotationRadians);
+    final sine = math.sin(rotationRadians);
+    return Offset(
+      cosine * scaledU - sine * scaledV + offset.dx,
+      sine * scaledU + cosine * scaledV + offset.dy,
+    );
+  }
+}
+
 class ObjMaterial {
   const ObjMaterial({
     this.red = 0.72,
@@ -23,6 +66,13 @@ class ObjMaterial {
     this.emissiveRed = 0,
     this.emissiveGreen = 0,
     this.emissiveBlue = 0,
+    this.baseColorTextureMap,
+    this.metallicRoughnessTextureMap,
+    this.normalTextureMap,
+    this.occlusionTextureMap,
+    this.emissiveTextureMap,
+    this.normalScale = 1,
+    this.occlusionStrength = 1,
   });
 
   final double red;
@@ -42,6 +92,13 @@ class ObjMaterial {
   final double emissiveRed;
   final double emissiveGreen;
   final double emissiveBlue;
+  final ObjTextureMap? baseColorTextureMap;
+  final ObjTextureMap? metallicRoughnessTextureMap;
+  final ObjTextureMap? normalTextureMap;
+  final ObjTextureMap? occlusionTextureMap;
+  final ObjTextureMap? emissiveTextureMap;
+  final double normalScale;
+  final double occlusionStrength;
 }
 
 class ObjTriangle {
