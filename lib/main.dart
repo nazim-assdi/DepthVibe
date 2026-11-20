@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:media_kit/media_kit.dart';
@@ -13,7 +15,6 @@ Future<void> main() async {
   MediaKit.ensureInitialized();
   await FFmpegKitExtended.initialize();
   await FontManagerService.instance.initialize();
-  await FontManagerService.instance.refreshAvailableFonts();
   await ExtensionManagerService.instance.initialize();
   await AdobeBridgeService.instance.start();
   try {
@@ -22,4 +23,5 @@ Future<void> main() async {
     // Marketplace is optional; a missing feed or settings file must not block app startup.
   }
   runApp(const DepthVibeApp());
+  unawaited(FontManagerService.instance.refreshAvailableFonts());
 }
