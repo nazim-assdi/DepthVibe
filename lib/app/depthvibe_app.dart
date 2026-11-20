@@ -1,12 +1,20 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../features/editor/presentation/editor_screen.dart';
+import '../features/fonts/data/font_manager_service.dart';
 
 class DepthVibeApp extends StatelessWidget {
   const DepthVibeApp({super.key});
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: FontManagerService.instance,
+      builder: (context, _) => _buildApplication(context),
+    );
+  }
+
+  Widget _buildApplication(BuildContext context) {
     const background = Color(0xFF0A0D13);
     const surface = Color(0xFF121824);
     const accent = Color(0xFF7C8CFF);
@@ -17,6 +25,8 @@ class DepthVibeApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
+        fontFamily: FontManagerService.instance.activeFamily,
+        fontFamilyFallback: FontManagerService.instance.fallbackFamilies,
         scaffoldBackgroundColor: background,
         colorScheme: ColorScheme.fromSeed(
           seedColor: accent,
