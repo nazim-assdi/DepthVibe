@@ -136,7 +136,7 @@ void main() {
     expect(filters.single, contains('rh=0.155:gh=0.035:bh=-0.335:pl=1'));
     expect(
       filters.single,
-      contains("eq=contrast='1.350':brightness='0.050':gamma='1.200':saturation='1.400':eval=frame"),
+      contains("eq=contrast='1.35000':brightness='0.05000':gamma='1.20000':saturation='1.40000':eval=frame"),
     );
   });
 
