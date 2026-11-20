@@ -10,11 +10,11 @@ class DepthVibeApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: FontManagerService.instance,
-      builder: (context, _) => _buildApplication(context),
+      builder: (context, _) => _buildApplication(),
     );
   }
 
-  Widget _buildApplication(BuildContext context) {
+  Widget _buildApplication() {
     const background = Color(0xFF0A0D13);
     const surface = Color(0xFF121824);
     const accent = Color(0xFF7C8CFF);
