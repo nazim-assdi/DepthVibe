@@ -43,7 +43,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     surfaceColor *= textureSample(
       baseColorTexture,
       baseColorSampler,
-      fract(input.uv)
+      input.uv
     );
   }
   return surfaceColor;
@@ -223,7 +223,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
       _baseColorTexture = device.createTexture(
         width: textureWidth,
         height: textureHeight,
-        format: GpuTextureFormat.rgba8Unorm,
+        format: GpuTextureFormat.rgba8UnormSrgb,
         usage: GpuTextureUsage.textureBinding | GpuTextureUsage.copyDst,
         label: 'DepthVibe glTF base-colour map',
       );
