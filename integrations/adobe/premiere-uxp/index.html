@@ -10,6 +10,11 @@ input,textarea,button{box-sizing:border-box;width:100%;margin:5px 0;padding:9px}
 input,textarea{color:#e7edf8;background:#232d40;border:1px solid #3d4a62;border-radius:6px}
 button{border:0;border-radius:6px;color:#fff;background:#536acb;font-weight:700;cursor:pointer}
 button.secondary{background:#34435b}
+hr{border:0;border-top:1px solid #34435b;margin:12px 0}
+h3{font-size:13px;margin:13px 0 4px}
+select{width:100%;padding:8px;background:#232d40;color:#e7edf8;border:1px solid #3d4a62;border-radius:6px}
+.effect-list{max-height:260px;overflow-y:auto;border:1px solid #34435b;border-radius:6px;padding:6px}
+.effect-list .host-effect{text-align:left;font-size:11px;margin:3px 0;padding:7px}
 small,#status{color:#a8b6cc}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#10151f;padding:9px;border-radius:6px;max-height:160px;overflow:auto}
 </style>
@@ -26,8 +31,17 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#10151f;padding:9px;b
 <button id="importSnapshot" class="secondary" disabled>Import captured timeline into DepthVibe</button>
 <button id="exportXml" class="secondary" disabled>Save Premiere XML interchange</button>
 <button id="refresh" class="secondary" disabled>Read DepthVibe composition</button>
-<button id="effects" class="secondary" disabled>List available effects</button>
-<small>Capture reads active sequence and clip timing from Premiere's UXP DOM. It sends metadata only; source media is not copied.</small>
+<button id="effects" class="secondary" disabled>List DepthVibe effects</button>
+<hr>
+<h3>Installed Premiere video effects</h3>
+<button id="refreshHostEffects" class="secondary" disabled>Refresh installed video effect catalog</button>
+<label for="hostEffectTarget">Target clip</label>
+<select id="hostEffectTarget"></select>
+<input id="hostEffectSearch" placeholder="Search installed effect name or match name">
+<div id="hostEffectList" class="effect-list"><small>Capture a sequence or refresh to load installed effects.</small></div>
+<button id="syncNativeSettings" class="secondary" disabled>Apply DepthVibe native effect settings to target clip</button>
+<small>Applying an effect uses Premiere's native VideoFilterFactory and component chain. Static parameter values are synced back; host keyframe data remains captured for edit/interchange.</small>
+<small>Capture sends metadata only; source media and plug-in binaries are not copied.</small>
 <label for="document">DepthVibe composition JSON</label>
 <textarea id="document" rows="7" placeholder="Paste a DepthVibe composition document JSON to send it back to the app."></textarea>
 <button id="send" class="secondary" disabled>Send composition to DepthVibe</button>

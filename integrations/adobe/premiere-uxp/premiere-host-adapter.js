@@ -173,7 +173,20 @@ async function applyNativeVideoEffect(clipId, matchName, parameters) {
   const item = await findTrackItem(sequence, clipId);
   if (!item) throw new Error("The captured Premiere clip no longer exists. Capture the sequence again.");
   const factory = premiere.VideoFilterFactory;
-  const component = await factory.createComponent(matchName);
+  const chain = await item.getComponentChain();
+  const initialCount = await optional(() => chain.getComponentCount(), 0);
+  let component = null;
+  for (let index = 0; index < Math.min(Number(initialCount) || 0, 256); index += 1) {
+    const existing = await optional(() => chain.getComponentAtIndex(index), null);
+    if (!existing) continue;
+    const existingName = await optional(() => existing.getMatchName(), "");
+    if (existingName === matchName) {
+      component = existing;
+      break;
+    }
+  }
+  const isNewComponent = component === null;
+  if (isNewComponent) component = await factory.createComponent(matchName);
   if (!component) throw new Error("Premiere could not create effect: " + matchName);
 
   const skippedParameters = [];
@@ -200,13 +213,16 @@ async function applyNativeVideoEffect(clipId, matchName, parameters) {
     }
   }
 
-  const chain = await item.getComponentChain();
   let success = false;
   project.lockedAccess(() => {
     success = project.executeTransaction((compoundAction) => {
-      compoundAction.addAction(chain.createAppendComponentAction(component));
+      if (isNewComponent) {
+        compoundAction.addAction(chain.createAppendComponentAction(component));
+      }
       for (const action of actions) compoundAction.addAction(action);
-    }, "DepthVibe · Add Native Video Effect");
+    }, isNewComponent
+      ? "DepthVibe · Add Native Video Effect"
+      : "DepthVibe · Update Native Video Effect");
   });
   if (!success) throw new Error("Premiere did not accept the native effect transaction.");
   const snapshot = await capturePremiereSequence();
@@ -218,6 +234,7 @@ async function applyNativeVideoEffect(clipId, matchName, parameters) {
     matchName: matchName,
     appliedToClipId: String(clipId),
     parametersApplied: actions.length,
+    createdNewComponent: isNewComponent,
     skippedParameters: skippedParameters,
     capturedEffect: importedClip && importedClip.effects
       ? importedClip.effects.find((effect) => effect.matchName === matchName) || null
