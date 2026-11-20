@@ -277,6 +277,6 @@ class AdobeInterchangeService {
  for(var j=0;j<d.layers.length;j++){var x=d.layers[j];if(x.parentId&&made[x.parentId]&&made[x.id])try{made[x.id].parent=made[x.parentId];}catch(_){}}
  app.endUndoGroup();alert("Imported "+d.layers.length+" editable layers. "+(warnings.length?"Review: "+warnings.join("\\n"):""));
 }());
-'''.replace('__DATA__',encoded);
+'''.replaceAll('__DATA__',encoded);
   }
 }
