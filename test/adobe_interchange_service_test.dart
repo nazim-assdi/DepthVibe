@@ -261,6 +261,51 @@ void main() {
           contains('No verified portable'));
     });
 
+    test('Premiere applied transition metadata imports and survives project round-trip', () {
+      final report = AdobeInterchangeService.importSnapshot({
+        'schemaVersion': 1,
+        'hostApp': 'premierepro',
+        'payload': {
+          'sequence': {
+            'name': 'Transition Sequence',
+            'width': 1920,
+            'height': 1080,
+            'timebase': '8467200000',
+            'durationSeconds': 5,
+          },
+          'videoTracks': [
+            {
+              'index': 0,
+              'id': 'V1',
+              'name': 'V1',
+              'clips': [
+                {'id': 'a', 'name': 'A', 'startSeconds': 0, 'durationSeconds': 2, 'sourcePath': r'C:\Media\a.mp4'},
+                {'id': 'b', 'name': 'B', 'startSeconds': 2, 'durationSeconds': 2, 'sourcePath': r'C:\Media\b.mp4'},
+              ],
+              'transitions': [
+                {
+                  'id': 'x1',
+                  'name': 'Cross Dissolve',
+                  'matchName': 'AE.ADBE Cross Dissolve',
+                  'startSeconds': 1.9,
+                  'durationSeconds': 0.5,
+                },
+              ],
+            },
+          ],
+          'audioTracks': [],
+        },
+      });
+      expect(report.document.transitions, hasLength(1));
+      expect(report.document.transitions.single.kind, TransitionKind.dissolve);
+      expect(report.document.transitions.single.externalMatchName, 'AE.ADBE Cross Dissolve');
+      final restored = CompositionProjectCodec.decodeDocument(
+        CompositionProjectCodec.encodeDocument(report.document),
+      );
+      expect(restored.transitions.single.externalMatchName, 'AE.ADBE Cross Dissolve');
+      expect(restored.transitions.single.metadata['hostApp'], 'premierepro');
+    });
+
     test('After Effects transform and effect keyframes import and survive .dvproj', () {
       final report = AdobeInterchangeService.importSnapshot({
         'schemaVersion': 1,
@@ -492,6 +537,9 @@ void main() {
       expect(script, contains('setInterpolationTypeAtKey'));
       expect(script, contains('setSpatialTangentsAtKey'));
       expect(script, contains('setTemporalEaseAtKey'));
+      expect(script, contains('ADBE Effect Parade'));
+      expect(script, contains('unsupportedEffects'));
+      expect(script, contains('canAddProperty(rawMatch)'));
       expect(script, contains('setRovingAtKey'));
       expect(script, contains('new KeyframeEase'));
       expect(script, contains('ADBE Gaussian Blur 2-0001'));

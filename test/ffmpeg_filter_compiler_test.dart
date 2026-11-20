@@ -185,6 +185,62 @@ void main() {
     expect(filter, contains(':eval=frame'));
   });
 
+  test('renders the expanded native effect library through supported FFmpeg filters', () {
+    const compiler = FfmpegFilterCompiler();
+    final cases = <String, Map<String, double>>{
+      'exposure': {'value': 1.25, 'black': 0},
+      'hue_rotate': {'degrees': 45},
+      'colorize': {'hue': 210, 'saturation': 0.7, 'lightness': 0, 'mix': 0.5},
+      'directional_blur': {'angle': 35, 'radius': 12},
+      'average_blur': {'size': 7},
+      'chroma_denoise': {'threshold': 0.1, 'window': 3},
+      'deband': {'threshold': 0.02, 'range': 16},
+      'deflicker': {'size': 9},
+      'scanlines': {'spacing': 4, 'thickness': 1, 'opacity': 0.2},
+      'rgb_split': {'shift': 5},
+      'posterize_time': {'fps': 12},
+      'echo_trails': {'frames': 5},
+      'vhs_warp': {'shift': 3, 'noise': 18},
+      'fisheye': {'strength': 0.3},
+      'radial_blur': {'angle': 10, 'radius': 15},
+      'noise_reduction': {'luma': 1.5, 'chroma': 2, 'temporal': 3},
+    };
+    for (final entry in cases.entries) {
+      final filters = compiler.compileEffects(
+        CompositionLayer(
+          id: entry.key,
+          name: entry.key,
+          kind: LayerKind.video,
+          effects: [EffectInstance(
+            id: 'fx-' + entry.key,
+            effectId: entry.key,
+            name: entry.key,
+            parameters: entry.value,
+          )],
+        ),
+        timeMs: 0,
+      );
+      expect(filters, isNotEmpty, reason: entry.key);
+      expect(filters.single, isNotEmpty, reason: entry.key);
+    }
+  });
+
+  test('every built-in transition maps to a native xfade identifier', () {
+    const compiler = FfmpegFilterCompiler();
+    for (final kind in TransitionKind.values) {
+      final filter = compiler.compileTransition(CompositionTransition(
+        id: kind.name,
+        fromLayerId: 'from',
+        toLayerId: 'to',
+        kind: kind,
+        durationMs: 500,
+        startMs: 1000,
+      ));
+      expect(filter, isNotNull, reason: kind.name);
+      expect(filter, contains('xfade=transition='), reason: kind.name);
+    }
+  });
+
   test('compiles an effect stack into FFmpeg filters', () {
     const layer = CompositionLayer(
       id: 'video-1',

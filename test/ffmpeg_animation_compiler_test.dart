@@ -250,6 +250,31 @@ void main() {
     expect(expression, contains('hypot('));
   });
 
+  test('compiles vertical slide transitions in the motion preview', () {
+    const layer = CompositionLayer(id: 'clip', name: 'Clip', kind: LayerKind.video);
+    const slideUp = CompositionTransition(
+      id: 'up', fromLayerId: 'previous', toLayerId: 'clip',
+      kind: TransitionKind.slideUp, startMs: 500, durationMs: 700,
+    );
+    const slideDown = CompositionTransition(
+      id: 'down', fromLayerId: 'previous', toLayerId: 'clip',
+      kind: TransitionKind.slideDown, startMs: 500, durationMs: 700,
+    );
+    final compiler = FfmpegAnimationCompiler();
+    final up = compiler.transitionPositionExpression(
+      layer: layer, transitions: const [slideUp],
+      baseExpression: '540', axis: 'y',
+      compositionWidth: 1920, compositionHeight: 1080,
+    );
+    final down = compiler.transitionPositionExpression(
+      layer: layer, transitions: const [slideDown],
+      baseExpression: '540', axis: 'y',
+      compositionWidth: 1920, compositionHeight: 1080,
+    );
+    expect(up, contains('1080'));
+    expect(down, contains('1080'));
+  });
+
   test('compiles wipe alpha and slide position transitions', () {
     const layer = CompositionLayer(
       id: 'clip-b',

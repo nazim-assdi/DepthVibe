@@ -98,3 +98,16 @@ The Premiere UXP manifest requests the UXP local file-system save permission. Th
 - The generated After Effects script restores separate in/out interpolation, temporal ease, spatial tangents, auto-Bezier/continuity flags and roving where the destination property supports the relevant API. Host API failures are reported as warnings rather than silently converted.
 - Premiere FCP7 XML now writes the documented static Gaussian Blur filter schema (channel and radius). Effects without a verified portable XMEML effect ID/parameter contract, and animated Gaussian Blur curves, remain listed as unsupported rather than being emitted using guessed identifiers.
 - Real host validation is still required in supported After Effects and Premiere versions. This richer interchange is not a guarantee of lossless conversion for all projects or third-party plugins.
+
+
+### Expanded native effects, transitions and motion presets
+
+The Effects panel now includes additional native renderable effects: Exposure, Hue Rotate, Colorize, Directional Blur, Average Blur, Chroma Denoise, Deband, Deflicker, Scanlines, RGB Split, Posterize Time, Echo Trails, VHS Warp, Fisheye, Radial Blur and Spatial Noise Reduction. These use FFmpeg filters and are not Adobe binary plug-ins.
+
+The transition picker includes the FFmpeg xfade transition family, including slides, circles, rectangles, radial/diagonal wipes, slices, wind, squeeze, cover and reveal variants. Each kind maps to its FFmpeg xfade identifier. Some live preview transitions remain approximations; final export uses xfade.
+
+The Effects panel also includes 20 original editable motion recipes. Applying a recipe writes ordinary keyframe tracks at the playhead, so users can edit them in the timeline/graph editor afterwards.
+
+Premiere UXP capture queries the host's installed video transition match-name list and active transition track-items where supported. Imported Premiere transition match-names and source descriptors persist in DVPROJ projects. The After Effects JSX importer attempts exact native match-names from unmatched source effect descriptors when the same effect is installed in the target application; missing plug-ins are reported rather than replaced with invented effects.
+
+These additions are native DepthVibe equivalents and host interoperability paths, not a redistribution of licensed Motion Bro packs or a claim that every third-party Adobe effect can run without its original plug-in.
