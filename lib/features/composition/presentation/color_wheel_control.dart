@@ -41,7 +41,7 @@ class ColorWheelControl extends StatelessWidget {
   }
 
   void _update(Offset localPosition) {
-    final radius = diameter / 2;
+    final radius = diameter / 2 - 5;
     final vector = Offset(
       (localPosition.dx - radius) / radius,
       (radius - localPosition.dy) / radius,
