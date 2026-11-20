@@ -4,7 +4,7 @@ DepthVibe's font system is designed around Unicode text, local font ownership an
 
 ## Application-wide fonts
 
-Open **Font Manager** from the Compositor toolbar. The manager can scan readable system font folders, import `.ttf` and `.otf` files into the application's support directory, preview multilingual samples, select a default family for the full app, and configure an ordered glyph fallback chain.
+Open **Font Manager** from the Compositor toolbar. The manager can scan readable system font folders, import one `.ttf` or `.otf` file or bulk-import a folder (up to 2,000 candidate files) into the application's support directory, preview multilingual samples, select a default family for the full app, and configure an ordered glyph fallback chain. System font scanning runs after the first app frame so it does not block the initial window.
 
 System-folder discovery is currently implemented for:
 
