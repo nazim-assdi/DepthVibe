@@ -185,14 +185,6 @@ class EffectCatalog {
       ffmpegFilter: 'vflip',
     ),
     EffectDefinition(
-      id: 'color_curves',
-      name: 'Color Curves',
-      category: 'Color',
-      description: 'Advanced tone curves using a GPU render pass.',
-      parameters: [EffectParameterDefinition(id: 'lift', label: 'Lift', min: -1, max: 1, defaultValue: 0), EffectParameterDefinition(id: 'gamma', label: 'Gamma', min: 0.2, max: 3, defaultValue: 1), EffectParameterDefinition(id: 'gain', label: 'Gain', min: 0, max: 3, defaultValue: 1)],
-      ffmpegFilter: 'curves',
-    ),
-    EffectDefinition(
       id: 'drop_shadow',
       name: 'Drop Shadow',
       category: 'Compositing',
