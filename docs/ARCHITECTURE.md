@@ -19,11 +19,17 @@ ffmpeg_kit_extended_flutter is configured with a full LGPL native bundle (type=f
 
 ## Composition document and layers
 
-CompositionDocument owns composition name, dimensions, frame rate, duration, layer list, transitions, playhead and selection. CompositionLayer stores video/image/PSD/text/shape/audio/Null/Adjustment/Camera/Light/3D/particle/precomposition kinds, source URIs and dimensions, transform properties, blend mode, masks, effects, keyframe tracks, shape style, camera/light settings and audio settings.
+CompositionDocument owns composition name, dimensions, frame rate, duration, layer list, transitions, playhead and selection. CompositionLayer stores video/image/PSD/text/shape/audio/Null/Adjustment/Camera/Light/3D/particle/precomposition kinds, source URIs and dimensions, transform properties, blend mode, masks, effects, keyframe tracks, text typography and font asset metadata, shape style, camera/light settings and audio settings.
 
 CompositionController owns layer lifecycle, visibility/solo/lock, parent cycle checks, source-in/start/duration clip timing, masks, blend metadata, effect parameters/keyframes, transform keyframes, audio gain keyframes and audio controls.
 
 The NLE timeline shows clip regions at their composition start/duration, supports dragging clips to reposition and resizing the right edge, and exposes source-in time separately from timeline position. Ripple/roll/slip editing, source-out handles, snapping, nested sequences and waveform editing are still open work.
+
+## Global font library and multilingual text
+
+`FontManagerService` discovers readable system `.ttf`/`.otf` files on Windows, macOS, Linux and Android; imports user-selected font files into application support; dynamically registers font bytes through Flutter `FontLoader`; and persists the global app family plus an ordered fallback family list. `ThemeData.fontFamily` and `fontFamilyFallback` apply the global choice across the app. The Compositor Typography panel can override family and fallback per text layer, plus content, size, weight, italic, colour, tracking, line height, alignment and box width. The `.dvproj` manifest stores these settings and embeds the selected font file, including the active global font when a text layer has no local override.
+
+The final composition renderer lays out Unicode text with Flutter `TextPainter` (including shaping and paragraph bidi handling) and rasterizes it to temporary transparent PNGs before feeding the FFmpeg compositor. TTF/OTF runtime loading is supported; WOFF/WOFF2 and TTC collection import are not. System font folders are platform-dependent, iOS system fonts are accessed through normal system fallback rather than filesystem scanning, and no complete world-font bundle is shipped. Font licensing and glyph coverage remain dependent on the supplied fonts.
 
 ## Transform, mask and transition compilation
 
@@ -59,7 +65,7 @@ Glow uses a thresholded RGB split, blur and screen blend pass. Drop Shadow deriv
 
 ## Current composition renderer
 
-CompositionExportService renders a black composition background with ordered visual layers, animated 2D position/scale/rotation/opacity, supported 2D masks, blend modes, transition mattes and multi-track audio. It reports unsupported or missing layers instead of pretending they were rendered. Text, shape, adjustment and true 3D rendering remain unsupported in this output graph.
+CompositionExportService renders a black composition background with ordered visual layers, Flutter-shaped text raster layers, animated 2D position/scale/rotation/opacity, supported 2D masks, blend modes, transition mattes and multi-track audio. It reports unsupported or missing layers instead of pretending they were rendered. Shape, some adjustment operations and true 3D rendering remain unsupported in this output graph.
 
 This is a functional first NLE/compositor render path, not yet a complete After Effects/Premiere Pro replacement. A capability is only considered complete after automated tests, preview/export parity and target-device validation.
 
