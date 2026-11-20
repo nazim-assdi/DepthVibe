@@ -93,7 +93,7 @@ async function captureComponentParameters(component, timeSeconds) {
   }
   return parameters;
 }
-async function captureEffects(trackItem, startSeconds) {
+async function captureEffects(trackItem, startSeconds, mediaType) {
   const chain = await optional(() => trackItem.getComponentChain(), null);
   if (!chain) return [];
   const count = await optional(() => chain.getComponentCount(), 0);
@@ -112,6 +112,7 @@ async function captureEffects(trackItem, startSeconds) {
       displayName: String(name || "Premiere Effect"),
       enabled: true,
       hostApp: "premierepro",
+      mediaType: mediaType || "video",
       properties: parameters,
       parameters: parameters
     });
@@ -144,8 +145,27 @@ async function captureInstalledVideoEffects() {
   }
   return { supported: true, minimumVersion: "25.6", effects: effects };
 }
-async function findTrackItem(sequence, clipId) {
-  for (const type of ["video", "audio"]) {
+async function captureInstalledAudioEffects() {
+  const factory = premiere.AudioFilterFactory;
+  if (!factory || typeof factory.getDisplayNames !== "function") {
+    return { supported: false, minimumVersion: "25.6", effects: [] };
+  }
+  const labels = await optional(() => factory.getDisplayNames(), []);
+  const effects = (Array.isArray(labels) ? labels : [])
+    .filter((name) => typeof name === "string" && name.trim())
+    .slice(0, 4096)
+    .map((displayName) => ({
+      matchName: displayName,
+      displayName: displayName,
+      category: "Audio",
+      version: "",
+      mediaType: "audio",
+      hostApp: "premierepro"
+    }));
+  return { supported: true, minimumVersion: "25.6", effects: effects };
+}
+async function findTrackItem(sequence, clipId, mediaType) {
+  for (const type of (mediaType === "audio" ? ["audio"] : mediaType === "video" ? ["video"] : ["video", "audio"])) {
     const count = type === "video"
       ? await sequence.getVideoTrackCount()
       : await sequence.getAudioTrackCount();
@@ -243,6 +263,82 @@ async function applyNativeVideoEffect(clipId, matchName, parameters) {
   };
 }
 
+async function applyNativeAudioEffect(clipId, displayName, parameters) {
+  const project = await premiere.Project.getActiveProject();
+  const sequence = project && await project.getActiveSequence();
+  if (!project || !sequence) throw new Error("Open an active Premiere project and sequence.");
+  if (!displayName) throw new Error("An audio effect displayName is required.");
+  const item = await findTrackItem(sequence, clipId, "audio");
+  if (!item) throw new Error("The captured audio clip no longer exists. Capture the sequence again.");
+  const factory = premiere.AudioFilterFactory;
+  if (!factory || typeof factory.createComponentByDisplayName !== "function") {
+    throw new Error("Premiere AudioFilterFactory requires Premiere Pro 25.6 or later.");
+  }
+  const chain = await item.getComponentChain();
+  const initialCount = await optional(() => chain.getComponentCount(), 0);
+  let component = null;
+  for (let index = 0; index < Math.min(Number(initialCount) || 0, 256); index += 1) {
+    const existing = await optional(() => chain.getComponentAtIndex(index), null);
+    if (!existing) continue;
+    const name = await optional(() => existing.getDisplayName(), "");
+    if (name === displayName) {
+      component = existing;
+      break;
+    }
+  }
+  const isNewComponent = component === null;
+  if (isNewComponent) {
+    component = await factory.createComponentByDisplayName(displayName, item);
+  }
+  if (!component) throw new Error("Premiere could not create audio effect: " + displayName);
+
+  const skippedParameters = [];
+  const actions = [];
+  const paramCount = await optional(() => component.getParamCount(), 0);
+  for (const descriptor of (Array.isArray(parameters) ? parameters : [])) {
+    const index = Number(descriptor.index !== undefined ? descriptor.index : descriptor.matchName);
+    if (!Number.isInteger(index) || index < 0 || index >= Number(paramCount)) continue;
+    const value = nativeParameterValue(descriptor.value);
+    if (value === null) continue;
+    const param = await optional(() => component.getParam(index), null);
+    if (!param) continue;
+    const timeVarying = await optional(async () => param.isTimeVarying, false);
+    if (timeVarying) {
+      skippedParameters.push(String(descriptor.displayName || descriptor.name) + ": animated parameter retained in DepthVibe");
+      continue;
+    }
+    try {
+      const keyframe = param.createKeyframe(value);
+      const action = param.createSetValueAction(keyframe, true);
+      if (action) actions.push(action);
+    } catch (error) {
+      skippedParameters.push(String(descriptor.displayName || descriptor.name) + ": " + String(error));
+    }
+  }
+
+  let success = false;
+  project.lockedAccess(() => {
+    success = project.executeTransaction((compoundAction) => {
+      if (isNewComponent) {
+        compoundAction.addAction(chain.createAppendComponentAction(component));
+      }
+      for (const action of actions) compoundAction.addAction(action);
+    }, isNewComponent
+      ? "DepthVibe · Add Native Audio Effect"
+      : "DepthVibe · Update Native Audio Effect");
+  });
+  if (!success) throw new Error("Premiere did not accept the native audio effect transaction.");
+  const snapshot = await capturePremiereSequence();
+  return {
+    displayName: displayName,
+    appliedToClipId: String(clipId),
+    parametersApplied: actions.length,
+    createdNewComponent: isNewComponent,
+    skippedParameters: skippedParameters,
+    snapshot: snapshot
+  };
+}
+
 async function captureTrackTransitions(track) {
   const transitionType = premiere.Constants && premiere.Constants.TrackItemType
     ? premiere.Constants.TrackItemType.TRANSITION : undefined;
@@ -297,7 +393,7 @@ async function captureTrackItems(track, trackType) {
       ? await optional(() => projectItem.getMediaFilePath(), null)
       : null;
     const startSeconds = secondsOf(values[1]);
-    const effects = await captureEffects(item, startSeconds);
+    const effects = await captureEffects(item, startSeconds, trackType);
     clips.push({
       id: typeof item.getId === "function" ? await optional(() => item.getId()) : null,
       name: values[0],
@@ -376,10 +472,12 @@ async function capturePremiereSequence() {
     }
   }
 
-  const [installedTransitionResult, installedEffectResult] = await Promise.all([
-    optional(async () => premiere.TransitionFactory.getVideoTransitionMatchNames(), []),
-    captureInstalledVideoEffects()
-  ]);
+  const [installedTransitionResult, installedEffectResult, installedAudioEffectResult] =
+    await Promise.all([
+      optional(async () => premiere.TransitionFactory.getVideoTransitionMatchNames(), []),
+      captureInstalledVideoEffects(),
+      captureInstalledAudioEffects()
+    ]);
   const installedVideoTransitions = installedTransitionResult;
   const installedTransitionNames = Array.isArray(installedVideoTransitions)
     ? installedVideoTransitions.map((item) => typeof item === "string"
@@ -425,10 +523,19 @@ async function capturePremiereSequence() {
       installedVideoEffects: installedEffectResult.effects,
       installedVideoEffectsSupported: installedEffectResult.supported,
       installedVideoEffectsMinimumVersion: installedEffectResult.minimumVersion,
+      installedAudioEffects: installedAudioEffectResult.effects,
+      installedAudioEffectsSupported: installedAudioEffectResult.supported,
+      installedAudioEffectsMinimumVersion: installedAudioEffectResult.minimumVersion,
       warnings: trackWarnings,
       transferScope: "metadata-only; media files and native effects are not copied"
     }
   };
 }
 
-module.exports = { capturePremiereSequence, captureInstalledVideoEffects, applyNativeVideoEffect };
+module.exports = {
+  capturePremiereSequence,
+  captureInstalledVideoEffects,
+  captureInstalledAudioEffects,
+  applyNativeVideoEffect,
+  applyNativeAudioEffect
+};

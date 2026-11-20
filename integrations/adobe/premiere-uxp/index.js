@@ -2,13 +2,17 @@ const { entrypoints, storage } = require("uxp");
 const {
   capturePremiereSequence,
   captureInstalledVideoEffects,
-  applyNativeVideoEffect
+  captureInstalledAudioEffects,
+  applyNativeVideoEffect,
+  applyNativeAudioEffect
 } = require("./premiere-host-adapter");
 const { host } = require("uxp");
 const DEFAULT_BRIDGE = "http://127.0.0.1:47653";
 let sessionToken = null;
 let latestSnapshot = null;
 let installedVideoEffects = [];
+let installedAudioEffects = [];
+let installedEffects = [];
 
 function bridgeBaseUrl() {
   const field = document.getElementById("bridgeUrl");
@@ -79,6 +83,8 @@ async function captureSequence() {
   const snapshot = await capturePremiereSequence();
   latestSnapshot = snapshot;
   installedVideoEffects = snapshot.payload.installedVideoEffects || [];
+  installedAudioEffects = snapshot.payload.installedAudioEffects || [];
+  installedEffects = installedVideoEffects.concat(installedAudioEffects);
   refreshClipTargets();
   renderHostEffectList(document);
   const result = await request("/v1/adobe/metadata", {
@@ -92,6 +98,7 @@ async function captureSequence() {
     audioTracks: snapshot.payload.audioTracks.length,
     installedVideoTransitions: (snapshot.payload.installedVideoTransitions || []).length,
     installedVideoEffects: installedVideoEffects.length,
+    installedAudioEffects: installedAudioEffects.length,
     appliedVideoTransitions: snapshot.payload.videoTracks.reduce(
       function (count, track) { return count + (track.transitions || []).length; }, 0
     ),
@@ -143,7 +150,7 @@ function renderHostEffectList(root) {
   const container = root.querySelector("#hostEffectList");
   if (!container) return;
   const term = search ? search.value.trim().toLowerCase() : "";
-  const matches = installedVideoEffects.filter(function (effect) {
+  const matches = installedEffects.filter(function (effect) {
     return [effect.displayName, effect.matchName, effect.category]
       .join(" ").toLowerCase().indexOf(term) >= 0;
   }).slice(0, 300);
@@ -159,14 +166,17 @@ function renderHostEffectList(root) {
   matches.forEach(function (effect) {
     const button = document.createElement("button");
     button.className = "secondary host-effect";
-    button.textContent = effect.displayName;
+    button.textContent = (effect.mediaType === "audio" ? "AUDIO · " : "VIDEO · ") + effect.displayName;
     button.title = effect.matchName;
     button.addEventListener("click", async function () {
       try {
         const clipId = root.querySelector("#hostEffectTarget").value;
         if (!clipId) throw new Error("Select a target clip first.");
-        setStatus("Applying " + effect.displayName + " to Premiere clip…");
-        const result = await applyNativeVideoEffect(clipId, effect.matchName, []);
+        const isAudio = effect.mediaType === "audio";
+        setStatus("Applying " + effect.displayName + " to Premiere " + (isAudio ? "audio" : "video") + " clip…");
+        const result = isAudio
+          ? await applyNativeAudioEffect(clipId, effect.displayName, [])
+          : await applyNativeVideoEffect(clipId, effect.matchName, []);
         await publishPremiereSnapshot(result.snapshot);
         output({
           effect: effect,
@@ -190,6 +200,8 @@ function renderHostEffectList(root) {
 async function publishPremiereSnapshot(snapshot) {
   latestSnapshot = snapshot;
   installedVideoEffects = snapshot.payload.installedVideoEffects || installedVideoEffects;
+  installedAudioEffects = snapshot.payload.installedAudioEffects || installedAudioEffects;
+  installedEffects = installedVideoEffects.concat(installedAudioEffects);
   refreshClipTargets();
   renderHostEffectList(document);
   await request("/v1/adobe/metadata", {
@@ -199,16 +211,27 @@ async function publishPremiereSnapshot(snapshot) {
   return await request("/v1/adobe/import", {method: "POST", body: "{}"});
 }
 async function refreshHostEffects() {
-  const inventory = await captureInstalledVideoEffects();
-  installedVideoEffects = inventory.effects || [];
+  const [videoInventory, audioInventory] = await Promise.all([
+    captureInstalledVideoEffects(),
+    captureInstalledAudioEffects()
+  ]);
+  installedVideoEffects = videoInventory.effects || [];
+  installedAudioEffects = audioInventory.effects || [];
+  installedEffects = installedVideoEffects.concat(installedAudioEffects);
   renderHostEffectList(document);
-  setStatus(inventory.supported
-    ? "Found " + installedVideoEffects.length + " installed Premiere video effects."
-    : "Installed video effect inventory needs Premiere Pro 25.6 or later.");
+  setStatus("Found " + installedVideoEffects.length + " video and " +
+    installedAudioEffects.length + " audio effects available in Premiere.");
   showResult({
-    supported: inventory.supported,
-    minimumVersion: inventory.minimumVersion,
-    effectCount: installedVideoEffects.length
+    video: {
+      supported: videoInventory.supported,
+      minimumVersion: videoInventory.minimumVersion,
+      effectCount: installedVideoEffects.length
+    },
+    audio: {
+      supported: audioInventory.supported,
+      minimumVersion: audioInventory.minimumVersion,
+      effectCount: installedAudioEffects.length
+    }
   });
 }
 async function syncDepthVibeNativeSettings() {
@@ -222,15 +245,33 @@ async function syncDepthVibeNativeSettings() {
   if (!layer) throw new Error("Import the captured Premiere clip into DepthVibe first.");
   const nativeEffects = (layer.effects || []).filter(function (effect) {
     const descriptor = effect.nativeDescriptor || {};
-    return descriptor.hostApp === "premierepro" && descriptor.matchName;
+    return descriptor.hostApp === "premierepro" &&
+      descriptor.matchName &&
+      (descriptor.mediaType || "video") === "video";
   });
-  if (!nativeEffects.length) throw new Error("The selected DepthVibe layer has no captured Premiere-native effects.");
+  const nativeAudioEffects = (layer.effects || []).filter(function (effect) {
+    const descriptor = effect.nativeDescriptor || {};
+    return descriptor.hostApp === "premierepro" &&
+      descriptor.matchName &&
+      descriptor.mediaType === "audio";
+  });
+  if (!nativeEffects.length && !nativeAudioEffects.length) {
+    throw new Error("The selected DepthVibe layer has no captured Premiere-native effects.");
+  }
   const results = [];
   for (const effect of nativeEffects) {
     const descriptor = effect.nativeDescriptor;
     results.push(await applyNativeVideoEffect(
       clipId,
       descriptor.matchName,
+      Array.isArray(descriptor.parameters) ? descriptor.parameters : []
+    ));
+  }
+  for (const effect of nativeAudioEffects) {
+    const descriptor = effect.nativeDescriptor;
+    results.push(await applyNativeAudioEffect(
+      clipId,
+      descriptor.displayName || descriptor.matchName,
       Array.isArray(descriptor.parameters) ? descriptor.parameters : []
     ));
   }

@@ -312,6 +312,7 @@ class AdobeInterchangeService {
         'displayName': _s(raw['displayName'],_s(raw['name'],match)),
         'category': _s(raw['category']),
         'version': _s(raw['version']),
+        'mediaType': _s(raw['mediaType'], 'video'),
         'parameters': nativeParameters,
         if (raw['parameterTree'] is List)
           'parameterTree': raw['parameterTree'],
@@ -343,7 +344,6 @@ class AdobeInterchangeService {
           parameters:{'value':(1+param(['master saturation','saturation'],0)/100).clamp(0,3).toDouble()},
           keyframeTracks:_effectKeyframeTracks(props,['master saturation','saturation'],'value',mapValue:(v)=>(1+v/100).clamp(0,3).toDouble()),enabled:_b(raw['enabled'],true)));id++;
       }
-      final additions=<EffectInstance>[];
       if(additions.isEmpty) {
         final nativeName = _s(raw['displayName'], _s(raw['name'], match));
         additions.add(EffectInstance(

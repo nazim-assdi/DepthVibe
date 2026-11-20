@@ -33,14 +33,14 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#10151f;padding:9px;b
 <button id="refresh" class="secondary" disabled>Read DepthVibe composition</button>
 <button id="effects" class="secondary" disabled>List DepthVibe effects</button>
 <hr>
-<h3>Installed Premiere video effects</h3>
-<button id="refreshHostEffects" class="secondary" disabled>Refresh installed video effect catalog</button>
+<h3>Installed Premiere video &amp; audio effects</h3>
+<button id="refreshHostEffects" class="secondary" disabled>Refresh installed video/audio effect catalog</button>
 <label for="hostEffectTarget">Target clip</label>
 <select id="hostEffectTarget"></select>
 <input id="hostEffectSearch" placeholder="Search installed effect name or match name">
 <div id="hostEffectList" class="effect-list"><small>Capture a sequence or refresh to load installed effects.</small></div>
 <button id="syncNativeSettings" class="secondary" disabled>Apply DepthVibe native effect settings to target clip</button>
-<small>Applying an effect uses Premiere's native VideoFilterFactory and component chain. Static parameter values are synced back; host keyframe data remains captured for edit/interchange.</small>
+<small>Video effects use VideoFilterFactory; audio effects use AudioFilterFactory. Static parameter values are applied through Premiere transactions. Animated host parameters remain captured in DepthVibe metadata where the host API exposes them.</small>
 <small>Capture sends metadata only; source media and plug-in binaries are not copied.</small>
 <label for="document">DepthVibe composition JSON</label>
 <textarea id="document" rows="7" placeholder="Paste a DepthVibe composition document JSON to send it back to the app."></textarea>
