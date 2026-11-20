@@ -131,7 +131,7 @@ class FontManagerService extends ChangeNotifier {
 
   static int suggestedWeight(String? style) {
     final value = (style ?? '').toLowerCase();
-    final compact = value.replaceAll(RegExp(r'[\\s_-]+'), '');
+    final compact = value.replaceAll(RegExp(r'[\s_-]+'), '');
     if (compact.contains('thin')) return 100;
     if (compact.contains('extralight') || compact.contains('ultralight')) {
       return 200;
