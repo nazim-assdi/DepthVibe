@@ -72,7 +72,7 @@ void main() {
       cameraSettings: const CameraSettings(nearClip: 50, farClip: 5000),
     );
 
-    expect(result.canRenderBaseColorTextures, isTrue);
+    expect(result.canRenderGpuMaterialData, isTrue);
     expect(result.hasBaseColorTexture, isTrue);
     expect(result.baseColorTextureRgba, same(pixels));
     expect(result.baseColorTextureWidth, 1);
@@ -111,8 +111,30 @@ void main() {
       cameraSettings: const CameraSettings(),
     );
 
-    expect(result.canRenderBaseColorTextures, isFalse);
+    expect(result.canRenderGpuMaterialData, isFalse);
     expect(result.hasBaseColorTexture, isFalse);
+  });
+
+
+  test('routes alpha mask and blend materials away from the opaque GPU pass', () {
+    final masked = ProjectedMeshTriangle(
+      a: Offset.zero,
+      b: const Offset(100, 0),
+      c: const Offset(50, 100),
+      color: const Color(0xFFFFFFFF),
+      distance: 200,
+      distanceA: 50,
+      distanceB: 5000,
+      distanceC: 500,
+      alphaMode: 'MASK',
+      alphaCutoff: 0.4,
+    );
+    final result = packer.pack(
+      triangles: [masked],
+      viewport: const Size(100, 100),
+      cameraSettings: const CameraSettings(),
+    );
+    expect(result.canRenderGpuMaterialData, isFalse);
   });
 
   test('uses linear camera depth for orthographic projection', () {
@@ -132,7 +154,7 @@ void main() {
     );
     expect(values[2], 0);
     expect(values[9], 0);
-    expect(values[19], 1);
+    expect(values[12], 1);
     expect(values[22], closeTo(450 / 4950, 0.0001));
   });
 
