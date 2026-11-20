@@ -125,6 +125,7 @@ class _ColorScopePainter extends CustomPainter {
             (points[const Color(0xFFB8F2D4)] ??= <Offset>[]).add(
               Offset(nx * size.width, (1 - luma) * size.height),
             );
+            break;
           case ColorScopeMode.rgbParade:
             final bandWidth = size.width / 3;
             final values = [red, green, blue];
@@ -136,6 +137,7 @@ class _ColorScopePainter extends CustomPainter {
                 ),
               );
             }
+            break;
           case ColorScopeMode.vectorscope:
             final cb = (blue - luma) * 0.564;
             final cr = (red - luma) * 0.713;
@@ -147,6 +149,7 @@ class _ColorScopePainter extends CustomPainter {
                 center.dy - cb * radius * 2,
               ),
             );
+            break;
         }
       }
     }
