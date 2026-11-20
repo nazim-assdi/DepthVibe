@@ -178,7 +178,7 @@ class _Gpu3dMeshViewState extends State<Gpu3dMeshView> {
     );
     if ((meshUsesBaseColorTextures || meshUsesUnsupportedAlphaMode) &&
         !_vertexData.canRenderGpuMaterialData) {
-      return _cpuFallback('multiple glTF base-colour textures');
+      return _cpuFallback('unsupported glTF material combination');
     }
     if (meshUsesBaseColorTextures &&
         !_vertexData.hasBaseColorTexture) {
