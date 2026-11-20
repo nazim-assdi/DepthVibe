@@ -476,6 +476,15 @@ class CompositionExportService {
       const padding = 8;
       final imageWidth = math.max(1, painter.width.ceil() + padding * 2).toInt();
       final imageHeight = math.max(1, painter.height.ceil() + padding * 2).toInt();
+      if (imageWidth > 16384 ||
+          imageHeight > 16384 ||
+          imageWidth * imageHeight > 16 * 1024 * 1024) {
+        painter.dispose();
+        throw StateError(
+          'Text layer ' + layer.name +
+              ' exceeds the safe 16-megapixel raster limit. Reduce font size or text-box dimensions.',
+        );
+      }
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(
         recorder,
