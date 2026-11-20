@@ -1772,37 +1772,55 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       final safeName = _controller.document.name
           .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
           .replaceAll(RegExp(r'\s+'), '_');
+      final fileName = (safeName.isEmpty ? 'Untitled_Composition' : safeName) +
+          '.dvproj';
       final output = File(
-        projectDirectory.path + Platform.pathSeparator +
-            (safeName.isEmpty ? 'Untitled_Composition' : safeName) +
-            '.dvproj',
+        projectDirectory.path + Platform.pathSeparator + fileName,
       );
       final result = await _projectService.exportProject(
         _controller.document,
         outputFile: output,
       );
 
+      String savedPath = result.file.path;
       var shared = false;
-      try {
-        await SharePlus.instance.share(
-          ShareParams(
-            files: [XFile(result.file.path)],
-            text: 'DepthVibe composition project',
-          ),
-        );
-        shared = true;
-      } catch (_) {
-        // The project is still safely stored in the app's Projects/Exports folder.
+      if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+        final selectedDirectory = await FilePicker.pickDirectory();
+        if (selectedDirectory != null) {
+          final targetDirectory = Directory(selectedDirectory.toFilePath());
+          await targetDirectory.create(recursive: true);
+          final destination = File(
+            targetDirectory.path + Platform.pathSeparator + fileName,
+          );
+          if (await destination.exists()) await destination.delete();
+          savedPath = (await result.file.copy(destination.path)).path;
+        }
+      } else {
+        try {
+          await SharePlus.instance.share(
+            ShareParams(
+              files: [XFile(result.file.path)],
+              text: 'DepthVibe composition project',
+            ),
+          );
+          shared = true;
+        } catch (_) {
+          // The project remains in the app's Projects/Exports folder.
+        }
       }
+
       if (!mounted) return;
       setState(() {
         final base = 'Project saved · ' +
             result.embeddedAssetCount.toString() + ' assets embedded.';
+        final destinationNotice = shared
+            ? ' Use the share sheet to copy it to Files or Drive.'
+            : ' File: ' + savedPath;
         _notice = result.missingAssetPaths.isEmpty
-            ? (shared ? base + ' Use the share sheet to copy it elsewhere.' : base +
-                ' Saved inside the app Projects/Exports folder.')
+            ? base + destinationNotice
             : base + ' ' + result.missingAssetPaths.length.toString() +
-                ' linked files were missing and remain external.';
+                ' linked files were missing and remain external.' +
+                destinationNotice;
       });
     } catch (error) {
       if (mounted) {
