@@ -38,6 +38,12 @@ class FontCatalogEntry {
 ///
 /// Font binaries stay in Application Support. Project files explicitly embed
 /// the chosen font asset so a .dvproj can be moved to another computer.
+class FontFolderImportResult {
+  const FontFolderImportResult({required this.imported, required this.skipped});
+  final int imported;
+  final int skipped;
+}
+
 class FontManagerService extends ChangeNotifier {
   FontManagerService._();
 
@@ -223,6 +229,34 @@ class FontManagerService extends ChangeNotifier {
     await _writeSettings();
     notifyListeners();
     return entry;
+  }
+
+
+  Future<FontFolderImportResult> importFontFolder(String directoryPath) async {
+    await initialize();
+    final directory = Directory(directoryPath);
+    if (!await directory.exists()) {
+      throw FileSystemException('Font folder does not exist.', directoryPath);
+    }
+    var imported = 0;
+    var skipped = 0;
+    var inspected = 0;
+    await for (final entity
+        in directory.list(recursive: true, followLinks: false)) {
+      if (entity is! File || !isSupportedFontFilePath(entity.path)) continue;
+      inspected++;
+      if (inspected > 2000) {
+        skipped++;
+        continue;
+      }
+      try {
+        await importFont(entity.path);
+        imported++;
+      } catch (_) {
+        skipped++;
+      }
+    }
+    return FontFolderImportResult(imported: imported, skipped: skipped);
   }
 
   Future<void> ensureFontLoaded({
