@@ -1,4 +1,6 @@
 const { entrypoints } = require("uxp");
+const { capturePremiereSequence } = require("./premiere-host-adapter");
+const { host } = require("uxp");
 const DEFAULT_BRIDGE = "http://127.0.0.1:47653";
 let sessionToken = null;
 
@@ -36,7 +38,7 @@ async function request(path, options) {
   return result;
 }
 function setConnected(enabled) {
-  ["refresh", "effects", "send"].forEach(function (id) {
+  ["capture", "refresh", "effects", "send"].forEach(function (id) {
     const button = document.getElementById(id);
     if (button) button.disabled = !enabled;
   });
@@ -44,18 +46,45 @@ function setConnected(enabled) {
 async function connect() {
   const code = document.getElementById("pairing").value.trim();
   if (!/^\d{6}$/.test(code)) throw new Error("Enter the six-digit code from DepthVibe.");
+  const hostVersion = host && host.version ? host.version : "Unknown";
   const pairing = await request("/v1/pair", {
     method: "POST",
     body: JSON.stringify({
       code: code,
       hostApp: "premierepro",
-      hostVersion: "25.6+"
+      hostVersion: hostVersion
     })
   });
   sessionToken = pairing.token;
   setConnected(true);
   setStatus("Connected to DepthVibe.");
   showResult(await request("/v1/session"));
+}
+async function captureSequence() {
+  setStatus("Reading the active Premiere sequence…");
+  const snapshot = await capturePremiereSequence();
+  const result = await request("/v1/adobe/metadata", {
+    method: "POST",
+    body: JSON.stringify({ snapshot: snapshot })
+  });
+  showResult({
+    project: snapshot.payload.project.name,
+    sequence: snapshot.payload.sequence.name,
+    videoTracks: snapshot.payload.videoTracks.length,
+    audioTracks: snapshot.payload.audioTracks.length,
+    capturedClips: snapshot.payload.videoTracks.reduce(
+      function (count, track) { return count + track.clips.length; }, 0
+    ) + snapshot.payload.audioTracks.reduce(
+      function (count, track) { return count + track.clips.length; }, 0
+    ),
+    bridgeResponse: result
+  });
+  setStatus("Active Premiere sequence metadata sent to DepthVibe.");
+}
+async function readLatestSnapshot() {
+  const result = await request("/v1/adobe/metadata");
+  showResult(result.snapshot || result);
+  setStatus("Latest Adobe host snapshot received from DepthVibe.");
 }
 async function readComposition() {
   const result = await request("/v1/composition");
@@ -89,6 +118,10 @@ async function sendComposition() {
 function bindPanel(rootNode) {
   rootNode.querySelector("#connect").addEventListener("click", async function () {
     try { setStatus("Connecting…"); await connect(); }
+    catch (error) { setStatus(error.message); showResult(error.stack || error.message); }
+  });
+  rootNode.querySelector("#capture").addEventListener("click", async function () {
+    try { await captureSequence(); }
     catch (error) { setStatus(error.message); showResult(error.stack || error.message); }
   });
   rootNode.querySelector("#refresh").addEventListener("click", async function () {

@@ -16,11 +16,13 @@ The sample requests network access only to http://127.0.0.1:47653. The app bridg
 ## Panel capabilities
 
 - Pair with a one-time code and receive a scoped session token.
-- Read the current DepthVibe composition document.
-- Query the DepthVibe effect catalog.
+- Capture the active Premiere Pro project/sequence using the official Premiere UXP DOM API (25.6+).
+- Capture sequence frame size, timebase/duration, video/audio track names, clip names, source in/out, sequence start/end and speed.
+- Send an explicit metadata-only snapshot to DepthVibe. The latest snapshot appears in Extension Manager > Adobe Integration.
+- Read the current DepthVibe composition document and effect catalog.
 - Send a DepthVibe-compatible composition JSON document to the open Compositor.
 
-This sample does not translate arbitrary Premiere timelines or third-party Premiere effects into the DepthVibe project model. Add a host-specific translator using the official Premiere DOM APIs where required. Document import is an explicit panel action.
+The active sequence snapshot is a metadata handoff, not a lossless Premiere project conversion. Media bytes, plugin binaries, effect parameter graphs, multicam/nested sequence internals and Premiere-only effects are not copied. The current snapshot is a read-only interchange record; it is not automatically converted into editable DepthVibe layers.
 
 ## Distribution
 

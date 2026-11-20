@@ -27,6 +27,14 @@ export interface DepthVibeEffectDescriptor {
   parameters: DepthVibeEffectParameter[];
 }
 
+export interface DepthVibeAdobeHostSnapshot {
+  schemaVersion: 1;
+  hostApp: DepthVibeAdobeHost;
+  hostVersion: string;
+  capturedAt: string;
+  payload: Record<string, unknown>;
+}
+
 export interface DepthVibeCompositionDocument {
   name: string;
   width: number;
@@ -43,6 +51,13 @@ export interface DepthVibeBridgeClient {
     Promise<DepthVibePairingResponse>;
   getComposition(): Promise<DepthVibeCompositionDocument>;
   getEffects(): Promise<DepthVibeEffectDescriptor[]>;
+  getAdobeMetadata(): Promise<DepthVibeAdobeHostSnapshot>;
+  sendAdobeMetadata(snapshot: DepthVibeAdobeHostSnapshot): Promise<{
+    ok: true;
+    message: string;
+    hostApp: DepthVibeAdobeHost;
+    payloadKeys: number;
+  }>;
   sendComposition(document: DepthVibeCompositionDocument):
     Promise<{ ok: true; importedLayers: number }>;
   disconnect(): Promise<void>;
@@ -56,6 +71,8 @@ export interface DepthVibeBridgeClient {
  * GET /v1/effects
  * GET /v1/composition
  * POST /v1/composition
+ * GET /v1/adobe/metadata
+ * POST /v1/adobe/metadata with { snapshot }
  * POST /v1/disconnect
  *
  * Always obtain the pairing code from the user. Never embed pairing codes or

@@ -28,16 +28,50 @@ async function api(path, options) {
   return data;
 }
 function enabled(value) {
-  ["read", "effects", "send"].forEach(function (id) {
+  ["capture", "read", "effects", "send"].forEach(function (id) {
     document.getElementById(id).disabled = !value;
+  });
+}
+function evalHostSnapshot() {
+  return new Promise(function (resolve, reject) {
+    const cep = window.__adobe_cep__;
+    if (!cep || typeof cep.evalScript !== "function") {
+      reject(new Error("The Adobe CEP host bridge is not available."));
+      return;
+    }
+    cep.evalScript("depthVibeGetActiveCompSnapshot()", function (result) {
+      try {
+        const parsed = JSON.parse(result);
+        if (parsed && parsed.error) reject(new Error(parsed.error));
+        else resolve(parsed);
+      } catch (error) {
+        reject(new Error("Could not parse the After Effects host snapshot: " + error));
+      }
+    });
   });
 }
 document.getElementById("connect").addEventListener("click", async function () {
   try {
     const code = document.getElementById("pairing").value.trim();
+    if (!/^\d{6}$/.test(code)) throw new Error("Enter a six-digit pairing code.");
+    const hostInfo = await new Promise(function (resolve, reject) {
+      const cep = window.__adobe_cep__;
+      if (!cep || typeof cep.evalScript !== "function") {
+        resolve({hostVersion: "CEP"});
+        return;
+      }
+      cep.evalScript("JSON.stringify(depthVibeGetHostInfo())", function (value) {
+        try { resolve(JSON.parse(value)); }
+        catch (_) { resolve({hostVersion: "CEP"}); }
+      });
+    });
     const response = await api("/v1/pair", {
       method: "POST",
-      body: JSON.stringify({code: code, hostApp: "aftereffects", hostVersion: "CEP 11"})
+      body: JSON.stringify({
+        code: code,
+        hostApp: "aftereffects",
+        hostVersion: hostInfo.hostVersion || "CEP"
+      })
     });
     sessionToken = response.token;
     enabled(true);
@@ -45,18 +79,30 @@ document.getElementById("connect").addEventListener("click", async function () {
     output(await api("/v1/session"));
   } catch (error) { status(error.message); }
 });
+document.getElementById("capture").addEventListener("click", async function () {
+  try {
+    status("Reading the active After Effects composition…");
+    const snapshot = await evalHostSnapshot();
+    const response = await api("/v1/adobe/metadata", {
+      method: "POST",
+      body: JSON.stringify({snapshot: snapshot})
+    });
+    output({
+      project: snapshot.payload.project.file,
+      composition: snapshot.payload.composition.name,
+      width: snapshot.payload.composition.width,
+      height: snapshot.payload.composition.height,
+      frameRate: snapshot.payload.composition.frameRate,
+      layers: snapshot.payload.layers.length,
+      bridgeResponse: response
+    });
+    status("Active After Effects composition metadata sent to DepthVibe.");
+  } catch (error) { status(error.message); output(error.stack || error.message); }
+});
 document.getElementById("read").addEventListener("click", async function () {
   try {
     const result = await api("/v1/composition");
-    const doc = result.document || {};
-    const layers = Array.isArray(doc.layers) ? doc.layers : [];
-    output({
-      name: doc.name,
-      width: doc.width,
-      height: doc.height,
-      frameRate: doc.frameRate,
-      layerCount: layers.length
-    });
+    output(result.document || result);
     status("DepthVibe composition received.");
   } catch (error) { status(error.message); }
 });

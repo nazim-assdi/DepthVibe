@@ -119,6 +119,66 @@ void main() {
       expect(imported['status'], HttpStatus.ok);
       expect(controller.document.name, 'Adobe exchange');
 
+      final invalidSnapshot = await send(
+        'POST',
+        '/v1/adobe/metadata',
+        token: token,
+        body: {
+          'snapshot': {
+            'schemaVersion': 1,
+            'hostApp': 'aftereffects-beta',
+            'payload': {'composition': 'Wrong host'},
+          },
+        },
+      );
+      expect(invalidSnapshot['status'], HttpStatus.badRequest);
+
+      final hostSnapshot = {
+        'schemaVersion': 1,
+        'hostApp': 'premierepro',
+        'hostVersion': '25.6.0',
+        'capturedAt': DateTime.now().toUtc().toIso8601String(),
+        'payload': {
+          'project': {'name': 'Demo.prproj'},
+          'sequence': {
+            'name': 'Main sequence',
+            'width': 1920,
+            'height': 1080,
+          },
+          'videoTracks': [
+            {
+              'index': 0,
+              'clips': [
+                {
+                  'name': 'Opening shot',
+                  'startSeconds': 0.0,
+                  'durationSeconds': 4.0,
+                },
+              ],
+            },
+          ],
+        },
+      };
+      final captured = await send(
+        'POST',
+        '/v1/adobe/metadata',
+        token: token,
+        body: {'snapshot': hostSnapshot},
+      );
+      expect(captured['status'], HttpStatus.ok);
+      expect(bridge.lastHostMetadata?['hostApp'], 'premierepro');
+
+      final latestSnapshot = await send(
+        'GET',
+        '/v1/adobe/metadata',
+        token: token,
+      );
+      expect(latestSnapshot['status'], HttpStatus.ok);
+      final received = (latestSnapshot['body'] as Map<String, Object?>)['snapshot']
+          as Map<String, Object?>;
+      final payload = received['payload'] as Map<String, Object?>;
+      expect(payload['project'], isA<Map>());
+
       final disconnected = await send(
         'POST',
         '/v1/disconnect',

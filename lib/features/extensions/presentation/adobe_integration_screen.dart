@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -211,6 +212,33 @@ class _AdobeIntegrationScreenState extends State<AdobeIntegrationScreen> {
                     ),
                   ),
                 ),
+            if (_bridge.lastHostMetadata != null) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'LATEST ADOBE HOST SNAPSHOT',
+                style: TextStyle(
+                  fontSize: 10,
+                  letterSpacing: 1.2,
+                  color: Color(0xFF9BAAC2),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: SelectableText(
+                    const JsonEncoder.withIndent('  ').convert(
+                      _bridge.lastHostMetadata,
+                    ),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFFB4C2D7),
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             const Text(
               'SUPPORTED HOST CONNECTIONS',
@@ -248,11 +276,12 @@ class _AdobeIntegrationScreenState extends State<AdobeIntegrationScreen> {
               ),
             const SizedBox(height: 12),
             const Text(
-              'The Adobe panel runs inside Adobe, not inside Flutter. It can '
-              'pair with this bridge, read the current DepthVibe composition, '
-              'read the effect catalog, and send a composition JSON document '
-              'back after an explicit action. Native .aex/.prm plug-ins and '
-              'Adobe-only effects still execute only inside their Adobe host.',
+              'Premiere UXP and After Effects UXP Beta/CEP panels can capture '
+              'the active host sequence/composition metadata into the snapshot '
+              'panel above. The snapshot is read-only metadata; it does not copy '
+              'media, Adobe effect binaries, or full native effect/keyframe graphs. '
+              'Native .aex/.prm plug-ins and Adobe-only effects still execute '
+              'only inside their Adobe host.',
               style: TextStyle(
                 fontSize: 11,
                 color: Color(0xFF97A6BD),

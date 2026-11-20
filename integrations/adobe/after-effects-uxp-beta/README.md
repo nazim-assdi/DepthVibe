@@ -9,6 +9,8 @@ After Effects UXP support is public beta. Adobe's published baseline is After Ef
 5. Add both http://127.0.0.1:47653 and https://127.0.0.1:47653 to the generated manifest network permissions. Use HTTPS on macOS.
 6. Load it with UXP Developer Tool and pair it with the code shown in DepthVibe > Extension Manager > Adobe Integration.
 
-This adapter implements the local bridge panel only. It does not yet translate After Effects projects/comps/layers. Add host-specific translation using the After Effects UXP DOM API and validate round trips in the Beta host.
+The adapter uses the After Effects UXP DOM API to capture the active composition's dimensions, frame rate, duration, background and per-layer timing/visibility/lock/3D/parent metadata. It sends an explicit metadata-only snapshot to DepthVibe, where the latest snapshot appears in Extension Manager > Adobe Integration.
+
+This is not a lossless AEP/AET converter. Footage bytes, effect plug-in binaries, arbitrary effect property/keyframe trees, expressions and rendered frames are not copied. The snapshot is initially read-only and not automatically converted into editable DepthVibe layers.
 
 The repository deliberately does not guess an After Effects Beta manifest. Host identifiers, APIs and manifest fields can change during beta. The CEP adapter remains the stable-release compatibility path.

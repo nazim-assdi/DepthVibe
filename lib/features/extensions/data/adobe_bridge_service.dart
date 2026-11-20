@@ -52,8 +52,13 @@ class AdobeBridgeService extends ChangeNotifier {
   int _pairingFailures = 0;
   DateTime? _lastPairingFailure;
   bool _secure = false;
+  Map<String, Object?>? _lastHostMetadata;
 
   bool get isRunning => _server != null;
+  Map<String, Object?>? get lastHostMetadata =>
+      _lastHostMetadata == null
+          ? null
+          : Map<String, Object?>.unmodifiable(_lastHostMetadata!);
   int get port => _server?.port ?? defaultPort;
   String get scheme => _secure ? 'https' : 'http';
   String get baseUrl => scheme + '://127.0.0.1:' + port.toString();
@@ -161,6 +166,7 @@ class AdobeBridgeService extends ChangeNotifier {
     _secure = false;
     _sessions.clear();
     _sessionTokens.clear();
+    _lastHostMetadata = null;
     notifyListeners();
   }
 
@@ -284,6 +290,64 @@ class AdobeBridgeService extends ChangeNotifier {
             'ok': true,
             'importedLayers': imported.layers.length,
             'message': 'Composition imported into DepthVibe.',
+          });
+          return;
+
+        case 'GET /v1/adobe/metadata':
+          _touchSession(authorized);
+          final snapshot = _lastHostMetadata;
+          if (snapshot == null) {
+            _writeJson(response, HttpStatus.notFound, {
+              'ok': false,
+              'error': 'No Adobe host snapshot has been received yet.',
+            });
+            return;
+          }
+          _writeJson(response, HttpStatus.ok, {
+            'ok': true,
+            'snapshot': snapshot,
+          });
+          return;
+
+        case 'POST /v1/adobe/metadata':
+          final body = await _readJsonBody(request);
+          final snapshot = body['snapshot'];
+          if (snapshot is! Map) {
+            throw const FormatException(
+              'Adobe metadata request must include a snapshot object.',
+            );
+          }
+          final snapshotMap = <String, Object?>{
+            for (final entry in snapshot.entries)
+              if (entry.key is String) entry.key as String: entry.value,
+          };
+          if (snapshotMap['schemaVersion'] != 1 ||
+              snapshotMap['hostApp'] != authorized.session.hostApp ||
+              snapshotMap['hostVersion'] != authorized.session.hostVersion ||
+              snapshotMap['payload'] is! Map) {
+            throw const FormatException(
+              'Adobe snapshot schema or host identity does not match the paired session.',
+            );
+          }
+          final serializedSnapshot = jsonEncode(snapshotMap);
+          if (utf8.encode(serializedSnapshot).length > 16 * 1024 * 1024) {
+            throw const FormatException(
+              'Adobe snapshot exceeds the 16 MiB storage limit.',
+            );
+          }
+          final session = _touchSession(authorized);
+          _lastHostMetadata = {
+            ...snapshotMap,
+            'receivedAt': DateTime.now().toUtc().toIso8601String(),
+            'pairedHostVersion': session.hostVersion,
+            'sessionId': session.sessionId,
+          };
+          notifyListeners();
+          _writeJson(response, HttpStatus.ok, {
+            'ok': true,
+            'message': 'Adobe host snapshot received.',
+            'hostApp': session.hostApp,
+            'payloadKeys': (snapshotMap['payload'] as Map).keys.length,
           });
           return;
 

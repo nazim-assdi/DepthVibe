@@ -15,8 +15,10 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#10151f;padding:9px;b
 <input id="bridgeUrl" value="http://127.0.0.1:47653" placeholder="Bridge URL; use HTTPS on macOS">
 <input id="pairing" maxlength="6" inputmode="numeric" placeholder="One-time pairing code">
 <button id="connect">Connect</button>
+<button id="capture" class="secondary" disabled>Capture active After Effects composition</button>
 <button id="read" class="secondary" disabled>Read DepthVibe composition</button>
 <button id="effects" class="secondary" disabled>List effects</button>
+<small>Capture reads active composition and layer timing/flags from the After Effects UXP API. It sends metadata only; footage files are not copied.</small>
 <textarea id="document" rows="6" placeholder="DepthVibe composition JSON"></textarea>
 <button id="send" class="secondary" disabled>Send to DepthVibe</button>
 <p id="status">Not connected.</p><pre id="result"></pre>

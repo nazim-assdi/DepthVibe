@@ -14,8 +14,10 @@ small,p{color:#a8b6cc}
 <input id="bridgeUrl" value="http://127.0.0.1:47653" placeholder="Bridge URL; use HTTPS on macOS">
 <input id="pairing" maxlength="6" placeholder="DepthVibe one-time pairing code">
 <button id="connect">Connect</button>
+<button id="capture" disabled>Capture active After Effects composition</button>
 <button id="read" disabled>Read DepthVibe composition</button>
 <button id="effects" disabled>List DepthVibe effects</button>
+<small>Capture reads the active After Effects composition and layer metadata from the CEP host. Footage files are not copied.</small>
 <textarea id="document" rows="6" placeholder="Paste a DepthVibe composition JSON document"></textarea>
 <button id="send" disabled>Send composition to DepthVibe</button>
 <p id="status">Not connected.</p><pre id="result"></pre>

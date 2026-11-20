@@ -4,6 +4,7 @@ import type {
   DepthVibeCompositionDocument,
   DepthVibeEffectDescriptor,
   DepthVibePairingResponse,
+  DepthVibeAdobeHostSnapshot,
 } from "./depthvibe-bridge";
 
 export class DepthVibeBridgeError extends Error {
@@ -71,6 +72,27 @@ export class LocalDepthVibeBridgeClient implements DepthVibeBridgeClient {
       "/v1/effects",
     );
     return result.effects;
+  }
+
+  async getAdobeMetadata(): Promise<DepthVibeAdobeHostSnapshot> {
+    const result = await this.request<{ snapshot: DepthVibeAdobeHostSnapshot }>(
+      "/v1/adobe/metadata",
+    );
+    return result.snapshot;
+  }
+
+  async sendAdobeMetadata(
+    snapshot: DepthVibeAdobeHostSnapshot,
+  ): Promise<{
+    ok: true;
+    message: string;
+    hostApp: DepthVibeAdobeHost;
+    payloadKeys: number;
+  }> {
+    return this.request("/v1/adobe/metadata", {
+      method: "POST",
+      body: JSON.stringify({ snapshot }),
+    });
   }
 
   async sendComposition(
