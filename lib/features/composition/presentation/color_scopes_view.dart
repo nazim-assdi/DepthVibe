@@ -141,7 +141,7 @@ class _ColorScopePainter extends CustomPainter {
           case ColorScopeMode.vectorscope:
             final cb = (blue - luma) * 0.564;
             final cr = (red - luma) * 0.713;
-            final radius = math.min(size.width, size.height) * 0.43;
+            final radius = math.min(size.width, size.height).toDouble() * 0.43;
             final center = Offset(size.width / 2, size.height / 2);
             (points[const Color(0xFF8DDCF4)] ??= <Offset>[]).add(
               Offset(
