@@ -14,6 +14,33 @@ async function optional(call, fallback) {
   }
 }
 
+async function captureEffects(trackItem) {
+  const chain = await optional(() => trackItem.getComponentChain(), null);
+  if (!chain) return [];
+  const count = await optional(() => chain.getComponentCount(), 0);
+  const effects = [];
+  for (let index = 0; index < Math.min(Number(count) || 0, 128); index += 1) {
+    const component = await optional(() => chain.getComponentAtIndex(index), null);
+    if (!component) continue;
+    const matchName = await optional(() => component.getMatchName(), "");
+    const name = await optional(() => component.getDisplayName(), matchName || "Premiere Effect");
+    const paramCount = await optional(() => component.getParamCount(), 0);
+    const properties = [];
+    for (let p = 0; p < Math.min(Number(paramCount) || 0, 128); p += 1) {
+      const param = await optional(() => component.getParam(p), null);
+      if (!param) continue;
+      const paramName = await optional(() => param.getName(), "Parameter " + p);
+      const value = await optional(() => param.getValue(), null);
+      if (typeof value === "number" || typeof value === "string" || typeof value === "boolean" ||
+          (Array.isArray(value) && value.every((item) => typeof item === "number"))) {
+        properties.push({ name: String(paramName), value: value });
+      }
+    }
+    effects.push({ matchName: String(matchName || ""), name: String(name || "Premiere Effect"), properties: properties });
+  }
+  return effects;
+}
+
 async function captureTrackItems(track, trackType) {
   const trackItems = await optional(
     async () => track.getTrackItems(premiere.Constants.TrackItemType.CLIP, false),
@@ -34,6 +61,10 @@ async function captureTrackItems(track, trackType) {
       optional(() => item.getProjectItem())
     ]);
     const projectItem = values[7];
+    const sourcePath = projectItem
+      ? await optional(() => projectItem.getMediaFilePath(), null)
+      : null;
+    const effects = await captureEffects(item);
     clips.push({
       id: typeof item.getId === "function" ? await optional(() => item.getId()) : null,
       name: values[0],
@@ -44,6 +75,8 @@ async function captureTrackItems(track, trackType) {
       sourceOutSeconds: secondsOf(values[5]),
       speed: values[6],
       sourceName: projectItem && projectItem.name ? projectItem.name : null,
+      sourcePath: typeof sourcePath === "string" ? sourcePath : null,
+      effects: effects,
       sourceId: projectItem && typeof projectItem.getId === "function"
         ? await optional(() => projectItem.getId())
         : null,

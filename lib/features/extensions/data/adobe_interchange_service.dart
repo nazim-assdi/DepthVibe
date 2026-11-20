@@ -1,0 +1,282 @@
+import 'dart:convert';
+import '../../composition/data/effect_catalog.dart';
+import '../../composition/domain/composition_models.dart';
+import '../../composition/engine/composition_project_codec.dart';
+
+class AdobeImportReport {
+  const AdobeImportReport({required this.document,required this.mappedEffects,required this.unsupportedEffects,required this.warnings});
+  final CompositionDocument document;
+  final List<String> mappedEffects,unsupportedEffects,warnings;
+  Map<String,Object?> toJson()=>{'ok':true,'composition':{'name':document.name,'width':document.width,'height':document.height,'frameRate':document.frameRate,'durationMs':document.durationMs,'layerCount':document.layers.length},'mappedEffects':mappedEffects,'unsupportedEffects':unsupportedEffects,'warnings':warnings};
+}
+
+class AdobeInterchangeService {
+  AdobeInterchangeService._();
+  static const int _ticksPerSecond=254016000000;
+  static const Map<String,String> afterEffectsMatchNames={
+    'brightness':'ADBE Brightness & Contrast 2','contrast':'ADBE Brightness & Contrast 2',
+    'gaussian_blur':'ADBE Gaussian Blur 2','sharpen':'ADBE Sharpen','invert':'ADBE Invert','saturation':'ADBE Hue/Saturation',
+  };
+  static Map<String,Object?> _map(Object? v)=>v is Map?{for(final e in v.entries)if(e.key is String)e.key as String:e.value}:{};
+  static List<Map<String,Object?>> _maps(Object? v)=>v is List?v.whereType<Map>().map(_map).toList():const[];
+  static String _s(Object? v,[String d=''])=>v is String&&v.trim().isNotEmpty?v.trim():d;
+  static double? _n(Object? v)=>v is num&&v.isFinite?v.toDouble():null;
+  static double _d(Object? v,[double d=0])=>_n(v)??d;
+  static int _i(Object? v,[int d=0])=>v is num&&v.isFinite?v.round():d;
+  static bool _b(Object? v,[bool d=false])=>v is bool?v:d;
+  static int _ms(Object? v,[int fallback=0])=>(_d(v,fallback/1000)*1000).round();
+  static int _dim(Object? v,int d)=>_i(v,d).clamp(1,16384).toInt();
+  static String? _path(Object? v){
+    final p=_s(v);
+    if(p.startsWith('file://')||RegExp(r'^[A-Za-z]:[\\/]').hasMatch(p)||p.startsWith(r'\\')||p.startsWith('/'))return p;
+    return null;
+  }
+  static String _id(String prefix,Object? src,int index,Set<String> used){
+    final raw=_s(src,index.toString()).replaceAll(RegExp(r'[^A-Za-z0-9_-]'),'_');
+    final base=prefix+'_'+raw;var candidate=base;var suffix=2;
+    while(!used.add(candidate)){candidate=base+'_'+suffix.toString();suffix++;}
+    return candidate;
+  }
+  static AdobeImportReport importSnapshot(Map<String,Object?> snap){
+    if(snap['schemaVersion']!=1)throw const FormatException('Unsupported Adobe snapshot schema.');
+    final host=_s(snap['hostApp']),p=_map(snap['payload']);
+    if(host=='premierepro')return _premiere(p);
+    if(host=='aftereffects'||host=='aftereffects-beta')return _afterEffects(snap,p);
+    throw FormatException('Unsupported Adobe host: '+host);
+  }
+
+  static AdobeImportReport _premiere(Map<String,Object?> payload){
+    final seq=_map(payload['sequence']),warnings=<String>[],mapped=<String>[],unsupported=<String>[];
+    final used=<String>{},layers=<CompositionLayer>[];
+    double? fps=_n(seq['frameRate']);
+    if(fps==null||fps<1||fps>240){
+      final ticks=double.tryParse(_s(seq['timebase']));
+      if(ticks!=null&&ticks>0)fps=_ticksPerSecond/ticks;
+    }
+    if(fps==null||fps<1||fps>240){fps=30;warnings.add('Premiere frame rate unavailable; used 30 fps.');}
+    final tracks=<({Map<String,Object?> t,bool audio})>[
+      for(final t in _maps(payload['videoTracks']))(t:t,audio:false),
+      for(final t in _maps(payload['audioTracks']))(t:t,audio:true),
+    ];
+    var maxEnd=0;
+    for(var ti=0;ti<tracks.length;ti++){
+      final entry=tracks[ti],track=entry.t,trackIndex=_i(track['index'],ti),clips=_maps(track['clips']);
+      for(var ci=0;ci<clips.length;ci++){
+        final clip=clips[ci],start=_ms(clip['startSeconds']),end=_n(clip['endSeconds']);
+        final duration=_ms(clip['durationSeconds'],end==null?1000:(end*1000).round()-start).clamp(1,86400000).toInt();
+        final audio=entry.audio||_s(clip['mediaType']).toLowerCase()=='audio',path=_path(clip['sourcePath']);
+        final sourceId=_s(clip['id'],_s(clip['sourceId'],'$trackIndex-$ci'));
+        final name=_s(clip['name'],_s(clip['sourceName'],'Adobe Clip '+(ci+1).toString()));
+        final mappedResult=_mapEffects(_maps(clip['effects']),host:'premierepro',layerIndex:layers.length);
+        mapped.addAll(mappedResult.mapped);unsupported.addAll(mappedResult.unsupported);
+        final muted=_b(track['muted']);
+        layers.add(CompositionLayer(
+          id:_id('premiere',_s(track['id'],trackIndex.toString())+'_'+sourceId,layers.length,used),
+          name:name,kind:audio?LayerKind.audio:LayerKind.video,startMs:start,durationMs:duration,
+          sourceInMs:_ms(clip['sourceInSeconds']),enabled:_b(clip['enabled'],!muted),
+          solo:_b(clip['solo']),locked:_b(clip['locked']),sourceUri:path,
+          sourceWidth:_i(clip['sourceWidth']),sourceHeight:_i(clip['sourceHeight']),
+          effects:mappedResult.effects,audioSettings:AudioSettings(muted:audio&&muted),
+          externalSourceId:sourceId,externalSourceName:_s(clip['sourceName'],name),
+          externalHostApp:'premierepro',externalLayerIndex:trackIndex,
+          interchangeMetadata:{'hostApp':'premierepro','trackIndex':trackIndex,'trackName':_s(track['name'],'Track '+trackIndex.toString()),
+            'clipIndex':ci,'speed':_d(clip['speed'],1),'sourceName':_s(clip['sourceName'],name),'sourcePath':path,
+            'unsupportedEffects':mappedResult.rawUnsupported},
+        ));
+        if(start+duration>maxEnd)maxEnd=start+duration;
+        if(path==null&&!audio)warnings.add('Missing media: '+name+' (use Relink).');
+      }
+    }
+    final seqDuration=_ms(seq['durationSeconds']),project=_map(payload['project']);
+    if(layers.isEmpty)warnings.add('No clips found in active Premiere sequence.');
+    return AdobeImportReport(document:CompositionDocument(
+      name:_s(seq['name'],_s(project['name'],'Premiere Sequence')),width:_dim(seq['width'],1920),
+      height:_dim(seq['height'],1080),frameRate:fps,durationMs:(seqDuration>0?seqDuration:maxEnd).clamp(1,86400000).toInt(),layers:layers),
+      mappedEffects:mapped,unsupportedEffects:unsupported,warnings:warnings);
+  }
+
+  static AdobeImportReport _afterEffects(Map<String,Object?> snap,Map<String,Object?> payload){
+    final comp=_map(payload['composition']),rawLayers=_maps(payload['layers']);
+    final warnings=<String>[],mapped=<String>[],unsupported=<String>[],used=<String>{};
+    final sourceIds=<String,String>{},parents=<({String id,String parent})>[],layers=<CompositionLayer>[];
+    final fps=_d(comp['frameRate'],30).clamp(1,240).toDouble();
+    for(var index=0;index<rawLayers.length;index++){
+      final raw=rawLayers[index],extId=_s(raw['id'],_i(raw['index'],index+1).toString());
+      final id=_id('aftereffects',extId,index,used);sourceIds[extId]=id;
+      final name=_s(raw['name'],'AE Layer '+(index+1).toString()),match=_s(raw['matchName']);
+      final audioOnly=_b(raw['hasAudio'])&&!_b(raw['hasVideo'],true);
+      final kind=_aeKind(raw,audioOnly),inPoint=_d(raw['inPointSeconds'],_d(raw['startTimeSeconds']));
+      final startTime=_d(raw['startTimeSeconds'],inPoint),outPoint=_d(raw['outPointSeconds'],inPoint+1);
+      final duration=((outPoint-inPoint).abs()<0.0001?1:((outPoint-inPoint)*1000).round()).clamp(1,86400000).toInt();
+      final source=_map(raw['source']),path=_path(raw['sourcePath']??source['path']);
+      final mappedResult=_mapEffects(_maps(raw['effects']),host:'aftereffects',layerIndex:index);
+      mapped.addAll(mappedResult.mapped);unsupported.addAll(mappedResult.unsupported);
+      final parent=_s(raw['parentLayerId']);if(parent.isNotEmpty)parents.add((id:id,parent:parent));
+      final text=_s(raw['textContent']);
+      layers.add(CompositionLayer(
+        id:id,name:name,kind:kind,startMs:(inPoint*1000).round(),durationMs:duration,
+        sourceInMs:((inPoint-startTime)*1000).round().clamp(0,86400000).toInt(),
+        enabled:_b(raw['enabled'],true),solo:_b(raw['solo']),locked:_b(raw['locked']),sourceUri:path,
+        sourceWidth:_i(raw['sourceWidth']??source['width']),sourceHeight:_i(raw['sourceHeight']??source['height']),
+        textContent:text.isEmpty?null:text,transform:_readTransform(_map(raw['transform'])),
+        effects:mappedResult.effects,camera:kind==LayerKind.camera?const CameraSettings():null,
+        light:kind==LayerKind.light?const LightSettings():null,
+        externalSourceId:extId,externalSourceName:_s(source['name'],name),externalHostApp:_s(snap['hostApp']),
+        externalLayerIndex:_i(raw['index'],index+1),
+        interchangeMetadata:{'hostApp':_s(snap['hostApp']),'matchName':match,'layerIndex':_i(raw['index'],index+1),
+          'startTimeSeconds':startTime,'inPointSeconds':inPoint,'outPointSeconds':outPoint,
+          'threeDLayer':_b(raw['threeDLayer']),'adjustmentLayer':_b(raw['adjustmentLayer']),
+          'nullLayer':_b(raw['nullLayer']),'sourcePath':path,'unsupportedEffects':mappedResult.rawUnsupported},
+      ));
+      if(path==null&&[LayerKind.video,LayerKind.audio,LayerKind.image].contains(kind))warnings.add('Missing footage: '+name+' (use Relink).');
+    }
+    final linked=layers.map((layer){
+      final r=parents.where((p)=>p.id==layer.id);if(r.isEmpty)return layer;
+      final parentId=sourceIds[r.first.parent];return parentId==null?layer:layer.copyWith(parentId:parentId);
+    }).toList();
+    final maxEnd=linked.fold<int>(0,(m,l)=>l.endMs>m?l.endMs:m),compDuration=_ms(comp['durationSeconds'],maxEnd);
+    if(linked.isEmpty)warnings.add('No layers found in active After Effects composition.');
+    return AdobeImportReport(document:CompositionDocument(name:_s(comp['name'],'After Effects Composition'),
+      width:_dim(comp['width'],1920),height:_dim(comp['height'],1080),frameRate:fps,
+      durationMs:(compDuration>0?compDuration:maxEnd).clamp(1,86400000).toInt(),layers:linked),
+      mappedEffects:mapped,unsupportedEffects:unsupported,warnings:warnings);
+  }
+
+  static LayerKind _aeKind(Map<String,Object?> raw,bool audioOnly){
+    final n=_s(raw['matchName']).toLowerCase();
+    if(_b(raw['nullLayer'])||n.contains('null'))return LayerKind.nullObject;
+    if(_b(raw['adjustmentLayer']))return LayerKind.adjustment;
+    if(n.contains('camera'))return LayerKind.camera;if(n.contains('light'))return LayerKind.light;
+    if(audioOnly)return LayerKind.audio;if(n.contains('text'))return LayerKind.text;
+    if(n.contains('shape'))return LayerKind.shape;
+    if(raw['sourcePath']!=null||raw['source']!=null)return LayerKind.video;
+    return LayerKind.nullObject;
+  }
+  static LayerTransform _readTransform(Map<String,Object?> raw){
+    List<num> vec(Object? v,List<num> d){if(v is! List)return d;final a=v.whereType<num>().take(3).toList();return a.isEmpty?d:a;}
+    final p=vec(raw['position'],const [960,540,0]),a=vec(raw['anchorPoint'],const [0,0,0]),s=vec(raw['scale'],const [100,100,100]);
+    return LayerTransform(position:Vector3(p[0].toDouble(),p.length>1?p[1].toDouble():540,p.length>2?p[2].toDouble():0),
+      anchor:Vector3(a[0].toDouble(),a.length>1?a[1].toDouble():0,a.length>2?a[2].toDouble():0),
+      scale:Vector3(s[0].toDouble(),s.length>1?s[1].toDouble():100,s.length>2?s[2].toDouble():100),
+      rotation:Vector3(0,0,_d(raw['rotation'])),opacity:_d(raw['opacity'],100).clamp(0,100).toDouble());
+  }
+
+  static ({List<EffectInstance> effects,List<String> mapped,List<String> unsupported,List<Map<String,Object?>> rawUnsupported}) _mapEffects(
+    List<Map<String,Object?>> input,{required String host,required int layerIndex}){
+    final effects=<EffectInstance>[],mapped=<String>[],unsupported=<String>[],rawUnsupported=<Map<String,Object?>>[];var id=0;
+    for(final raw in input){
+      final match=_s(raw['matchName'],_s(raw['name'],'Unknown Effect')),lower=match.toLowerCase(),props=_maps(raw['properties']);
+      double param(List<String> keys,double fallback){
+        for(final p in props){final n=(_s(p['matchName'])+' '+_s(p['name'])).toLowerCase();
+          if(keys.any(n.contains)){final v=_n(p['value']);if(v!=null)return v;}}return fallback;
+      }
+      final additions=<EffectInstance>[];
+      if(lower.contains('gaussian blur')||lower.contains('fast blur')){
+        additions.add(EffectInstance(id:'adobe_'+layerIndex.toString()+'_'+id.toString(),effectId:'gaussian_blur',name:'Gaussian Blur',
+          parameters:{'sigma':param(['blurriness','blur amount','radius'],2).clamp(0,30).toDouble()}));id++;
+      }else if(lower.contains('brightness')&&lower.contains('contrast')){
+        additions.add(EffectInstance(id:'adobe_'+layerIndex.toString()+'_'+id.toString(),effectId:'brightness',name:'Brightness',
+          parameters:{'value':(param(['brightness'],0)/100).clamp(-1,1).toDouble()}));id++;
+        additions.add(EffectInstance(id:'adobe_'+layerIndex.toString()+'_'+id.toString(),effectId:'contrast',name:'Contrast',
+          parameters:{'value':(1+param(['contrast'],0)/100).clamp(0,3).toDouble()}));id++;
+      }else if(lower.contains('sharpen')){
+        additions.add(EffectInstance(id:'adobe_'+layerIndex.toString()+'_'+id.toString(),effectId:'sharpen',name:'Sharpen',
+          parameters:{'amount':param(['amount','sharpness'],1).clamp(0,5).toDouble()}));id++;
+      }else if(lower.contains('invert')){
+        additions.add(EffectInstance(id:'adobe_'+layerIndex.toString()+'_'+id.toString(),effectId:'invert',name:'Invert'));id++;
+      }else if(lower.contains('hue/saturation')||lower.contains('hue saturation')){
+        additions.add(EffectInstance(id:'adobe_'+layerIndex.toString()+'_'+id.toString(),effectId:'saturation',name:'Saturation',
+          parameters:{'value':(1+param(['master saturation','saturation'],0)/100).clamp(0,3).toDouble()}));id++;
+      }
+      if(additions.isEmpty||additions.any((e)=>EffectCatalog.findBuiltin(e.effectId)==null)){
+        unsupported.add(host+': '+match);rawUnsupported.add(raw);
+      }else{effects.addAll(additions);mapped.add(host+': '+match+' -> '+additions.map((e)=>e.effectId).join(', '));}
+    }
+    return(effects:effects,mapped:mapped,unsupported:unsupported,rawUnsupported:rawUnsupported);
+  }
+
+  static Map<String,Object?> buildInterchangeBundle(CompositionDocument doc){
+    final ae=<Map<String,Object?>>[],unknown=<Map<String,Object?>>[],premiereUnsupported=<Map<String,Object?>>[];
+    for(final l in doc.layers){for(final e in l.effects){
+      final name=afterEffectsMatchNames[e.effectId],entry=<String,Object?>{'layerId':l.id,'effectId':e.effectId,'effectName':e.name,
+        'afterEffectsMatchName':name,'premiereFcpXmlEffectMapping':null,'parameters':e.parameters};
+      if(name==null||EffectCatalog.findBuiltin(e.effectId)==null)unknown.add(entry);else ae.add(entry);
+      premiereUnsupported.add(entry);
+    }}
+    return{'format':'DepthVibe.AdobeInterchange','schemaVersion':1,'document':CompositionProjectCodec.encodeDocument(doc),
+      'effectMapping':{'afterEffects':{'mapped':ae,'unsupported':unknown},
+        'premiereFcpXml':{'mapped':const [],'unsupported':premiereUnsupported,'note':'Premiere FCP XML export includes clip timing/media only; effect nodes not encoded.'}},
+      'media':{'embedded':false,'note':'Only local media references are exported. Relink missing media on the target machine.'}};
+  }
+
+  static String buildPremiereXml(CompositionDocument doc){
+    String esc(String s)=>s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+    final fps=doc.frameRate.clamp(1,240),base=fps.round(),ntsc=(fps-base).abs()>0.001;
+    int frame(int ms)=>(ms*fps/1000).round();
+    final rate='<rate><timebase>'+base.toString()+'</timebase><ntsc>'+(ntsc?'TRUE':'FALSE')+'</ntsc></rate>';
+    final video=doc.layers.where((l)=>l.kind!=LayerKind.audio).toList(),audio=doc.layers.where((l)=>l.kind==LayerKind.audio).toList();
+    String clip(CompositionLayer l,int i){
+      final st=frame(l.startMs),en=st+frame(l.durationMs),ins=frame(l.sourceInMs),outs=ins+frame(l.durationMs),path=l.sourceUri;
+      final nm=l.externalSourceName??(path==null?l.name:path.split(RegExp(r'[/\\]')).last);
+      final file=path==null?'<file id="file-$i"><name>'+esc(nm)+'</name><offline>true</offline></file>':
+        '<file id="file-$i"><name>'+esc(nm)+'</name><pathurl>'+esc(path.startsWith('file://')?path:Uri.file(path).toString())+'</pathurl></file>';
+      return '<clipitem id="clip-$i"><name>'+esc(l.name)+'</name>'+rate+'<start>$st</start><end>$en</end><in>$ins</in><out>$outs</out>'+file+'</clipitem>';
+    }
+    final v=video.asMap().entries.map((e)=>'<track>'+clip(e.value,e.key+1)+'</track>').join();
+    final a=audio.asMap().entries.map((e)=>'<track>'+clip(e.value,video.length+e.key+1)+'</track>').join();
+    return '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE xmeml><xmeml version="5"><sequence id="depthvibe"><name>'+
+      esc(doc.name)+'</name><duration>'+frame(doc.durationMs).toString()+'</duration>'+rate+'<media><video><format><samplecharacteristics>'+
+      rate+'<width>'+doc.width.toString()+'</width><height>'+doc.height.toString()+'</height></samplecharacteristics></format>'+v+
+      '</video><audio>'+a+'</audio></media></sequence><!-- Clip timing/media only; FCP XML effect nodes are not mapped. --></xmeml>';
+  }
+
+  static String buildAfterEffectsScript(CompositionDocument doc){
+    final encoded=jsonEncode(jsonEncode(buildInterchangeBundle(doc)));
+    return '''
+(function(){
+ var bundle=JSON.parse(__DATA__),d=bundle.document;
+ app.beginUndoGroup("DepthVibe Interchange Import");
+ var comp=app.project.items.addComp(String(d.name||"DepthVibe Composition"),Number(d.width)||1920,
+  Number(d.height)||1080,1,Math.max(1,Number(d.durationMs)/1000),Number(d.frameRate)||30);
+ var made={},warnings=[];
+ function put(g,n,v){try{var p=g.property(n);if(p&&v!==undefined)p.setValue(v);}catch(_){}}
+ function fx(id){var m={brightness:"ADBE Brightness & Contrast 2",contrast:"ADBE Brightness & Contrast 2",
+  gaussian_blur:"ADBE Gaussian Blur 2",sharpen:"ADBE Sharpen",invert:"ADBE Invert",saturation:"ADBE Hue/Saturation"};return m[id]||null;}
+ for(var i=0;i<d.layers.length;i++){
+  var x=d.layers[i],l=null;
+  try{if(x.sourceUri&&new File(x.sourceUri).exists)l=comp.layers.add(app.project.importFile(new ImportOptions(new File(x.sourceUri))));}
+  catch(e){warnings.push(x.name+": "+String(e));}
+  try{
+   if(!l&&x.kind==="text")l=comp.layers.addText(x.textContent||x.name);
+   else if(!l&&x.kind==="nullObject")l=comp.layers.addNull();
+   else if(!l&&x.kind==="camera")l=comp.layers.addCamera(x.name,[d.width/2,d.height/2]);
+   else if(!l&&x.kind==="light")l=comp.layers.addLight(x.name,[d.width/2,d.height/2]);
+   else if(!l){l=comp.layers.addSolid([0.16,0.18,0.24],x.name,d.width,d.height,1,Math.max(1,x.durationMs/1000));warnings.push(x.name+": placeholder; relink media.");}
+  }catch(e){warnings.push(x.name+": layer skipped: "+String(e));continue;}
+  l.name=x.name;l.startTime=Number(x.startMs)/1000;l.inPoint=Number(x.startMs)/1000;
+  l.outPoint=Math.min(comp.duration,(Number(x.startMs)+Number(x.durationMs))/1000);
+  l.enabled=x.enabled!==false;l.solo=x.solo===true;l.locked=x.locked===true;
+  var t=l.property("ADBE Transform Group"),tr=x.transform||{};
+  if(t){if(tr.position)put(t,"ADBE Position",[tr.position.x,tr.position.y,tr.position.z]);
+   if(tr.anchor)put(t,"ADBE Anchor Point",[tr.anchor.x,tr.anchor.y,tr.anchor.z]);
+   if(tr.scale)put(t,"ADBE Scale",[tr.scale.x,tr.scale.y,tr.scale.z]);
+   if(tr.rotation)put(t,"ADBE Rotate Z",tr.rotation.z);put(t,"ADBE Opacity",tr.opacity);}
+  made[x.id]=l;var parade=l.property("ADBE Effect Parade");
+  if(parade&&x.effects)for(var e=0;e<x.effects.length;e++){
+   var ef=x.effects[e],mn=fx(ef.effectId);
+   try{if(!mn||!parade.canAddProperty(mn)){warnings.push(x.name+": unsupported "+ef.name);continue;}
+    var added=parade.addProperty(mn),p=ef.parameters||{};
+    if(ef.effectId==="gaussian_blur")put(added,"ADBE Gaussian Blur 2-0001",p.sigma);
+    if(ef.effectId==="brightness")put(added,"ADBE Brightness & Contrast 2-0001",p.value*100);
+    if(ef.effectId==="contrast")put(added,"ADBE Brightness & Contrast 2-0002",(p.value-1)*100);
+    if(ef.effectId==="sharpen")put(added,"ADBE Sharpen-0001",p.amount);
+    if(ef.effectId==="saturation")put(added,"ADBE Hue/Saturation-0004",(p.value-1)*100);
+   }catch(err){warnings.push(x.name+": effect skipped "+String(err));}
+  }
+ }
+ for(var j=0;j<d.layers.length;j++){var x=d.layers[j];if(x.parentId&&made[x.parentId]&&made[x.id])try{made[x.id].parent=made[x.parentId];}catch(_){}}
+ app.endUndoGroup();alert("Imported "+d.layers.length+" editable layers. "+(warnings.length?"Review: "+warnings.join("\\n"):""));
+}());
+'''.replace('__DATA__',encoded);
+  }
+}

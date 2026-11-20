@@ -1,5 +1,41 @@
 // After Effects CEP host-side metadata adapter.
 // Runs only inside the installed Adobe After Effects CEP host.
+
+function depthVibeSafeValue(group, matchName) {
+  try {
+    var property = group && group.property(matchName);
+    if (!property) return null;
+    var value = property.value;
+    if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") return value;
+    if (value instanceof Array) return value.slice(0, 4);
+    return null;
+  } catch (_) { return null; }
+}
+function depthVibeTransform(layer) {
+  var group = layer.property("ADBE Transform Group");
+  return {
+    position: depthVibeSafeValue(group, "ADBE Position"),
+    anchorPoint: depthVibeSafeValue(group, "ADBE Anchor Point"),
+    scale: depthVibeSafeValue(group, "ADBE Scale"),
+    rotation: depthVibeSafeValue(group, "ADBE Rotate Z"),
+    opacity: depthVibeSafeValue(group, "ADBE Opacity")
+  };
+}
+function depthVibeEffects(layer) {
+  var group = layer.property("ADBE Effect Parade"), effects = [];
+  if (!group) return effects;
+  for (var i=1; i<=Math.min(group.numProperties || 0,128); i++) {
+    var effect=group.property(i), properties=[];
+    if (!effect) continue;
+    for (var p=1; p<=Math.min(effect.numProperties || 0,128); p++) {
+      var prop=effect.property(p), value=prop?depthVibeSafeValue(effect,prop.matchName):null;
+      if (prop && value!==null) properties.push({matchName:prop.matchName,name:prop.name,value:value});
+    }
+    effects.push({matchName:effect.matchName,name:effect.name,enabled:effect.enabled!==false,properties:properties});
+  }
+  return effects;
+}
+
 function depthVibeGetActiveCompSnapshot() {
   try {
     var project = app.project;
@@ -15,6 +51,10 @@ function depthVibeGetActiveCompSnapshot() {
     for (var index = 1; index <= comp.numLayers; index += 1) {
       var layer = comp.layer(index);
       var parent = layer.parent;
+      var source = layer.source;
+      var footageFile = source && source.file ? source.file : null;
+      var textContent = null;
+      try { var textDoc=layer.property('ADBE Text Properties').property('ADBE Text Document').value; textContent=textDoc?textDoc.text:null; } catch (_) {}
       layers.push({
         id: layer.id,
         index: layer.index,
@@ -34,7 +74,13 @@ function depthVibeGetActiveCompSnapshot() {
         parentLayerId: parent ? parent.id : null,
         parentLayerName: parent ? parent.name : null,
         hasVideo: layer.hasVideo,
-        hasAudio: layer.hasAudio
+        hasAudio: layer.hasAudio,
+        sourcePath: footageFile && footageFile.fsName ? footageFile.fsName : null,
+        source: source ? {name:source.name||null,width:source.width||null,height:source.height||null,path:footageFile&&footageFile.fsName?footageFile.fsName:null} : null,
+        textContent: textContent,
+        transform: depthVibeTransform(layer),
+        effects: depthVibeEffects(layer),
+        blendMode: layer.blendingMode !== undefined ? String(layer.blendingMode) : null
       });
     }
 

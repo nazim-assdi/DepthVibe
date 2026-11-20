@@ -65,3 +65,16 @@ The first bridge supports one-time localhost pairing, effect descriptor listing,
 This is not yet a Premiere sequence importer or After Effects comp/project importer. It does not translate arbitrary Adobe tracks, comps, third-party effects, keyframes, expressions or proprietary project files. These require dedicated host translators using Adobe DOM APIs and round-trip tests.
 
 Premiere .prm and After Effects .aex plugins are native binaries built against Adobe C++ SDKs and platform ABIs. They cannot run inside Flutter/Dart or be loaded from .dvext. Native Adobe effect support requires a separate plugin built and signed for its host and operating system. DepthVibe does not bundle Adobe SDKs or claim compatibility with arbitrary native Adobe plugins.
+
+
+## Editable interchange workflow
+
+1. Pair the Premiere Pro UXP / After Effects UXP Beta / After Effects CEP panel with DepthVibe.
+2. Capture the active sequence or composition.
+3. Choose **Import captured timeline into DepthVibe**. The bridge turns clip/layer timing, source in-points, visibility, parent links, transforms and the audited effect subset into editable DepthVibe layers.
+4. Save as `.dvproj`. Adobe source identifiers and unsupported source effect records remain in each layer's interchange metadata.
+5. Export from DepthVibe as Final Cut Pro 7 XML for Premiere Pro (File > Import), or save the generated After Effects ExtendScript and run it using File > Scripts > Run Script File.
+
+### Verified scope and limitations
+
+Media bytes are not copied. Only genuine local footage paths are linked; missing media remains offline and must be relinked. Premiere FCP XML exports clip placement and media references only; Premiere effect-filter XML is deliberately not emitted until its parameter schema is verified. The After Effects script creates editable layers and applies only the explicit built-in subset: Brightness, Contrast, Gaussian Blur, Sharpen, Invert and Hue/Saturation. Expressions, arbitrary keyframe graphs, third-party effects, nested sequences/comps, complete audio routing and every blend-mode variant are not losslessly converted. Unsupported effect metadata is preserved and reported, not executed.

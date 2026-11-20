@@ -1,4 +1,4 @@
-const { entrypoints, host } = require("uxp");
+const { entrypoints, host, storage } = require("uxp");
 const { captureActiveComposition } = require("./after-effects-host-adapter");
 const DEFAULT_BRIDGE = "http://127.0.0.1:47653";
 let token = null;
@@ -34,7 +34,7 @@ function output(value) {
     typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }
 function setConnected(connected) {
-  ["capture", "read", "effects", "send"].forEach(function (id) {
+  ["capture", "read", "effects", "send", "importSnapshot", "exportScript"].forEach(function (id) {
     document.getElementById(id).disabled = !connected;
   });
 }
@@ -79,6 +79,23 @@ async function readLatestSnapshot() {
   output(result.snapshot || result);
   status("Latest Adobe host snapshot received from DepthVibe.");
 }
+
+async function importCapturedComposition() {
+  status("Importing After Effects composition into DepthVibe…");
+  const result = await api("/v1/adobe/import", { method: "POST", body: "{}" });
+  output(result);
+  status("Imported " + result.composition.layerCount + " editable DepthVibe layers.");
+}
+async function exportAfterEffectsScript() {
+  const result = await api("/v1/adobe/export/after-effects.jsx");
+  const file = await storage.localFileSystem.getFileForSaving(result.filename);
+  if (!file) return;
+  await file.write(result.content);
+  output({ filename: result.filename, format: result.format,
+    instruction: "In After Effects use File > Scripts > Run Script File to create the editable composition." });
+  status("After Effects import script saved.");
+}
+
 function bind(root) {
   root.querySelector("#connect").addEventListener("click", async function () {
     try { status("Connecting…"); await connect(); }
@@ -87,6 +104,12 @@ function bind(root) {
   root.querySelector("#capture").addEventListener("click", async function () {
     try { await captureComposition(); }
     catch (error) { status(error.message); output(error.stack || error.message); }
+  });
+  root.querySelector("#importSnapshot").addEventListener("click", async function () {
+    try { await importCapturedComposition(); } catch (error) { status(error.message); output(error.stack || error.message); }
+  });
+  root.querySelector("#exportScript").addEventListener("click", async function () {
+    try { await exportAfterEffectsScript(); } catch (error) { status(error.message); output(error.stack || error.message); }
   });
   root.querySelector("#read").addEventListener("click", async function () {
     try { output(await api("/v1/composition")); status("DepthVibe composition received."); }

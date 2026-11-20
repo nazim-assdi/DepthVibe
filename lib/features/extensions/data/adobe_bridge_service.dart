@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import '../../composition/application/composition_controller.dart';
 import '../../composition/data/effect_catalog.dart';
 import '../../composition/engine/composition_project_codec.dart';
+import 'adobe_interchange_service.dart';
 
 class AdobeHostSession {
   const AdobeHostSession({
@@ -290,6 +291,65 @@ class AdobeBridgeService extends ChangeNotifier {
             'ok': true,
             'importedLayers': imported.layers.length,
             'message': 'Composition imported into DepthVibe.',
+          });
+          return;
+
+        case 'POST /v1/adobe/import':
+          _touchSession(authorized);
+          final targetController = _controller;
+          final captured = _lastHostMetadata;
+          if (targetController == null) {
+            _writeJson(response, HttpStatus.conflict, {'ok': false, 'error': 'Open the DepthVibe Compositor first.'});
+            return;
+          }
+          if (captured == null) {
+            _writeJson(response, HttpStatus.notFound, {'ok': false, 'error': 'Capture an Adobe sequence/composition first.'});
+            return;
+          }
+          final importReport = AdobeInterchangeService.importSnapshot(captured);
+          targetController.replaceDocument(importReport.document);
+          _writeJson(response, HttpStatus.ok, {
+            ...importReport.toJson(),
+            'message': 'Adobe timeline imported as editable DepthVibe layers.',
+          });
+          return;
+
+        case 'GET /v1/adobe/interchange':
+          _touchSession(authorized);
+          final exportController = _controller;
+          if (exportController == null) {
+            _writeJson(response, HttpStatus.conflict, {'ok': false, 'error': 'Open the DepthVibe Compositor first.'});
+            return;
+          }
+          _writeJson(response, HttpStatus.ok,
+            AdobeInterchangeService.buildInterchangeBundle(exportController.document));
+          return;
+
+        case 'GET /v1/adobe/export/premiere.xml':
+          _touchSession(authorized);
+          final premiereController = _controller;
+          if (premiereController == null) {
+            _writeJson(response, HttpStatus.conflict, {'ok': false, 'error': 'Open the DepthVibe Compositor first.'});
+            return;
+          }
+          _writeJson(response, HttpStatus.ok, {
+            'filename': 'DepthVibe-Premiere-Interchange.xml',
+            'format': 'Final Cut Pro 7 XML for Premiere Pro',
+            'content': AdobeInterchangeService.buildPremiereXml(premiereController.document),
+          });
+          return;
+
+        case 'GET /v1/adobe/export/after-effects.jsx':
+          _touchSession(authorized);
+          final aeController = _controller;
+          if (aeController == null) {
+            _writeJson(response, HttpStatus.conflict, {'ok': false, 'error': 'Open the DepthVibe Compositor first.'});
+            return;
+          }
+          _writeJson(response, HttpStatus.ok, {
+            'filename': 'DepthVibe-After-Effects-Import.jsx',
+            'format': 'After Effects ExtendScript import script',
+            'content': AdobeInterchangeService.buildAfterEffectsScript(aeController.document),
           });
           return;
 

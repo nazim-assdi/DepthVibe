@@ -1,4 +1,4 @@
-const { entrypoints } = require("uxp");
+const { entrypoints, storage } = require("uxp");
 const { capturePremiereSequence } = require("./premiere-host-adapter");
 const { host } = require("uxp");
 const DEFAULT_BRIDGE = "http://127.0.0.1:47653";
@@ -38,7 +38,7 @@ async function request(path, options) {
   return result;
 }
 function setConnected(enabled) {
-  ["capture", "refresh", "effects", "send"].forEach(function (id) {
+  ["capture", "refresh", "effects", "send", "importSnapshot", "exportXml"].forEach(function (id) {
     const button = document.getElementById(id);
     if (button) button.disabled = !enabled;
   });
@@ -105,6 +105,23 @@ async function listEffects() {
   showResult(result.effects || []);
   setStatus("Effect catalog received.");
 }
+
+async function importCapturedTimeline() {
+  setStatus("Importing Premiere sequence into DepthVibe…");
+  const result = await request("/v1/adobe/import", { method: "POST", body: "{}" });
+  showResult(result);
+  setStatus("Imported " + result.composition.layerCount + " editable DepthVibe layers.");
+}
+async function exportPremiereXml() {
+  const result = await request("/v1/adobe/export/premiere.xml");
+  const file = await storage.localFileSystem.getFileForSaving(result.filename);
+  if (!file) return;
+  await file.write(result.content);
+  showResult({ filename: result.filename, format: result.format,
+    note: "Import via Premiere Pro > File > Import. This XML carries clip timing/media references, not effect-filter nodes." });
+  setStatus("Premiere interchange XML saved.");
+}
+
 async function sendComposition() {
   const input = document.getElementById("document").value.trim();
   if (!input) throw new Error("Paste a DepthVibe composition document first.");
@@ -123,6 +140,12 @@ function bindPanel(rootNode) {
   rootNode.querySelector("#capture").addEventListener("click", async function () {
     try { await captureSequence(); }
     catch (error) { setStatus(error.message); showResult(error.stack || error.message); }
+  });
+  rootNode.querySelector("#importSnapshot").addEventListener("click", async function () {
+    try { await importCapturedTimeline(); } catch (error) { setStatus(error.message); showResult(error.stack || error.message); }
+  });
+  rootNode.querySelector("#exportXml").addEventListener("click", async function () {
+    try { await exportPremiereXml(); } catch (error) { setStatus(error.message); showResult(error.stack || error.message); }
   });
   rootNode.querySelector("#refresh").addEventListener("click", async function () {
     try { await readComposition(); } catch (error) { setStatus(error.message); }

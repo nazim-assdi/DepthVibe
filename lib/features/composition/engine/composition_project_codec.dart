@@ -36,6 +36,11 @@ class CompositionProjectCodec {
         'sourceUri': asset(layer.sourceUri),
         'sourceDocumentUri': asset(layer.sourceDocumentUri),
         'sourceLayerIndex': layer.sourceLayerIndex,
+        'externalSourceId': layer.externalSourceId,
+        'externalSourceName': layer.externalSourceName,
+        'externalHostApp': layer.externalHostApp,
+        'externalLayerIndex': layer.externalLayerIndex,
+        'interchangeMetadata': layer.interchangeMetadata,
         'textContent': layer.textContent,
         'textFontFamily': layer.textFontFamily,
         'textFontAssetUri': asset(layer.textFontAssetUri),
@@ -150,6 +155,11 @@ class CompositionProjectCodec {
         sourceUri: asset(_optionalString(item['sourceUri'])),
         sourceDocumentUri: asset(_optionalString(item['sourceDocumentUri'])),
         sourceLayerIndex: _optionalInteger(item['sourceLayerIndex']),
+        externalSourceId: _optionalString(item['externalSourceId']),
+        externalSourceName: _optionalString(item['externalSourceName']),
+        externalHostApp: _optionalString(item['externalHostApp']),
+        externalLayerIndex: _optionalInteger(item['externalLayerIndex']),
+        interchangeMetadata: _safeMetadata(item['interchangeMetadata']),
         textContent: _optionalString(item['textContent']),
         textFontFamily: _optionalString(item['textFontFamily']),
         textFontAssetUri: asset(_optionalString(item['textFontAssetUri'])),
@@ -248,6 +258,22 @@ class CompositionProjectCodec {
       playheadMs: _integer(json['playheadMs'], 0),
       selectedLayerId: selected != null && ids.contains(selected) ? selected : null,
     );
+  }
+
+  static Map<String, Object?> _safeMetadata(Object? raw) {
+    if (raw is! Map) return const <String, Object?>{};
+    final result = <String, Object?>{};
+    for (final entry in raw.entries) {
+      if (entry.key is! String) continue;
+      final key = entry.key as String;
+      if (key.length > 128) continue;
+      final value = entry.value;
+      if (value is String || value is num || value is bool || value == null ||
+          value is List || value is Map) {
+        result[key] = value;
+      }
+    }
+    return result;
   }
 
   static Map<String, Object?> _encodeMask(MaskModel mask) => {

@@ -28,7 +28,7 @@ async function api(path, options) {
   return data;
 }
 function enabled(value) {
-  ["capture", "read", "effects", "send"].forEach(function (id) {
+  ["capture", "read", "effects", "send", "importSnapshot"].forEach(function (id) {
     document.getElementById(id).disabled = !value;
   });
 }
@@ -97,6 +97,15 @@ document.getElementById("capture").addEventListener("click", async function () {
       bridgeResponse: response
     });
     status("Active After Effects composition metadata sent to DepthVibe.");
+  } catch (error) { status(error.message); output(error.stack || error.message); }
+});
+
+document.getElementById("importSnapshot").addEventListener("click", async function () {
+  try {
+    status("Importing After Effects composition into DepthVibe…");
+    const result = await api("/v1/adobe/import", {method: "POST", body: "{}"});
+    output(result);
+    status("Imported " + result.composition.layerCount + " editable DepthVibe layers.");
   } catch (error) { status(error.message); output(error.stack || error.message); }
 });
 document.getElementById("read").addEventListener("click", async function () {

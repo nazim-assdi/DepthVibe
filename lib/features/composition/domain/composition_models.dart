@@ -872,6 +872,11 @@ class CompositionLayer {
     this.sourceUri,
     this.sourceDocumentUri,
     this.sourceLayerIndex,
+    this.externalSourceId,
+    this.externalSourceName,
+    this.externalHostApp,
+    this.externalLayerIndex,
+    this.interchangeMetadata = const {},
     this.textContent,
     this.textFontFamily,
     this.textFontAssetUri,
@@ -916,6 +921,13 @@ class CompositionLayer {
   final String? sourceUri;
   final String? sourceDocumentUri;
   final int? sourceLayerIndex;
+  /// Stable Adobe source identity for interchange round trips.
+  final String? externalSourceId;
+  final String? externalSourceName;
+  final String? externalHostApp;
+  final int? externalLayerIndex;
+  /// Host-only metadata and unsupported effect data, retained as inert JSON.
+  final Map<String, Object?> interchangeMetadata;
   final String? textContent;
   final String? textFontFamily;
   final String? textFontAssetUri;
@@ -972,6 +984,11 @@ class CompositionLayer {
     String? sourceUri,
     String? sourceDocumentUri,
     int? sourceLayerIndex,
+    String? externalSourceId,
+    String? externalSourceName,
+    String? externalHostApp,
+    int? externalLayerIndex,
+    Map<String, Object?>? interchangeMetadata,
     String? textContent,
     String? textFontFamily,
     String? textFontAssetUri,
@@ -1021,6 +1038,11 @@ class CompositionLayer {
         sourceUri: sourceUri ?? this.sourceUri,
         sourceDocumentUri: sourceDocumentUri ?? this.sourceDocumentUri,
         sourceLayerIndex: sourceLayerIndex ?? this.sourceLayerIndex,
+        externalSourceId: externalSourceId ?? this.externalSourceId,
+        externalSourceName: externalSourceName ?? this.externalSourceName,
+        externalHostApp: externalHostApp ?? this.externalHostApp,
+        externalLayerIndex: externalLayerIndex ?? this.externalLayerIndex,
+        interchangeMetadata: interchangeMetadata ?? this.interchangeMetadata,
         textContent: textContent ?? this.textContent,
         textFontFamily: clearTextFont ? null : (textFontFamily ?? this.textFontFamily),
         textFontAssetUri: clearTextFont || clearTextFontAsset
