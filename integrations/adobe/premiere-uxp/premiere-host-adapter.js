@@ -385,6 +385,42 @@ async function applyNativeAudioEffect(clipId, displayName, parameters) {
   };
 }
 
+async function insertMotionBroMogrt(path) {
+  const project = await premiere.Project.getActiveProject();
+  const sequence = project && await project.getActiveSequence();
+  if (!project || !sequence) {
+    throw new Error("Open a Premiere project and active sequence first.");
+  }
+  if (!path || typeof path !== "string") {
+    throw new Error("Select an imported Motion Bro .MOGRT asset.");
+  }
+  const sequenceEditor = premiere.SequenceEditor.getEditor(sequence);
+  if (!sequenceEditor || typeof sequenceEditor.insertMogrtFromPath !== "function") {
+    throw new Error("MOGRT insertion requires Premiere Pro 25.6 or later.");
+  }
+  const [position, videoCount, audioCount] = await Promise.all([
+    sequence.getPlayerPosition(),
+    sequence.getVideoTrackCount(),
+    sequence.getAudioTrackCount()
+  ]);
+  const videoTrackIndex = Math.max(0, Number(videoCount) - 1);
+  const audioTrackIndex = Math.max(0, Number(audioCount) - 1);
+  const result = await sequenceEditor.insertMogrtFromPath(
+    path,
+    position,
+    videoTrackIndex,
+    audioTrackIndex
+  );
+  const snapshot = await capturePremiereSequence();
+  return {
+    inserted: Array.isArray(result) ? result.length > 0 : !!result,
+    insertionResult: result,
+    videoTrackIndex: videoTrackIndex,
+    audioTrackIndex: audioTrackIndex,
+    snapshot: snapshot
+  };
+}
+
 async function captureTrackTransitions(track) {
   const transitionType = premiere.Constants && premiere.Constants.TrackItemType
     ? premiere.Constants.TrackItemType.TRANSITION : undefined;
@@ -583,5 +619,6 @@ module.exports = {
   captureInstalledVideoEffects,
   captureInstalledAudioEffects,
   applyNativeVideoEffect,
-  applyNativeAudioEffect
+  applyNativeAudioEffect,
+  insertMotionBroMogrt
 };

@@ -4,7 +4,8 @@ const {
   captureInstalledVideoEffects,
   captureInstalledAudioEffects,
   applyNativeVideoEffect,
-  applyNativeAudioEffect
+  applyNativeAudioEffect,
+  insertMotionBroMogrt
 } = require("./premiere-host-adapter");
 const { host } = require("uxp");
 const DEFAULT_BRIDGE = "http://127.0.0.1:47653";
@@ -13,6 +14,7 @@ let latestSnapshot = null;
 let installedVideoEffects = [];
 let installedAudioEffects = [];
 let installedEffects = [];
+let motionBroMogrts = [];
 
 function bridgeBaseUrl() {
   const field = document.getElementById("bridgeUrl");
@@ -30,7 +32,7 @@ function bridgeBaseUrl() {
 
 function setConnected(connected) {
   ["capture", "importSnapshot", "exportXml", "refresh", "effects", "send",
-   "refreshHostEffects", "syncNativeSettings"].forEach(function (id) {
+   "refreshHostEffects", "syncNativeSettings", "refreshMotionBroAssets"].forEach(function (id) {
     const element = document.getElementById(id);
     if (element) element.disabled = !connected;
   });
@@ -234,6 +236,69 @@ async function refreshHostEffects() {
     }
   });
 }
+async function refreshMotionBroAssets() {
+  const catalog = await request("/v1/motionbro/assets");
+  motionBroMogrts = (catalog.assets || []).filter(function (asset) {
+    return asset.extension === "mogrt" &&
+      (!Array.isArray(asset.apps) || !asset.apps.length || asset.apps.indexOf("PP") >= 0);
+  });
+  renderMotionBroMogrts(document);
+  setStatus("Found " + motionBroMogrts.length + " Motion Bro/pack MOGRT templates.");
+  showResult({
+    importedPackCount: (catalog.packs || []).length,
+    premiereTemplateCount: motionBroMogrts.length,
+    minimumPremiereVersion: "25.6"
+  });
+}
+function renderMotionBroMogrts(root) {
+  const container = root.querySelector("#motionBroMogrtList");
+  const search = root.querySelector("#motionBroMogrtSearch");
+  if (!container) return;
+  const term = search ? search.value.trim().toLowerCase() : "";
+  const matches = motionBroMogrts.filter(function (asset) {
+    return [asset.packName, asset.category, asset.fileName, asset.relativePath]
+      .join(" ").toLowerCase().indexOf(term) >= 0;
+  }).slice(0, 250);
+  container.replaceChildren();
+  if (!matches.length) {
+    const note = document.createElement("small");
+    note.textContent = motionBroMogrts.length
+      ? "No matching MOGRT templates."
+      : "Import an MBR pack in DepthVibe and refresh this list.";
+    container.appendChild(note);
+    return;
+  }
+  matches.forEach(function (asset) {
+    const button = document.createElement("button");
+    button.className = "secondary host-effect";
+    button.textContent = asset.packName + " · " + asset.category + " · " + asset.fileName;
+    button.title = asset.path;
+    button.addEventListener("click", async function () {
+      try {
+        setStatus("Inserting Motion Bro MOGRT at the active Premiere playhead…");
+        const result = await insertMotionBroMogrt(asset.path);
+        const imported = await publishPremiereSnapshot(result.snapshot);
+        showResult({
+          pack: asset.packName,
+          template: asset.relativePath,
+          inserted: result.inserted,
+          videoTrackIndex: result.videoTrackIndex,
+          audioTrackIndex: result.audioTrackIndex,
+          depthVibeImport: imported
+        });
+        setStatus("MOGRT inserted into Premiere and sequence snapshot imported into DepthVibe.");
+      } catch (error) {
+        setStatus(error.message);
+        showResult(error.stack || error.message);
+      }
+    });
+    container.appendChild(button);
+  });
+  const count = document.createElement("small");
+  count.textContent = "Showing " + matches.length + " of " + motionBroMogrts.length + " Premiere templates";
+  container.appendChild(count);
+}
+
 async function syncDepthVibeNativeSettings() {
   const clipId = document.getElementById("hostEffectTarget").value;
   if (!clipId) throw new Error("Select the Premiere clip to receive the DepthVibe settings.");
@@ -352,6 +417,12 @@ function bindPanel(rootNode) {
   });
   rootNode.querySelector("#syncNativeSettings").addEventListener("click", async function () {
     try { await syncDepthVibeNativeSettings(); } catch (error) { setStatus(error.message); showResult(error.stack || error.message); }
+  });
+  rootNode.querySelector("#refreshMotionBroAssets").addEventListener("click", async function () {
+    try { await refreshMotionBroAssets(); } catch (error) { setStatus(error.message); showResult(error.stack || error.message); }
+  });
+  rootNode.querySelector("#motionBroMogrtSearch").addEventListener("input", function () {
+    renderMotionBroMogrts(rootNode);
   });
   rootNode.querySelector("#connect").addEventListener("click", async function () {
     try { setStatus("Connecting…"); await connect(); }

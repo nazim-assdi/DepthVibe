@@ -9,6 +9,7 @@ const {
 const DEFAULT_BRIDGE = "http://127.0.0.1:47653";
 let token = null;
 let installedEffects = [];
+let motionBroAssets = [];
 
 function bridgeBaseUrl() {
   const field = document.getElementById("bridgeUrl");
@@ -42,7 +43,7 @@ function output(value) {
 }
 function setConnected(connected) {
   ["capture", "read", "effects", "send", "importSnapshot", "exportScript",
-   "refreshHostEffects", "ffxImport", "ffxExport"].forEach(function (id) {
+   "refreshHostEffects", "ffxImport", "ffxExport", "refreshMotionBroAssets"].forEach(function (id) {
     document.getElementById(id).disabled = !connected;
   });
 }
@@ -153,6 +154,67 @@ function renderHostEffectList(root) {
   count.textContent = "Showing " + matches.length + " of " + installedEffects.length + " installed effects";
   container.appendChild(count);
 }
+async function refreshMotionBroAssets() {
+  const catalog = await api("/v1/motionbro/assets");
+  motionBroAssets = (catalog.assets || []).filter(function (asset) {
+    return asset.extension === "ffx" &&
+      (!Array.isArray(asset.apps) || !asset.apps.length || asset.apps.indexOf("AE") >= 0);
+  });
+  renderMotionBroAssets(document);
+  status("Found " + motionBroAssets.length + " Motion Bro/pack .ffx presets.");
+  output({
+    importedPackCount: (catalog.packs || []).length,
+    afterEffectsPresetCount: motionBroAssets.length,
+    scriptExecution: catalog.scriptExecution
+  });
+}
+function renderMotionBroAssets(root) {
+  const container = root.querySelector("#motionBroPresetList");
+  const search = root.querySelector("#motionBroSearch");
+  if (!container) return;
+  const term = search ? search.value.trim().toLowerCase() : "";
+  const matches = motionBroAssets.filter(function (asset) {
+    return [asset.packName, asset.category, asset.fileName, asset.relativePath]
+      .join(" ").toLowerCase().indexOf(term) >= 0;
+  }).slice(0, 250);
+  container.replaceChildren();
+  if (!matches.length) {
+    const note = document.createElement("small");
+    note.textContent = motionBroAssets.length
+      ? "No matching .ffx presets."
+      : "Import an MBR pack in DepthVibe and refresh this list.";
+    container.appendChild(note);
+    return;
+  }
+  matches.forEach(function (asset) {
+    const button = document.createElement("button");
+    button.className = "secondary host-effect";
+    button.textContent = asset.packName + " · " + asset.category + " · " + asset.fileName;
+    button.title = asset.path;
+    button.addEventListener("click", async function () {
+      try {
+        status("Applying Motion Bro preset " + asset.fileName + "…");
+        const result = applyFfxPreset(asset.path);
+        const imported = await publishHostSnapshot(result.snapshot);
+        output({
+          pack: asset.packName,
+          preset: asset.relativePath,
+          applied: result.applied,
+          depthVibeImport: imported
+        });
+        status("Motion Bro .ffx preset applied in After Effects and captured in DepthVibe.");
+      } catch (error) {
+        status(error.message);
+        output(error.stack || error.message);
+      }
+    });
+    container.appendChild(button);
+  });
+  const count = document.createElement("small");
+  count.textContent = "Showing " + matches.length + " of " + motionBroAssets.length + " After Effects presets";
+  container.appendChild(count);
+}
+
 async function importFfxPreset() {
   const file = await storage.localFileSystem.getFileForOpening({types: ["ffx"]});
   if (!file) return;
@@ -230,6 +292,12 @@ function bind(root) {
   });
   root.querySelector("#ffxExport").addEventListener("click", async function () {
     try { await exportFfxPreset(); } catch (error) { status(error.message); output(error.stack || error.message); }
+  });
+  root.querySelector("#refreshMotionBroAssets").addEventListener("click", async function () {
+    try { await refreshMotionBroAssets(); } catch (error) { status(error.message); output(error.stack || error.message); }
+  });
+  root.querySelector("#motionBroSearch").addEventListener("input", function () {
+    renderMotionBroAssets(root);
   });
   root.querySelector("#send").addEventListener("click", async function () {
     try {

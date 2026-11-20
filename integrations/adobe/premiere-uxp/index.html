@@ -40,7 +40,12 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#10151f;padding:9px;b
 <input id="hostEffectSearch" placeholder="Search installed effect name or match name">
 <div id="hostEffectList" class="effect-list"><small>Capture a sequence or refresh to load installed effects.</small></div>
 <button id="syncNativeSettings" class="secondary" disabled>Apply DepthVibe native effect settings to target clip</button>
-<small>Video effects use VideoFilterFactory; audio effects use AudioFilterFactory. Static parameter values are applied through Premiere transactions. Animated host parameters remain captured in DepthVibe metadata where the host API exposes them.</small>
+<h3>Motion Bro imported MOGRT templates</h3>
+<button id="refreshMotionBroAssets" class="secondary" disabled>Refresh imported .MOGRT assets</button>
+<input id="motionBroMogrtSearch" placeholder="Search pack, category or template">
+<div id="motionBroMogrtList" class="effect-list"><small>Import an .MBR pack in DepthVibe, then refresh.</small></div>
+<small>MOGRT templates are inserted at the active playhead on the last existing video/audio tracks.
+Video effects use VideoFilterFactory; audio effects use AudioFilterFactory. Static parameter values are applied through Premiere transactions. Animated host parameters remain captured in DepthVibe metadata where the host API exposes them.</small>
 <small>Capture sends metadata only; source media and plug-in binaries are not copied.</small>
 <label for="document">DepthVibe composition JSON</label>
 <textarea id="document" rows="7" placeholder="Paste a DepthVibe composition document JSON to send it back to the app."></textarea>
