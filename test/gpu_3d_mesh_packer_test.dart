@@ -131,8 +131,9 @@ void main() {
       result.bytes.lengthInBytes ~/ 4,
     );
     expect(values[2], 0);
-    expect(values[9], 1);
-    expect(values[16], closeTo(450 / 4950, 0.0001));
+    expect(values[9], 0);
+    expect(values[19], 1);
+    expect(values[22], closeTo(450 / 4950, 0.0001));
   });
 
   test('returns an empty upload for empty meshes or invalid viewports', () {
