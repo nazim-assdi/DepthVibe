@@ -30,7 +30,7 @@ void main() {
     );
 
     expect(result.vertexCount, 3);
-    expect(result.bytes.length, 3 * 7 * 4);
+    expect(result.bytes.length, 3 * 10 * 4);
     final values = Float32List.view(
       result.bytes.buffer,
       result.bytes.offsetInBytes,
@@ -41,8 +41,78 @@ void main() {
     expect(values[2], closeTo(0, 0.00001));
     expect(values[3], closeTo(128 / 255, 0.0001));
     expect(values[6], 1);
+    expect(values[9], 0);
+    expect(values[19], 0);
+    expect(values[22], closeTo(0.90909, 0.0001));
+  });
+
+
+  test('packs UV0 and a shared base-colour image for GPU sampling', () {
+    final pixels = Uint8List.fromList([30, 120, 240, 255]);
+    final textured = ProjectedMeshTriangle(
+      a: Offset.zero,
+      b: const Offset(100, 0),
+      c: const Offset(50, 100),
+      color: const Color(0xFFFFFFFF),
+      distance: 200,
+      distanceA: 50,
+      distanceB: 5000,
+      distanceC: 500,
+      uvA: const Offset(0.25, 0.5),
+      uvB: const Offset(1, 0),
+      uvC: const Offset(0, 1),
+      textureRgba: pixels,
+      textureWidth: 1,
+      textureHeight: 1,
+    );
+
+    final result = packer.pack(
+      triangles: [textured],
+      viewport: const Size(100, 100),
+      cameraSettings: const CameraSettings(nearClip: 50, farClip: 5000),
+    );
+
+    expect(result.canRenderBaseColorTextures, isTrue);
+    expect(result.hasBaseColorTexture, isTrue);
+    expect(result.baseColorTextureRgba, same(pixels));
+    expect(result.baseColorTextureWidth, 1);
+    expect(result.baseColorTextureHeight, 1);
+    final values = Float32List.view(
+      result.bytes.buffer,
+      result.bytes.offsetInBytes,
+      result.bytes.lengthInBytes ~/ 4,
+    );
+    expect(values[7], closeTo(0.25, 0.0001));
+    expect(values[8], closeTo(0.5, 0.0001));
     expect(values[9], 1);
-    expect(values[16], closeTo(0.90909, 0.0001));
+  });
+
+  test('marks meshes with multiple base-colour images for CPU fallback', () {
+    final first = Uint8List.fromList([255, 0, 0, 255]);
+    final second = Uint8List.fromList([0, 255, 0, 255]);
+    ProjectedMeshTriangle withImage(Uint8List pixels) =>
+        ProjectedMeshTriangle(
+          a: Offset.zero,
+          b: const Offset(100, 0),
+          c: const Offset(50, 100),
+          color: const Color(0xFFFFFFFF),
+          distance: 200,
+          distanceA: 50,
+          distanceB: 5000,
+          distanceC: 500,
+          textureRgba: pixels,
+          textureWidth: 1,
+          textureHeight: 1,
+        );
+
+    final result = packer.pack(
+      triangles: [withImage(first), withImage(second)],
+      viewport: const Size(100, 100),
+      cameraSettings: const CameraSettings(),
+    );
+
+    expect(result.canRenderBaseColorTextures, isFalse);
+    expect(result.hasBaseColorTexture, isFalse);
   });
 
   test('uses linear camera depth for orthographic projection', () {
