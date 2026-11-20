@@ -133,21 +133,21 @@ class FfmpegFilterCompiler {
         }
 
         final wheels = 'format=rgba,geq='
-            "r='\${channelExpression('r')}':"
-            "g='\${channelExpression('g')}':"
-            "b='\${channelExpression('b')}':"
+            "r='${channelExpression('r')}':"
+            "g='${channelExpression('g')}':"
+            "b='${channelExpression('b')}':"
             "a='alpha(X,Y)'";
         final eq = 'eq='
-            "contrast='\${parameterExpression('contrast', timeVariable: 't')}':"
-            "brightness='\${parameterExpression('brightness', timeVariable: 't')}':"
-            "gamma='\${parameterExpression('master_gamma', timeVariable: 't')}':"
-            "saturation='\${parameterExpression('saturation', timeVariable: 't')}':"
+            "contrast='${parameterExpression('contrast', timeVariable: 't')}':"
+            "brightness='${parameterExpression('brightness', timeVariable: 't')}':"
+            "gamma='${parameterExpression('master_gamma', timeVariable: 't')}':"
+            "saturation='${parameterExpression('saturation', timeVariable: 't')}':"
             'eval=frame';
         return wheels + ',' + eq;
       }
 
       double wheel(String band, String channel) {
-        final bandValue = effect.parameters['\${band}_$channel'] ?? 0;
+        final bandValue = effect.parameters['${band}_$channel'] ?? 0;
         final offset = effect.parameters['offset_$channel'] ?? 0;
         final temperature = effect.parameters['temperature'] ?? 0;
         final tint = effect.parameters['tint'] ?? 0;
@@ -162,20 +162,20 @@ class FfmpegFilterCompiler {
       }
 
       final colorBalance = 'colorbalance='
-          'rs=\${number(wheel('lift', 'r'))}:'
-          'gs=\${number(wheel('lift', 'g'))}:'
-          'bs=\${number(wheel('lift', 'b'))}:'
-          'rm=\${number(wheel('gamma', 'r'))}:'
-          'gm=\${number(wheel('gamma', 'g'))}:'
-          'bm=\${number(wheel('gamma', 'b'))}:'
-          'rh=\${number(wheel('gain', 'r'))}:'
-          'gh=\${number(wheel('gain', 'g'))}:'
-          'bh=\${number(wheel('gain', 'b'))}:pl=1';
+          'rs=${number(wheel('lift', 'r'))}:'
+          'gs=${number(wheel('lift', 'g'))}:'
+          'bs=${number(wheel('lift', 'b'))}:'
+          'rm=${number(wheel('gamma', 'r'))}:'
+          'gm=${number(wheel('gamma', 'g'))}:'
+          'bm=${number(wheel('gamma', 'b'))}:'
+          'rh=${number(wheel('gain', 'r'))}:'
+          'gh=${number(wheel('gain', 'g'))}:'
+          'bh=${number(wheel('gain', 'b'))}:pl=1';
       final eq = 'eq='
-          "contrast='\${parameterExpression('contrast', timeVariable: 't')}':"
-          "brightness='\${parameterExpression('brightness', timeVariable: 't')}':"
-          "gamma='\${parameterExpression('master_gamma', timeVariable: 't')}':"
-          "saturation='\${parameterExpression('saturation', timeVariable: 't')}':"
+          "contrast='${parameterExpression('contrast', timeVariable: 't')}':"
+          "brightness='${parameterExpression('brightness', timeVariable: 't')}':"
+          "gamma='${parameterExpression('master_gamma', timeVariable: 't')}':"
+          "saturation='${parameterExpression('saturation', timeVariable: 't')}':"
           'eval=frame';
       return colorBalance + ',' + eq;
     }
