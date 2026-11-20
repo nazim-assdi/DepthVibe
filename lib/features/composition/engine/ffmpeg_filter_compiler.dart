@@ -41,7 +41,10 @@ class FfmpegFilterCompiler {
     EffectDefinition definition,
     FfmpegAnimationCompiler animationCompiler,
   ) {
-    String parameterExpression(String parameterId) {
+    String parameterExpression(
+      String parameterId, {
+      String timeVariable = 'T',
+    }) {
       final definitionForParameter = definition.parameters.firstWhere(
         (parameter) => parameter.id == parameterId,
       );
@@ -52,7 +55,7 @@ class FfmpegFilterCompiler {
         tracks.isEmpty ? null : tracks.first,
         fallback: effect.parameters[parameterId] ??
             definitionForParameter.defaultValue,
-        timeVariable: 'T',
+        timeVariable: timeVariable,
       );
     }
 
@@ -84,10 +87,10 @@ class FfmpegFilterCompiler {
           'gh=${number(wheel('gain', 'g'))}:'
           'bh=${number(wheel('gain', 'b'))}:pl=1';
       final eq = 'eq='
-          "contrast='${parameterExpression('contrast')}':"
-          "brightness='${parameterExpression('brightness')}':"
-          "gamma='${parameterExpression('master_gamma')}':"
-          "saturation='${parameterExpression('saturation')}':"
+          "contrast='${parameterExpression('contrast', timeVariable: 't')}':"
+          "brightness='${parameterExpression('brightness', timeVariable: 't')}':"
+          "gamma='${parameterExpression('master_gamma', timeVariable: 't')}':"
+          "saturation='${parameterExpression('saturation', timeVariable: 't')}':"
           'eval=frame';
       return colorBalance + ',' + eq;
     }
