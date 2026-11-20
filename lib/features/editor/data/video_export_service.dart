@@ -10,6 +10,7 @@ import 'package:saver_gallery/saver_gallery.dart';
 import '../../media/data/gallery_permission_service.dart';
 
 import '../domain/editor_project.dart';
+import '../../fonts/data/font_manager_service.dart';
 
 typedef ExportProgress = void Function(double progress);
 
@@ -200,18 +201,40 @@ class VideoExportService {
 
     final title = project.title.trim();
     final caption = project.caption.trim();
+    final fontManager = FontManagerService.instance;
+    try {
+      await fontManager.ensureFontsLoaded(
+        family: fontManager.activeFamily,
+        path: fontManager.activeFontPath,
+        fallbackFamilies: fontManager.fallbackFamilies,
+      );
+    } catch (_) {
+      // Keep the platform's standard font fallback if a selected file disappeared.
+    }
+    final activeFamily = fontManager.activeFamily;
+    final fallbacks = fontManager.fallbackFamilies;
+    final titleDirection = RegExp(r'[\u0590-\u08FF\uFB1D-\uFEFF]')
+            .hasMatch(title)
+        ? TextDirection.rtl
+        : TextDirection.ltr;
+    final captionDirection = RegExp(r'[\u0590-\u08FF\uFB1D-\uFEFF]')
+            .hasMatch(caption)
+        ? TextDirection.rtl
+        : TextDirection.ltr;
     final titlePainter = TextPainter(
       text: TextSpan(
         text: title,
         style: TextStyle(
           color: Colors.white,
+          fontFamily: activeFamily,
+          fontFamilyFallback: fallbacks,
           fontSize: width * 0.046,
           fontWeight: FontWeight.w800,
           shadows: const [Shadow(color: Colors.black87, blurRadius: 10, offset: Offset(0, 3))],
         ),
       ),
       textAlign: TextAlign.center,
-      textDirection: TextDirection.ltr,
+      textDirection: titleDirection,
       maxLines: 2,
     )..layout(maxWidth: width * 0.84);
 
@@ -220,13 +243,15 @@ class VideoExportService {
         text: caption,
         style: TextStyle(
           color: const Color(0xFFE6E9F2),
+          fontFamily: activeFamily,
+          fontFamilyFallback: fallbacks,
           fontSize: width * 0.026,
           fontWeight: FontWeight.w500,
           shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
         ),
       ),
       textAlign: TextAlign.center,
-      textDirection: TextDirection.ltr,
+      textDirection: captionDirection,
       maxLines: 2,
     )..layout(maxWidth: width * 0.84);
 
