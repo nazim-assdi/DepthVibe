@@ -4,6 +4,12 @@ One creative studio. Five operating systems. One Flutter codebase.
 
 DepthVibe is an AI-first video, motion-design and 3D creative studio from N Tech. The primary application is Flutter for Android, iOS, Windows, macOS and Linux.
 
+## App appearance and DV branding
+
+Settings now includes **View** presets for **Dark**, **White** and **Eye Comfort**. The selection is saved on the device and updates the Video Studio and Compositor interface immediately. The same gradient **DV** mark and DepthVibe wordmark are used in both workspaces.
+
+Run the command bash tool/bootstrap_platforms.sh to generate the DV launcher assets for Android (including adaptive icons), iOS, macOS, Windows and Linux. The bootstrap also adds the Linux desktop entry and theme icon installation rules.
+
 ## Video Studio
 
 - Video import, device-camera recording and MediaKit preview.
@@ -26,7 +32,7 @@ DepthVibe is being developed as a combined nonlinear editor (NLE) and layer comp
 - Dedicated audio layers and embedded video audio streams are probed and mixed. Gain keyframes, pan, fade-in/out, trigger/background roles and sidechain ducking are available.
 - Brightness, contrast, saturation and gamma effect keyframes are evaluated per frame. The Color page includes per-layer Lift/Gamma/Gain/Offset wheels (including animated RGB wheel channels), Temperature/Tint, Contrast, Exposure, Master Gamma, Saturation, draggable Master/RGB curves, validated 3D `.cube` LUT import with Nearest/Trilinear/Tetrahedral/Pyramid/Prism interpolation, current-frame Luma Waveform/RGB Parade/Vectorscope, and Rec.709/HDR10 PQ/HLG output profiles. Primary wheel and curve operations compile to FFmpeg filters; the current live viewer grades decoded playhead frames with a fast matrix approximation. The export path uses FFmpeg colorbalance/geq/eq/curves/lut3d filters.
 - PSD/PSB import extracts visible raster layers to independent cached PNGs and keeps source metadata where available.
-- Global Font Manager scans installed TTF/OTF fonts on Windows, macOS and Linux (and readable Android system font folders), imports licensed font files, previews multilingual glyph samples, applies a global app font to Video Studio and Compositor, and stores ordered glyph fallback families for Bengali, Arabic, Devanagari, CJK, Thai, symbols and emoji where those fonts are installed.
+- Global Font Manager scans installed system fonts on Windows (including per-user installs), macOS, Linux and readable Android system font folders. It reads real font family/style names, provides a searchable Premiere-style font picker, and lists installed TTC collection faces. Licensed TTF/OTF files can be imported and applied globally or per Text layer; the same app font is used in Video Studio titles and Compositor. Ordered fallback families cover Bengali, Arabic, Devanagari, CJK, Thai, symbols and emoji where the glyph fonts are installed.
 - Text layers have per-layer font family, embedded font asset, fallback list, size, weight, italic, colour, letter spacing, line height, alignment and text-box width. `.dvproj` embeds the selected layer font or active app-default font, and final composition export shapes text with Flutter's text engine before compositing it through FFmpeg.
 - Portable `.dvproj` packages save the complete composition (layers, transforms, masks, effects, keyframes, transitions, audio buses and HDR output profile) with linked local media assets. Project autosave recovery snapshots run every 30 seconds when the document has unsaved changes; crash recovery offers a restore prompt, manual saves keep up to 10 previous versions, and missing local media can be relinked across all references. Recovery snapshots retain local asset paths; use `.dvproj` Save to embed assets for transfer to another device.
 - GLB/GLTF scene import retains node hierarchy, UV0, normals, animation, metallic/roughness factors and decoded base-colour, metallic-roughness, normal, occlusion and emissive texture payloads. CPU preview samples base colour and applies KHR_texture_transform on UV0; auxiliary PBR maps are imported but not yet shaded.
@@ -39,9 +45,11 @@ Compositor editing also has bounded in-memory Undo/Redo history (80 document sta
 
 ## Global font system
 
-Open the Font Manager from the Compositor toolbar. Import TrueType `.ttf` and OpenType `.otf` files, choose a default font for the full application, manage the ordered glyph fallback chain, and select different fonts per text layer. The text renderer uses Flutter's paragraph/shaping engine for Unicode and bidirectional layout, then exports transparent text PNGs into the FFmpeg composition graph. Project saves embed the chosen font file so its family can be loaded on another computer. See the [Global Font Manager guide](docs/FONTS.md) for supported locations, file types and licensing limits.
+Open the searchable Font Manager from the Video Studio or Compositor toolbar. The picker uses actual installed family/style metadata (for example, family plus Bold/Italic), rather than displaying only font file names. Windows discovery covers both the machine Fonts folder and the current user's LocalAppData Fonts folder. macOS/Linux system and user font folders are scanned too. Installed TrueType Collection (.ttc) files are enumerated face-by-face and use the OS font family.
 
-Flutter's runtime `FontLoader` accepts TTF/OTF byte streams; this workflow does not directly import WOFF/WOFF2 or TTC collections. The repository does not bundle every world's font and cannot grant font licences. Device/system fonts and fonts supplied by the user are available subject to platform access and each font's licence. A fallback family only works when its font is present on the device or embedded/loaded by the project; missing glyphs can still display as boxes.
+Import one licensed TTF/OTF file or bulk-import a folder (up to 2,000 candidate files and 1 GiB per operation). TTC is discovered as a system-installed font but is not copied into the app because Flutter's runtime FontLoader only accepts TTF/OTF. The app does not include every world's font and cannot bypass font licences. See the Global Font Manager guide (docs/FONTS.md).
+
+Settings > View provides Dark, White and Eye Comfort appearance presets. The selected appearance applies to Video Studio and Compositor and is persisted on the device.
 
 ## Renderer boundaries
 
