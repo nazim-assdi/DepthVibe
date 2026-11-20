@@ -1653,97 +1653,150 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
   }
 
 
-  Widget _buildColorPanel(CompositionLayer layer) {
-    final matches = layer.effects.where(
-      (effect) => effect.effectId == 'color_grade',
+  Future<void> _importColorLut() async {
+    try {
+      final picked = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['cube'],
+      );
+      if (picked == null) return;
+      final sourcePath = picked.path;
+      if (sourcePath == null || sourcePath.isEmpty) {
+        throw StateError('The selected file has no readable local path.');
+      }
+      final source = File(sourcePath);
+      final info = CubeLutValidator.parse(await source.readAsString());
+      final documents = await getApplicationDocumentsDirectory();
+      final lutDirectory = Directory(
+        documents.path + Platform.pathSeparator +
+            'DepthVibe' + Platform.pathSeparator + 'LUTs',
+      );
+      await lutDirectory.create(recursive: true);
+      final safeName = picked.name.replaceAll(
+        RegExp(r'[^a-zA-Z0-9._-]'),
+        '_',
+      );
+      final target = File(
+        lutDirectory.path + Platform.pathSeparator +
+            DateTime.now().millisecondsSinceEpoch.toString() + '_' + safeName,
+      );
+      final imported = await source.copy(target.path);
+
+      var effect = _selected?.effects
+          .where((item) => item.effectId == 'color_lut')
+          .firstOrNull;
+      if (effect == null) {
+        _controller.addEffect('color_lut');
+        effect = _selected?.effects
+            .where((item) => item.effectId == 'color_lut')
+            .lastOrNull;
+      }
+      if (effect == null) {
+        throw StateError('Could not attach the LUT to the selected layer.');
+      }
+      _controller.setEffectAssetUri(effect.id, imported.path);
+      if (mounted) {
+        setState(() {
+          _notice = 'Imported ' + info.title + ' · ' +
+              info.size.toString() + '³ LUT · ' +
+              info.entryCount.toString() + ' samples';
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _notice = '3D LUT import failed: ' + error.toString());
+      }
+    }
+  }
+
+  Widget _buildColorScopes(
+    CompositionLayer layer,
+    EffectInstance? grade,
+    int timeMs,
+  ) {
+    return FutureBuilder<img.Image?>(
+      future: _scopeImageFor(
+        layer,
+        timeMs,
+        _controller.document.frameRate,
+      ),
+      builder: (context, snapshot) {
+        final image = snapshot.data;
+        if (image == null) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _panelHeader('VIDEO SCOPES', Icons.multiline_chart),
+              Text(
+                snapshot.connectionState == ConnectionState.waiting
+                    ? 'Reading the current frame for scopes…'
+                    : 'Select an active video or image layer to inspect its pixel scopes.',
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Color(0xFF9BAAC1),
+                ),
+              ),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _panelHeader('VIDEO SCOPES', Icons.multiline_chart),
+            ColorScopesView(
+              image: image,
+              mode: ColorScopeMode.waveform,
+              grade: grade,
+              timeMs: timeMs,
+            ),
+            const SizedBox(height: 7),
+            ColorScopesView(
+              image: image,
+              mode: ColorScopeMode.rgbParade,
+              grade: grade,
+              timeMs: timeMs,
+            ),
+            const SizedBox(height: 7),
+            ColorScopesView(
+              image: image,
+              mode: ColorScopeMode.vectorscope,
+              grade: grade,
+              timeMs: timeMs,
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              'Scopes use the current decoded frame and the primary-wheel preview approximation. Curves and LUT data are not yet included in the scope calculations.',
+              style: TextStyle(fontSize: 9, color: Color(0xFF8190A8)),
+            ),
+          ],
+        );
+      },
     );
-    final grade = matches.isEmpty ? null : matches.first;
+  }
+
+  Widget _buildColorPanel(CompositionLayer layer) {
+    final grade = layer.effects
+        .where((effect) => effect.effectId == 'color_grade')
+        .firstOrNull;
+    final curves = layer.effects
+        .where((effect) => effect.effectId == 'color_curves')
+        .firstOrNull;
+    final lut = layer.effects
+        .where((effect) => effect.effectId == 'color_lut')
+        .firstOrNull;
     final definition = EffectCatalog.find('color_grade')!;
     final playheadMs = _controller.document.playheadMs;
-
-    if (grade == null) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _panelHeader('COLOR PAGE', Icons.color_lens),
-          const Text(
-            'Build a primary grade with Lift, Gamma, Gain and Offset wheels, then refine contrast, exposure, white balance and saturation.',
-            style: TextStyle(fontSize: 11, color: Color(0xFF9DABC3)),
-          ),
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: () => _controller.addEffect('color_grade'),
-            icon: const Icon(Icons.add),
-            label: const Text('ADD PRIMARY COLOR GRADE'),
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'The grade is stored on the selected layer and included in the FFmpeg composition export.',
-            style: TextStyle(fontSize: 10, color: Color(0xFF8190A8)),
-          ),
-        ],
-      );
-    }
+    final outputProfile = _controller.document.colorOutputProfile;
 
     double value(String id) {
       final parameter = definition.parameters.firstWhere(
         (item) => item.id == id,
       );
-      return grade.parameterAt(
+      return grade!.parameterAt(
         id,
         playheadMs,
         fallback: parameter.defaultValue,
       ).clamp(parameter.min, parameter.max).toDouble();
-    }
-
-    Widget wheelCard(String title, String prefix) {
-      return SizedBox(
-        width: 136,
-        child: Card(
-          color: const Color(0xFF182231),
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 9),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title.toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.7,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                ColorWheelControl(
-                  diameter: 112,
-                  red: value('${prefix}_r'),
-                  green: value('${prefix}_g'),
-                  blue: value('${prefix}_b'),
-                  onChanged: (wheel) {
-                    _controller.setEffectParameter(
-                      grade.id,
-                      '${prefix}_r',
-                      wheel.red,
-                    );
-                    _controller.setEffectParameter(
-                      grade.id,
-                      '${prefix}_g',
-                      wheel.green,
-                    );
-                    _controller.setEffectParameter(
-                      grade.id,
-                      '${prefix}_b',
-                      wheel.blue,
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
     }
 
     Widget gradeSlider({
@@ -1754,8 +1807,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       required bool keyframeable,
     }) {
       final current = value(id);
-      final hasTrack = grade.keyframeTracks.any(
-        (track) => track.property == id,
+      final hasTrack = grade!.keyframeTracks.any(
+        (track) => track.property == id && track.enabled,
       );
       return Padding(
         padding: const EdgeInsets.only(bottom: 5),
@@ -1767,7 +1820,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                 Expanded(
                   child: Text(
                     label,
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 Text(
@@ -1780,9 +1836,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                 if (keyframeable)
                   IconButton(
                     visualDensity: VisualDensity.compact,
-                    tooltip: 'Animate $label',
+                    tooltip: 'Add ' + label + ' keyframe',
                     onPressed: () => _controller.addEffectKeyframe(
-                      grade.id,
+                      grade!.id,
                       id,
                     ),
                     icon: Icon(
@@ -1800,7 +1856,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
               max: max,
               value: current,
               onChanged: (nextValue) => _controller.setEffectParameter(
-                grade.id,
+                grade!.id,
                 id,
                 nextValue,
                 keyframe: keyframeable && hasTrack,
@@ -1811,107 +1867,333 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
       );
     }
 
+    Widget wheelCard(String title, String prefix) {
+      final ids = [
+        prefix + '_r',
+        prefix + '_g',
+        prefix + '_b',
+      ];
+      final hasWheelTrack = grade!.keyframeTracks.any(
+        (track) => ids.contains(track.property) && track.enabled,
+      );
+      return SizedBox(
+        width: 142,
+        child: Card(
+          color: const Color(0xFF182231),
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.7,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(
+                        minWidth: 26,
+                        minHeight: 26,
+                      ),
+                      padding: EdgeInsets.zero,
+                      tooltip: 'Animate ' + title + ' wheel',
+                      onPressed: () {
+                        for (final id in ids) {
+                          _controller.addEffectKeyframe(grade!.id, id);
+                        }
+                      },
+                      icon: Icon(
+                        Icons.diamond,
+                        size: 14,
+                        color: hasWheelTrack
+                            ? const Color(0xFFB8A4FF)
+                            : const Color(0xFF8290A8),
+                      ),
+                    ),
+                  ],
+                ),
+                ColorWheelControl(
+                  diameter: 112,
+                  red: value(prefix + '_r'),
+                  green: value(prefix + '_g'),
+                  blue: value(prefix + '_b'),
+                  onChanged: (wheel) {
+                    _controller.setEffectParameter(
+                      grade!.id,
+                      prefix + '_r',
+                      wheel.red,
+                      keyframe: hasWheelTrack,
+                    );
+                    _controller.setEffectParameter(
+                      grade!.id,
+                      prefix + '_g',
+                      wheel.green,
+                      keyframe: hasWheelTrack,
+                    );
+                    _controller.setEffectParameter(
+                      grade!.id,
+                      prefix + '_b',
+                      wheel.blue,
+                      keyframe: hasWheelTrack,
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final curveValues = [
+      for (var index = 0; index < 5; index++)
+        curves?.parameters[_curveChannel + '_' + index.toString()] ??
+            index * 0.25,
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(child: _panelHeader('PRIMARY COLOR GRADE', Icons.color_lens)),
-            Switch(
-              value: grade.enabled,
-              onChanged: (enabled) => _controller.setEffectEnabled(
-                grade.id,
-                enabled,
+        _panelHeader('COLOR PAGE · PRIMARY & SECONDARY', Icons.color_lens),
+        if (grade == null)
+          FilledButton.icon(
+            onPressed: () => _controller.addEffect('color_grade'),
+            icon: const Icon(Icons.add),
+            label: const Text('ADD PRIMARY COLOR GRADE'),
+          )
+        else ...[
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'PRIMARY WHEELS',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+                ),
+              ),
+              Switch(
+                value: grade.enabled,
+                onChanged: (enabled) => _controller.setEffectEnabled(
+                  grade.id,
+                  enabled,
+                ),
+              ),
+            ],
+          ),
+          const Text(
+            'Lift · Gamma · Gain · Offset — drag a wheel to shift RGB balance. The diamond creates keyframes for all three channels.',
+            style: TextStyle(fontSize: 10, color: Color(0xFF9DABC3)),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              wheelCard('Lift', 'lift'),
+              wheelCard('Gamma', 'gamma'),
+              wheelCard('Gain', 'gain'),
+              wheelCard('Offset', 'offset'),
+            ],
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () {
+                for (final prefix in const [
+                  'lift',
+                  'gamma',
+                  'gain',
+                  'offset',
+                ]) {
+                  for (final channel in const ['r', 'g', 'b']) {
+                    _controller.setEffectParameter(
+                      grade.id,
+                      prefix + '_' + channel,
+                      0,
+                    );
+                  }
+                }
+                _controller.setEffectParameter(grade.id, 'temperature', 0);
+                _controller.setEffectParameter(grade.id, 'tint', 0);
+              },
+              icon: const Icon(Icons.restart_alt, size: 15),
+              label: const Text(
+                'Reset Wheels',
+                style: TextStyle(fontSize: 10),
               ),
             ),
-          ],
-        ),
-        const Text(
-          'Lift controls shadows · Gamma controls midtones · Gain controls highlights · Offset applies a global balance.',
-          style: TextStyle(fontSize: 10, color: Color(0xFF9DABC3)),
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            wheelCard('Lift', 'lift'),
-            wheelCard('Gamma', 'gamma'),
-            wheelCard('Gain', 'gain'),
-            wheelCard('Offset', 'offset'),
-          ],
-        ),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton.icon(
-            onPressed: () {
-              for (final prefix in const ['lift', 'gamma', 'gain', 'offset']) {
-                for (final channel in const ['r', 'g', 'b']) {
-                  _controller.setEffectParameter(
-                    grade.id,
-                    '${prefix}_${channel}',
-                    0,
-                  );
-                }
+          ),
+          const Divider(color: Color(0xFF29354A)),
+          _panelHeader('PRIMARY CONTROLS', Icons.tune),
+          gradeSlider(
+            id: 'contrast',
+            label: 'Contrast',
+            min: 0,
+            max: 3,
+            keyframeable: true,
+          ),
+          gradeSlider(
+            id: 'brightness',
+            label: 'Exposure / Brightness',
+            min: -1,
+            max: 1,
+            keyframeable: true,
+          ),
+          gradeSlider(
+            id: 'master_gamma',
+            label: 'Master Gamma',
+            min: 0.1,
+            max: 3,
+            keyframeable: true,
+          ),
+          gradeSlider(
+            id: 'saturation',
+            label: 'Saturation',
+            min: 0,
+            max: 3,
+            keyframeable: true,
+          ),
+          const Divider(color: Color(0xFF29354A)),
+          _panelHeader('WHITE BALANCE', Icons.wb_sunny_outlined),
+          gradeSlider(
+            id: 'temperature',
+            label: 'Temperature · Cool / Warm',
+            min: -1,
+            max: 1,
+            keyframeable: false,
+          ),
+          gradeSlider(
+            id: 'tint',
+            label: 'Tint · Green / Magenta',
+            min: -1,
+            max: 1,
+            keyframeable: false,
+          ),
+        ],
+        const Divider(color: Color(0xFF29354A)),
+        _panelHeader('CUSTOM RGB CURVES', Icons.show_chart),
+        if (curves == null)
+          OutlinedButton.icon(
+            onPressed: () => _controller.addEffect('color_curves'),
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('ADD MASTER / RGB CURVES'),
+          )
+        else ...[
+          DropdownButtonFormField<String>(
+            initialValue: _curveChannel,
+            decoration: const InputDecoration(
+              labelText: 'Curve channel',
+              isDense: true,
+            ),
+            items: const [
+              DropdownMenuItem(value: 'master', child: Text('Master / Luma')),
+              DropdownMenuItem(value: 'red', child: Text('Red')),
+              DropdownMenuItem(value: 'green', child: Text('Green')),
+              DropdownMenuItem(value: 'blue', child: Text('Blue')),
+            ],
+            onChanged: (channel) => setState(
+              () => _curveChannel = channel ?? 'master',
+            ),
+          ),
+          const SizedBox(height: 8),
+          ColorCurveEditor(
+            values: curveValues,
+            onChanged: (values) {
+              for (var index = 0; index < values.length; index++) {
+                _controller.setEffectParameter(
+                  curves.id,
+                  _curveChannel + '_' + index.toString(),
+                  values[index],
+                );
               }
-              _controller.setEffectParameter(grade.id, 'temperature', 0);
-              _controller.setEffectParameter(grade.id, 'tint', 0);
             },
-            icon: const Icon(Icons.restart_alt, size: 15),
-            label: const Text('Reset Wheels', style: TextStyle(fontSize: 10)),
+          ),
+          const Text(
+            'Curves are compiled into FFmpeg export. They are not yet included in the live preview transform.',
+            style: TextStyle(fontSize: 9, color: Color(0xFF8190A8)),
+          ),
+        ],
+        const Divider(color: Color(0xFF29354A)),
+        _panelHeader('3D LUT MANAGEMENT', Icons.palette_outlined),
+        if (lut?.assetUri != null)
+          Row(
+            children: [
+              const Icon(
+                Icons.check_circle,
+                color: Color(0xFF73D6B2),
+                size: 15,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  lut!.assetUri!.split(Platform.pathSeparator).last,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10),
+                ),
+              ),
+              Switch(
+                value: lut.enabled,
+                onChanged: (enabled) => _controller.setEffectEnabled(
+                  lut.id,
+                  enabled,
+                ),
+              ),
+            ],
+          )
+        else
+          const Text(
+            'Import a validated 3D .cube LUT. The table is applied by the native FFmpeg export filter.',
+            style: TextStyle(fontSize: 10, color: Color(0xFF9DABC3)),
+          ),
+        OutlinedButton.icon(
+          onPressed: _importColorLut,
+          icon: const Icon(Icons.file_upload_outlined, size: 16),
+          label: Text(
+            lut?.assetUri == null ? 'IMPORT .CUBE LUT' : 'REPLACE LUT',
           ),
         ),
         const Divider(color: Color(0xFF29354A)),
-        _panelHeader('PRIMARY CONTROLS', Icons.tune),
-        gradeSlider(
-          id: 'contrast',
-          label: 'Contrast',
-          min: 0,
-          max: 3,
-          keyframeable: true,
+        _panelHeader('HDR COLOR OUTPUT', Icons.hdr_on),
+        DropdownButtonFormField<ColorOutputProfile>(
+          initialValue: outputProfile,
+          decoration: const InputDecoration(
+            labelText: 'Composition output profile',
+            isDense: true,
+          ),
+          items: const [
+            DropdownMenuItem(
+              value: ColorOutputProfile.rec709,
+              child: Text('SDR · Rec.709 · 8-bit MP4'),
+            ),
+            DropdownMenuItem(
+              value: ColorOutputProfile.hdr10Pq,
+              child: Text('HDR10 · BT.2020 · PQ · 10-bit MOV'),
+            ),
+            DropdownMenuItem(
+              value: ColorOutputProfile.hlg,
+              child: Text('HLG · BT.2020 · 10-bit MOV'),
+            ),
+          ],
+          onChanged: (profile) {
+            if (profile != null) _controller.setColorOutputProfile(profile);
+          },
         ),
-        gradeSlider(
-          id: 'brightness',
-          label: 'Exposure / Brightness',
-          min: -1,
-          max: 1,
-          keyframeable: true,
-        ),
-        gradeSlider(
-          id: 'master_gamma',
-          label: 'Master Gamma',
-          min: 0.1,
-          max: 3,
-          keyframeable: true,
-        ),
-        gradeSlider(
-          id: 'saturation',
-          label: 'Saturation',
-          min: 0,
-          max: 3,
-          keyframeable: true,
+        const SizedBox(height: 5),
+        const Text(
+          'HDR modes export a Rec.709-to-BT.2020 PQ/HLG mapped ProRes 422 HQ 10-bit file. This is an SDR-to-HDR mapping, not native scene-referred HDR mastering; source highlight detail and dynamic HDR metadata are not created.',
+          style: TextStyle(fontSize: 9, color: Color(0xFFE1C28B)),
         ),
         const Divider(color: Color(0xFF29354A)),
-        _panelHeader('WHITE BALANCE', Icons.wb_sunny_outlined),
-        gradeSlider(
-          id: 'temperature',
-          label: 'Temperature · Cool / Warm',
-          min: -1,
-          max: 1,
-          keyframeable: false,
-        ),
-        gradeSlider(
-          id: 'tint',
-          label: 'Tint · Green / Magenta',
-          min: -1,
-          max: 1,
-          keyframeable: false,
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Export applies the grade to the selected layer. Contrast, brightness, master gamma and saturation keyframes evaluate per frame. Primary wheel and white-balance changes are currently static. Live viewer grading, waveform / parade / vectorscope, LUT management, HDR color management and GPU preview parity are still in development.',
-          style: TextStyle(fontSize: 10, color: Color(0xFF8190A8)),
-        ),
+        _buildColorScopes(layer, grade, playheadMs),
       ],
     );
   }
