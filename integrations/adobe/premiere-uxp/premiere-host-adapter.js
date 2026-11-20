@@ -41,6 +41,36 @@ async function captureEffects(trackItem) {
   return effects;
 }
 
+async function captureTrackTransitions(track) {
+  const transitionType = premiere.Constants && premiere.Constants.TrackItemType
+    ? premiere.Constants.TrackItemType.TRANSITION : undefined;
+  if (transitionType === undefined) return [];
+  const items = await optional(
+    async () => track.getTrackItems(transitionType, false),
+    []
+  );
+  const transitions = [];
+  for (let index = 0; index < Math.min(items.length || 0, 256); index += 1) {
+    const item = items[index];
+    const values = await Promise.all([
+      optional(() => item.getName(), item.name || "Premiere Transition"),
+      optional(() => item.getMatchName(), ""),
+      optional(() => item.getStartTime()),
+      optional(() => item.getDuration()),
+      optional(() => item.getEndTime())
+    ]);
+    transitions.push({
+      id: typeof item.getId === "function" ? await optional(() => item.getId()) : null,
+      name: String(values[0] || "Premiere Transition"),
+      matchName: String(values[1] || values[0] || ""),
+      startSeconds: secondsOf(values[2]),
+      durationSeconds: secondsOf(values[3]),
+      endSeconds: secondsOf(values[4])
+    });
+  }
+  return transitions;
+}
+
 async function captureTrackItems(track, trackType) {
   const trackItems = await optional(
     async () => track.getTrackItems(premiere.Constants.TrackItemType.CLIP, false),
@@ -119,7 +149,8 @@ async function capturePremiereSequence() {
         id: track.id,
         name: track.name,
         muted: false,
-        clips: await captureTrackItems(track, "video")
+        clips: await captureTrackItems(track, "video"),
+        transitions: await captureTrackTransitions(track)
       });
     } catch (error) {
       trackWarnings.push("Video track " + index + ": " + String(error));
@@ -142,6 +173,16 @@ async function capturePremiereSequence() {
     }
   }
 
+  const transitionFactory = premiere.TransitionFactory;
+  const installedVideoTransitions = await optional(
+    () => transitionFactory.getVideoTransitionMatchNames(),
+    []
+  );
+  const installedTransitionNames = Array.isArray(installedVideoTransitions)
+    ? installedVideoTransitions.map((item) => typeof item === "string"
+        ? item : (item && (item.matchName || item.name))
+          ? String(item.matchName || item.name) : "").filter(Boolean)
+    : [];
   const hostVersion = host && host.version ? host.version : "Unknown";
   return {
     schemaVersion: 1,
@@ -177,6 +218,7 @@ async function capturePremiereSequence() {
       },
       videoTracks: videoTracks,
       audioTracks: audioTracks,
+      installedVideoTransitions: installedTransitionNames,
       warnings: trackWarnings,
       transferScope: "metadata-only; media files and native effects are not copied"
     }

@@ -45,6 +45,26 @@ class AdobeInterchangeService {
     throw FormatException('Unsupported Adobe host: '+host);
   }
 
+  static TransitionKind _premiereTransitionKind(String name) {
+    final value = name.toLowerCase();
+    if (value.contains('dip to black') || value.contains('dip to white') ||
+        value.contains('fade through')) return TransitionKind.fadeThroughColor;
+    if (value.contains('wipe')) {
+      if (value.contains('left')) return TransitionKind.wipeLeft;
+      if (value.contains('right')) return TransitionKind.wipeRight;
+      if (value.contains('up')) return TransitionKind.wipeUp;
+      if (value.contains('down')) return TransitionKind.wipeDown;
+    }
+    if (value.contains('slide')) {
+      if (value.contains('left')) return TransitionKind.slideLeft;
+      if (value.contains('right')) return TransitionKind.slideRight;
+      if (value.contains('up')) return TransitionKind.slideUp;
+      if (value.contains('down')) return TransitionKind.slideDown;
+    }
+    if (value.contains('radial') || value.contains('iris')) return TransitionKind.radial;
+    return TransitionKind.dissolve;
+  }
+
   static AdobeImportReport _premiere(Map<String,Object?> payload){
     final seq=_map(payload['sequence']),warnings=<String>[],mapped=<String>[],unsupported=<String>[];
     final used=<String>{},layers=<CompositionLayer>[];
@@ -87,11 +107,55 @@ class AdobeInterchangeService {
         if(path==null&&!audio)warnings.add('Missing media: '+name+' (use Relink).');
       }
     }
+    final importedTransitions = <CompositionTransition>[];
+    for (final entry in tracks.where((item) => !item.audio)) {
+      final trackIndex = _i(entry.t['index']);
+      final trackLayers = layers.where((layer) =>
+        layer.kind != LayerKind.audio &&
+        _i(layer.interchangeMetadata['trackIndex'], -1) == trackIndex).toList()
+        ..sort((a,b) => a.startMs.compareTo(b.startMs));
+      final sourceTransitions = _maps(entry.t['transitions']);
+      for (var ti = 0; ti < sourceTransitions.length; ti++) {
+        final raw = sourceTransitions[ti];
+        if (trackLayers.length < 2) {
+          warnings.add('Premiere transition could not be attached: ' + _s(raw['name'], 'Transition'));
+          continue;
+        }
+        final startMs = _ms(raw['startSeconds']);
+        final durationMs = _ms(raw['durationSeconds'], 500).clamp(1, 60000).toInt();
+        var pairIndex = 0, bestDistance = 1 << 62;
+        for (var pair = 0; pair < trackLayers.length - 1; pair++) {
+          final distance = (trackLayers[pair + 1].startMs - startMs).abs();
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            pairIndex = pair;
+          }
+        }
+        final name = _s(raw['name'], 'Premiere Transition');
+        final matchName = _s(raw['matchName'], name);
+        importedTransitions.add(CompositionTransition(
+          id: _id('premiere_transition', _s(raw['id'], '$trackIndex-$ti'), ti, used),
+          fromLayerId: trackLayers[pairIndex].id,
+          toLayerId: trackLayers[pairIndex + 1].id,
+          kind: _premiereTransitionKind(name + ' ' + matchName),
+          startMs: startMs,
+          durationMs: durationMs,
+          externalMatchName: matchName,
+          metadata: {
+            'hostApp': 'premierepro',
+            'trackIndex': trackIndex,
+            'sourceName': name,
+            'sourceTransition': raw,
+          },
+        ));
+      }
+    }
     final seqDuration=_ms(seq['durationSeconds']),project=_map(payload['project']);
     if(layers.isEmpty)warnings.add('No clips found in active Premiere sequence.');
     return AdobeImportReport(document:CompositionDocument(
       name:_s(seq['name'],_s(project['name'],'Premiere Sequence')),width:_dim(seq['width'],1920),
-      height:_dim(seq['height'],1080),frameRate:fps,durationMs:(seqDuration>0?seqDuration:maxEnd).clamp(1,86400000).toInt(),layers:layers),
+      height:_dim(seq['height'],1080),frameRate:fps,durationMs:(seqDuration>0?seqDuration:maxEnd).clamp(1,86400000).toInt(),
+      layers:layers,transitions:importedTransitions),
       mappedEffects:mapped,unsupportedEffects:unsupported,warnings:warnings);
   }
 
@@ -546,6 +610,46 @@ class AdobeInterchangeService {
      if(propertyName) applyScalarTrack(added.property(propertyName),track);
     }
    }catch(err){warnings.push(x.name+": effect skipped "+String(err));}
+  }
+  // Try the exact native matchName for source effects without a DepthVibe map.
+  // The target host must have the same plug-in installed; expressions are never run.
+  var rawEffects=layerMeta.unsupportedEffects||[];
+  for(var rawIndex=0;rawIndex<rawEffects.length;rawIndex++) {
+   var rawEffect=rawEffects[rawIndex],rawMatch=rawEffect.matchName||rawEffect.name;
+   try {
+    var currentParade=made[x.id].property("ADBE Effect Parade");
+    if(!rawMatch||!currentParade||!currentParade.canAddProperty(rawMatch)) {
+     warnings.push(x.name+": unavailable native effect "+String(rawMatch||"unknown"));
+     continue;
+    }
+    var nativeEffect=currentParade.addProperty(rawMatch);
+    try { nativeEffect.enabled=rawEffect.enabled!==false; } catch(_){}
+    var rawProperties=rawEffect.properties||[];
+    for(var rawPropertyIndex=0;rawPropertyIndex<rawProperties.length;rawPropertyIndex++) {
+     var rawProperty=rawProperties[rawPropertyIndex],targetProperty=null;
+     try { if(rawProperty.matchName) targetProperty=nativeEffect.property(rawProperty.matchName); } catch(_){}
+     try { if(!targetProperty&&rawProperty.name) targetProperty=nativeEffect.property(rawProperty.name); } catch(_){}
+     if(!targetProperty) continue;
+     if(typeof rawProperty.value==="number" ||
+        (rawProperty.value instanceof Array && rawProperty.value.length>0)) {
+      try { if(!targetProperty.isTimeVarying) targetProperty.setValue(rawProperty.value); } catch(_){}
+     }
+     if(rawProperty.keyframes && rawProperty.keyframes.length) {
+      var normalizedFrames=[];
+      for(var rfi=0;rfi<rawProperty.keyframes.length;rfi++) {
+       var sourceKey=rawProperty.keyframes[rfi],curveMeta={};
+       var curveKeys=["inInterpolation","outInterpolation","inTemporalEase","outTemporalEase",
+        "inSpatialTangent","outSpatialTangent","roving","spatialAutoBezier",
+        "spatialContinuous","temporalAutoBezier","temporalContinuous"];
+       for(var ck=0;ck<curveKeys.length;ck++) if(sourceKey[curveKeys[ck]]!==undefined)
+        curveMeta[curveKeys[ck]]=sourceKey[curveKeys[ck]];
+       normalizedFrames.push({timeMs:sourceKey.timeMs,value:sourceKey.value,
+        interpolation:sourceKey.interpolation,metadata:curveMeta});
+      }
+      applyScalarTrack(targetProperty,{property:rawProperty.name||rawProperty.matchName,keyframes:normalizedFrames});
+     }
+    }
+   } catch(nativeError) { warnings.push(x.name+": native effect "+String(rawMatch)+" skipped: "+String(nativeError)); }
   }
  }
  for(var j=0;j<d.layers.length;j++){var x=d.layers[j];if(x.parentId&&made[x.parentId]&&made[x.id])try{made[x.id].parent=made[x.parentId];}catch(_){}}

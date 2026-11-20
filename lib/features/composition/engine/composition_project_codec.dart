@@ -100,6 +100,8 @@ class CompositionProjectCodec {
             'kind': item.kind.name,
             'durationMs': item.durationMs,
             'startMs': item.startMs,
+            'externalMatchName': item.externalMatchName,
+            'metadata': item.metadata,
           }).toList(),
       'audioBuses': document.audioBuses.map(_encodeAudioBus).toList(),
       'playheadMs': document.playheadMs,
@@ -227,6 +229,8 @@ class CompositionProjectCodec {
         ),
         durationMs: _integer(item['durationMs'], 500),
         startMs: _integer(item['startMs'], 0),
+        externalMatchName: _optionalString(item['externalMatchName']),
+        metadata: _safeMetadata(item['metadata']),
       );
     }).toList();
 

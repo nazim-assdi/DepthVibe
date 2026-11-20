@@ -72,6 +72,10 @@ async function captureSequence() {
     sequence: snapshot.payload.sequence.name,
     videoTracks: snapshot.payload.videoTracks.length,
     audioTracks: snapshot.payload.audioTracks.length,
+    installedVideoTransitions: (snapshot.payload.installedVideoTransitions || []).length,
+    appliedVideoTransitions: snapshot.payload.videoTracks.reduce(
+      function (count, track) { return count + (track.transitions || []).length; }, 0
+    ),
     capturedClips: snapshot.payload.videoTracks.reduce(
       function (count, track) { return count + track.clips.length; }, 0
     ) + snapshot.payload.audioTracks.reduce(
