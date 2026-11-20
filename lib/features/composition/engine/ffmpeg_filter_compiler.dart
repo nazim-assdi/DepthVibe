@@ -59,8 +59,86 @@ class FfmpegFilterCompiler {
       );
     }
 
+    if (id == 'color_lut') {
+      final path = effect.assetUri;
+      if (path == null || path.trim().isEmpty) return null;
+      final escaped = path
+          .replaceAll('\\', '\\\\')
+          .replaceAll(':', '\\:')
+          .replaceAll("'", "\\'");
+      return "lut3d=file='$escaped':interp=trilinear";
+    }
+
+    if (id == 'color_curves') {
+      String curve(String channel) {
+        final points = <String>[];
+        for (var index = 0; index < 5; index++) {
+          final parameterId = '${channel}_${index}';
+          final parameter = definition.parameters.firstWhere(
+            (item) => item.id == parameterId,
+          );
+          final value = (effect.parameters[parameterId] ??
+                  parameter.defaultValue)
+              .clamp(0.0, 1.0)
+              .toDouble();
+          points.add(
+            '${(index * 0.25).toStringAsFixed(2)}/'
+            '${value.toStringAsFixed(3)}',
+          );
+        }
+        return points.join(' ');
+      }
+
+      return "curves=master='${curve('master')}':"
+          "r='${curve('red')}':"
+          "g='${curve('green')}':"
+          "b='${curve('blue')}':interp=natural";
+    }
+
     if (id == 'color_grade') {
-      double wheel(String band, String channel) {
+      const wheelProperties = [
+        'lift_r', 'lift_g', 'lift_b',
+        'gamma_r', 'gamma_g', 'gamma_b',
+        'gain_r', 'gain_g', 'gain_b',
+        'offset_r', 'offset_g', 'offset_b',
+      ];
+      final animatedWheels = effect.keyframeTracks.any(
+        (track) => wheelProperties.contains(track.property) &&
+            track.enabled &&
+            track.keyframes.isNotEmpty,
+      );
+      String wheelExpression(String key) =>
+          parameterExpression(key, timeVariable: 't');
+
+      String animatedWheelChannel(String channel) {
+        final luma = '((0.2126*r(X,Y)+0.7152*g(X,Y)+0.0722*b(X,Y))/255)';
+        final lift = wheelExpression('lift_$channel');
+        final gamma = wheelExpression('gamma_$channel');
+        final gain = wheelExpression('gain_$channel');
+        final offset = wheelExpression('offset_$channel');
+        final temperature = wheelExpression('temperature');
+        final tint = wheelExpression('tint');
+        final whiteBalance = switch (channel) {
+          'r' => '(($temperature)*0.35-($tint)*0.15)',
+          'g' => '(($tint)*0.35)',
+          _ => '(-($temperature)*0.35-($tint)*0.15)',
+        };
+        final adjustment =
+            '(($lift*(1-$luma)+$gamma*4*$luma*(1-$luma)+'
+            '$gain*$luma+$offset+$whiteBalance)*128)';
+        return "clip(${channel}(X,Y)+$adjustment,0,255)";
+      }
+
+      String number(double value) => value.toStringAsFixed(3);
+      String colorBalance;
+      if (animatedWheels) {
+        colorBalance = 'format=rgba,geq='
+            "r='${animatedWheelChannel('r')}':"
+            "g='${animatedWheelChannel('g')}':"
+            "b='${animatedWheelChannel('b')}':"
+            "a='alpha(X,Y)'";
+      } else {
+        double wheel(String band, String channel) {
         final bandValue = effect.parameters['${band}_${channel}'] ?? 0;
         final offset = effect.parameters['offset_$channel'] ?? 0;
         final temperature = effect.parameters['temperature'] ?? 0;
@@ -76,7 +154,8 @@ class FfmpegFilterCompiler {
       }
 
       String number(double value) => value.toStringAsFixed(3);
-      final colorBalance = 'colorbalance='
+      if (!animatedWheels) {
+        colorBalance = 'colorbalance='
           'rs=${number(wheel('lift', 'r'))}:'
           'gs=${number(wheel('lift', 'g'))}:'
           'bs=${number(wheel('lift', 'b'))}:'
@@ -86,6 +165,7 @@ class FfmpegFilterCompiler {
           'rh=${number(wheel('gain', 'r'))}:'
           'gh=${number(wheel('gain', 'g'))}:'
           'bh=${number(wheel('gain', 'b'))}:pl=1';
+      }
       final eq = 'eq='
           "contrast='${parameterExpression('contrast', timeVariable: 't')}':"
           "brightness='${parameterExpression('brightness', timeVariable: 't')}':"
