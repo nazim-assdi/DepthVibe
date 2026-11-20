@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../data/extension_manager_service.dart';
 
@@ -37,16 +38,33 @@ class _ExtensionManagerScreenState extends State<ExtensionManagerScreen> {
 
   Future<void> _install() async {
     if (_busy) return;
-    final picked = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: const ['dvext', 'zip'],
-    );
-    final path = picked?.path;
-    if (path == null || path.isEmpty) return;
-
     setState(() => _busy = true);
+    File? temporaryCopy;
     try {
-      final installed = await _manager.installFromFile(File(path));
+      final picked = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['dvext', 'zip'],
+      );
+      if (picked == null) return;
+
+      final packagePath = picked.path;
+      final File packageFile;
+      if (packagePath != null && packagePath.isNotEmpty) {
+        packageFile = File(packagePath);
+      } else {
+        final temporaryDirectory = await getTemporaryDirectory();
+        temporaryCopy = File(
+          temporaryDirectory.path +
+              Platform.pathSeparator +
+              'depthvibe_extension_' +
+              DateTime.now().microsecondsSinceEpoch.toString() +
+              '.dvext',
+        );
+        await picked.readAsByteStream().pipe(temporaryCopy.openWrite());
+        packageFile = temporaryCopy;
+      }
+
+      final installed = await _manager.installFromFile(packageFile);
       if (mounted) {
         _message(
           'Installed ' +
@@ -59,6 +77,9 @@ class _ExtensionManagerScreenState extends State<ExtensionManagerScreen> {
     } catch (error) {
       if (mounted) _message('Install failed: ' + error.toString());
     } finally {
+      if (temporaryCopy != null && await temporaryCopy.exists()) {
+        await temporaryCopy.delete();
+      }
       if (mounted) setState(() => _busy = false);
     }
   }

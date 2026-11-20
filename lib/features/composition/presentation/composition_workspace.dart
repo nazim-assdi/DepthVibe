@@ -2846,7 +2846,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  lut!.assetUri!.split(Platform.pathSeparator).last,
+                  lut.assetUri.split(Platform.pathSeparator).last,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 10),
@@ -2875,7 +2875,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ),
         if (lut?.assetUri != null)
           DropdownButtonFormField<String>(
-            initialValue: lut!.assetInterpolation,
+            initialValue: lut.assetInterpolation,
             decoration: const InputDecoration(
               labelText: 'LUT interpolation',
               isDense: true,
@@ -2889,7 +2889,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ],
             onChanged: (mode) {
               if (mode != null) {
-                _controller.setEffectAssetInterpolation(lut!.id, mode);
+                _controller.setEffectAssetInterpolation(lut.id, mode);
               }
             },
           ),
@@ -4329,7 +4329,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                               layer.sourceUri != null)
                             Positioned.fill(
                               child: FutureBuilder<File?>(
-                                future: _waveformFor(layer.sourceUri!),
+                                future: _waveformFor(layer.sourceUri),
                                 builder: (context, snapshot) {
                                   final waveform = snapshot.data;
                                   if (waveform == null) {
