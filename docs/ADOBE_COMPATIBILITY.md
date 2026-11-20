@@ -111,3 +111,10 @@ The Effects panel also includes 20 original editable motion recipes. Applying a 
 Premiere UXP capture queries the host's installed video transition match-name list and active transition track-items where supported. Imported Premiere transition match-names and source descriptors persist in DVPROJ projects. The After Effects JSX importer attempts exact native match-names from unmatched source effect descriptors when the same effect is installed in the target application; missing plug-ins are reported rather than replaced with invented effects.
 
 These additions are native DepthVibe equivalents and host interoperability paths, not a redistribution of licensed Motion Bro packs or a claim that every third-party Adobe effect can run without its original plug-in.
+
+
+### Transition export to both Adobe hosts
+
+The Premiere XML writer now places XMEML transitionitem nodes between the relevant clip items on their shared track. It uses the original Premiere transition match-name when one was captured; otherwise it uses the DepthVibe transition identifier and display name. Apple documents transitionitem/effect as the interchange structure, but a syntactically valid XML file does not guarantee every host will bind every proprietary transition identically. Adobe will need to resolve the identifier or show a generic transition proxy on projects whose effects do not exist on the target machine.
+
+The After Effects script recreates imported Premiere transitions as editable opacity keyframes, with positional/scale motion for common slide and zoom transitions. It does not execute the proprietary Premiere transition plug-in or claim parameter-exact parity.

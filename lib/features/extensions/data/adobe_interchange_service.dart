@@ -1,5 +1,6 @@
 import 'dart:convert';
 import '../../composition/data/effect_catalog.dart';
+import '../../composition/data/transition_catalog.dart';
 import '../../composition/domain/composition_models.dart';
 import '../../composition/engine/composition_project_codec.dart';
 
@@ -434,7 +435,49 @@ class AdobeInterchangeService {
           ins.toString()+'</in><out>'+outs.toString()+'</out>'+file+
           _premiereFiltersXml(layer)+'</clipitem>';
     }
-    String trackXml(List<CompositionLayer> track) => '<track>'+track.map(clip).join()+'</track>';
+    String transitionXml(CompositionTransition transition) {
+      final start = frame(transition.startMs);
+      final end = start + frame(transition.durationMs);
+      final display = _s(
+        transition.metadata['sourceName'],
+        TransitionCatalog.displayName(transition.kind),
+      );
+      final effectId = _s(
+        transition.externalMatchName,
+        TransitionCatalog.xfadeName(transition.kind),
+      );
+      return '<transitionitem>' + rate +
+        '<start>' + start.toString() + '</start>' +
+        '<end>' + end.toString() + '</end>' +
+        '<alignment>center</alignment>' +
+        '<effect><name>' + esc(display) + '</name>' +
+        '<effectid>' + esc(effectId) + '</effectid>' +
+        '<effectcategory>Transition</effectcategory>' +
+        '<effecttype>transition</effecttype><mediatype>video</mediatype>' +
+        '</effect></transitionitem>';
+    }
+    String trackXml(List<CompositionLayer> track) {
+      final ids = track.map((layer) => layer.id).toSet();
+      final timelineItems = <({int startMs, int order, String xml})>[];
+      for (final layer in track) {
+        timelineItems.add((startMs: layer.startMs, order: 0, xml: clip(layer)));
+      }
+      for (final transition in doc.transitions) {
+        if (ids.contains(transition.fromLayerId) &&
+            ids.contains(transition.toLayerId)) {
+          timelineItems.add((
+            startMs: transition.startMs,
+            order: 1,
+            xml: transitionXml(transition),
+          ));
+        }
+      }
+      timelineItems.sort((a,b) {
+        final byTime = a.startMs.compareTo(b.startMs);
+        return byTime == 0 ? a.order.compareTo(b.order) : byTime;
+      });
+      return '<track>' + timelineItems.map((item) => item.xml).join() + '</track>';
+    }
     final v=videoTracks.map(trackXml).join(),a=audioTracks.map(trackXml).join();
     return '<?xml version="1.0" encoding="UTF-8"?>'+
       '<!DOCTYPE xmeml><xmeml version="5"><sequence id="depthvibe"><name>'+
@@ -443,7 +486,7 @@ class AdobeInterchangeService {
       rate+'<width>'+doc.width.toString()+'</width><height>'+
       doc.height.toString()+'</height></samplecharacteristics></format>'+
       v+'</video><audio>'+a+'</audio></media></sequence>'+
-      '<!-- Premiere track grouping and clip timing are preserved. Only verified static Gaussian Blur filters are emitted. -->'+
+      '<!-- Premiere track grouping, supported transitionitems and verified static Gaussian Blur filters are emitted. Native transition identifiers are retained when imported from Adobe. -->'+
       '</xmeml>';
   }
 
@@ -652,6 +695,61 @@ class AdobeInterchangeService {
    } catch(nativeError) { warnings.push(x.name+": native effect "+String(rawMatch)+" skipped: "+String(nativeError)); }
   }
  }
+ function setTransitionValue(property,time,value) {
+  if(!property) return;
+  property.setValueAtTime(time,value);
+  var index=property.nearestKeyIndex(time);
+  property.setInterpolationTypeAtKey(index,KeyframeInterpolationType.BEZIER,KeyframeInterpolationType.BEZIER);
+ }
+ function applyImportedTransitions() {
+  var transitions=d.transitions||[];
+  for(var ti=0;ti<transitions.length;ti++) {
+   var transition=transitions[ti],from=made[transition.fromLayerId],to=made[transition.toLayerId];
+   if(!from||!to) { warnings.push("Transition "+String(transition.id)+" references a missing layer."); continue; }
+   var start=Number(transition.startMs)/1000,duration=Number(transition.durationMs)/1000;
+   if(!isFinite(start)||!isFinite(duration)||duration<=0) continue;
+   var end=start+duration,kind=String(transition.kind||"dissolve");
+   try {
+    var fromOpacity=from.property("ADBE Transform Group").property("ADBE Opacity");
+    var toOpacity=to.property("ADBE Transform Group").property("ADBE Opacity");
+    setTransitionValue(fromOpacity,start,100);
+    setTransitionValue(fromOpacity,end,0);
+    setTransitionValue(toOpacity,start,0);
+    setTransitionValue(toOpacity,end,100);
+    if(kind==="slideLeft"||kind==="slideRight"||kind==="slideUp"||kind==="slideDown") {
+     var dimension=(kind==="slideLeft"||kind==="slideRight")?Number(d.width):Number(d.height);
+     var axis=(kind==="slideLeft"||kind==="slideRight")?0:1;
+     var direction=(kind==="slideLeft"||kind==="slideUp")?1:-1;
+     var fromTransform=from.property("ADBE Transform Group");
+     var toTransform=to.property("ADBE Transform Group");
+     var fromPosition=fromTransform.property("ADBE Position");
+     var toPosition=toTransform.property("ADBE Position");
+     var fromBase=fromPosition.valueAtTime(start,false),toBase=toPosition.valueAtTime(start,false);
+     var fromEnd=fromBase.slice(0),toStart=toBase.slice(0);
+     fromEnd[axis]-=direction*dimension;
+     toStart[axis]+=direction*dimension;
+     setTransitionValue(fromPosition,start,fromBase);
+     setTransitionValue(fromPosition,end,fromEnd);
+     setTransitionValue(toPosition,start,toStart);
+     setTransitionValue(toPosition,end,toBase);
+    } else if(kind==="zoomIn"||kind==="zoomOut") {
+     var fromScale=from.property("ADBE Transform Group").property("ADBE Scale");
+     var toScale=to.property("ADBE Transform Group").property("ADBE Scale");
+     var fromBaseScale=fromScale.valueAtTime(start,false),toBaseScale=toScale.valueAtTime(start,false);
+     var factor=kind==="zoomIn"?0.2:1.2;
+     var fromEndScale=fromBaseScale.map(function(v){return v*factor;});
+     var toStartScale=toBaseScale.map(function(v){return v*factor;});
+     setTransitionValue(fromScale,start,fromBaseScale);
+     setTransitionValue(fromScale,end,fromEndScale);
+     setTransitionValue(toScale,start,toStartScale);
+     setTransitionValue(toScale,end,toBaseScale);
+    }
+    if(transition.externalMatchName)
+     warnings.push("Transition "+String(transition.externalMatchName)+" was recreated as editable motion; proprietary transition parameters are not executed.");
+   } catch(err) { warnings.push("Transition "+String(transition.id)+" partially applied: "+String(err)); }
+  }
+ }
+ applyImportedTransitions();
  for(var j=0;j<d.layers.length;j++){var x=d.layers[j];if(x.parentId&&made[x.parentId]&&made[x.id])try{made[x.id].parent=made[x.parentId];}catch(_){}}
  app.endUndoGroup();alert("Imported "+d.layers.length+" editable layers. "+(warnings.length?"Review: "+warnings.join("\\n"):""));
 }());

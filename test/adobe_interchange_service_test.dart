@@ -306,6 +306,44 @@ void main() {
       expect(restored.transitions.single.metadata['hostApp'], 'premierepro');
     });
 
+    test('Premiere XML exports native transition items', () {
+      final doc = CompositionDocument(
+        name: 'Transition XML',
+        durationMs: 4000,
+        layers: [
+          CompositionLayer(
+            id: 'a', name: 'A', kind: LayerKind.video,
+            startMs: 0, durationMs: 2200,
+            interchangeMetadata: const {'hostApp': 'premierepro', 'trackIndex': 0},
+            externalHostApp: 'premierepro',
+          ),
+          CompositionLayer(
+            id: 'b', name: 'B', kind: LayerKind.video,
+            startMs: 1800, durationMs: 2200,
+            interchangeMetadata: const {'hostApp': 'premierepro', 'trackIndex': 0},
+            externalHostApp: 'premierepro',
+          ),
+        ],
+        transitions: [
+          CompositionTransition(
+            id: 'transition-1',
+            fromLayerId: 'a',
+            toLayerId: 'b',
+            kind: TransitionKind.dissolve,
+            startMs: 1800,
+            durationMs: 400,
+            externalMatchName: 'AE.ADBE Cross Dissolve',
+            metadata: const {'sourceName': 'Cross Dissolve'},
+          ),
+        ],
+      );
+      final xml = AdobeInterchangeService.buildPremiereXml(doc);
+      expect(xml, contains('<transitionitem>'));
+      expect(xml, contains('<effecttype>transition</effecttype>'));
+      expect(xml, contains('<effectid>AE.ADBE Cross Dissolve</effectid>'));
+      expect(xml, contains('<alignment>center</alignment>'));
+    });
+
     test('After Effects transform and effect keyframes import and survive .dvproj', () {
       final report = AdobeInterchangeService.importSnapshot({
         'schemaVersion': 1,
@@ -541,6 +579,7 @@ void main() {
       expect(script, contains('unsupportedEffects'));
       expect(script, contains('canAddProperty(rawMatch)'));
       expect(script, contains('setRovingAtKey'));
+      expect(script, contains('applyImportedTransitions'));
       expect(script, contains('new KeyframeEase'));
       expect(script, contains('ADBE Gaussian Blur 2-0001'));
     });
