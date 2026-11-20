@@ -15,7 +15,9 @@ class ColorCurveEditor extends StatelessWidget {
     final x = (local.dx / size.width).clamp(0.0, 1.0);
     final index = (x * 4).round().clamp(0, 4);
     final next = [...values];
-    next[index] = (1 - local.dy / size.height).clamp(0.0, 1.0);
+    next[index] = (1 - local.dy / size.height)
+        .clamp(0.0, 1.0)
+        .toDouble();
     onChanged(next);
   }
 
