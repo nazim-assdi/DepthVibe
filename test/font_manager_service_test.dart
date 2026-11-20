@@ -3,21 +3,83 @@ import 'dart:typed_data';
 import 'package:depthvibe/features/fonts/data/font_manager_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+Uint8List _fontFixture({
+  required String family,
+  required String style,
+}) {
+  Uint8List utf16(String value) {
+    final result = Uint8List(value.length * 2);
+    final data = ByteData.sublistView(result);
+    for (var index = 0; index < value.length; index++) {
+      data.setUint16(index * 2, value.codeUnitAt(index), Endian.big);
+    }
+    return result;
+  }
+
+  final familyBytes = utf16(family);
+  final styleBytes = utf16(style);
+  const nameTableOffset = 28;
+  const stringsOffset = 30;
+  final nameTableLength =
+      stringsOffset + familyBytes.length + styleBytes.length;
+  final bytes = Uint8List(nameTableOffset + nameTableLength);
+  final data = ByteData.sublistView(bytes);
+
+  bytes.setRange(0, 4, [0, 1, 0, 0]);
+  data.setUint16(4, 1, Endian.big);
+  bytes.setRange(12, 16, 'name'.codeUnits);
+  data.setUint32(20, nameTableOffset, Endian.big);
+  data.setUint32(24, nameTableLength, Endian.big);
+
+  data.setUint16(nameTableOffset, 0, Endian.big);
+  data.setUint16(nameTableOffset + 2, 2, Endian.big);
+  data.setUint16(nameTableOffset + 4, stringsOffset, Endian.big);
+
+  final firstRecord = nameTableOffset + 6;
+  data.setUint16(firstRecord, 3, Endian.big);
+  data.setUint16(firstRecord + 2, 1, Endian.big);
+  data.setUint16(firstRecord + 4, 0x0409, Endian.big);
+  data.setUint16(firstRecord + 6, 1, Endian.big);
+  data.setUint16(firstRecord + 8, familyBytes.length, Endian.big);
+  data.setUint16(firstRecord + 10, 0, Endian.big);
+
+  final secondRecord = firstRecord + 12;
+  data.setUint16(secondRecord, 3, Endian.big);
+  data.setUint16(secondRecord + 2, 1, Endian.big);
+  data.setUint16(secondRecord + 4, 0x0409, Endian.big);
+  data.setUint16(secondRecord + 6, 2, Endian.big);
+  data.setUint16(secondRecord + 8, styleBytes.length, Endian.big);
+  data.setUint16(secondRecord + 10, familyBytes.length, Endian.big);
+
+  final stringsStart = nameTableOffset + stringsOffset;
+  bytes.setRange(
+    stringsStart,
+    stringsStart + familyBytes.length,
+    familyBytes,
+  );
+  bytes.setRange(
+    stringsStart + familyBytes.length,
+    stringsStart + familyBytes.length + styleBytes.length,
+    styleBytes,
+  );
+  return bytes;
+}
+
 void main() {
   group('FontManagerService file validation', () {
-    test('accepts TrueType and OpenType font extensions case-insensitively', () {
+    test('accepts TrueType, OpenType and collection extensions', () {
       expect(FontManagerService.isSupportedFontFilePath('NotoSans.ttf'), isTrue);
       expect(FontManagerService.isSupportedFontFilePath('NotoSans.OTF'), isTrue);
+      expect(FontManagerService.isSupportedFontFilePath('Fonts.ttc'), isTrue);
     });
 
     test('rejects browser font formats and unrelated files', () {
       expect(FontManagerService.isSupportedFontFilePath('font.woff'), isFalse);
       expect(FontManagerService.isSupportedFontFilePath('font.woff2'), isFalse);
-      expect(FontManagerService.isSupportedFontFilePath('font.ttc'), isFalse);
       expect(FontManagerService.isSupportedFontFilePath('font.txt'), isFalse);
     });
 
-    test('recognizes standard TrueType and OpenType signatures', () {
+    test('recognizes standard TrueType, OpenType and collection signatures', () {
       expect(
         FontManagerService.hasValidFontSignature(
           Uint8List.fromList([0, 1, 0, 0, 0, 0]),
@@ -36,10 +98,34 @@ void main() {
         ),
         isTrue,
       );
+      expect(
+        FontManagerService.hasValidFontSignature(
+          Uint8List.fromList('ttcf'.codeUnits),
+        ),
+        isTrue,
+      );
+    });
+
+    test('reads the real typographic family and subfamily from the name table', () {
+      final bytes = _fontFixture(
+        family: 'Depth Sans',
+        style: 'SemiBold',
+      );
+      final face = FontManagerService.readFontFaceMetadata(bytes);
+
+      expect(face, isNotNull);
+      expect(face!.family, 'Depth Sans');
+      expect(face.style, 'SemiBold');
+      expect(face.fullName, 'Depth Sans SemiBold');
+      expect(face.displayName, 'Depth Sans · SemiBold');
     });
 
     test('rejects truncated and invalid font headers', () {
       expect(FontManagerService.hasValidFontSignature(Uint8List(3)), isFalse);
+      expect(
+        FontManagerService.readFontFaceMetadata(Uint8List(100)),
+        isNull,
+      );
       expect(
         FontManagerService.hasValidFontSignature(
           Uint8List.fromList('NOPE'.codeUnits),
