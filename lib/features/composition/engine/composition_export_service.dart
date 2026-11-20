@@ -413,12 +413,17 @@ class CompositionExportService {
       final family = layer.textFontFamily ?? fontManager.activeFamily;
       final fontPath = layer.textFontAssetUri ??
           (layer.textFontFamily == null ? fontManager.activeFontPath : null);
-      if (family != null && fontPath != null) {
-        try {
-          await fontManager.ensureFontLoaded(family: family, path: fontPath);
-        } catch (_) {
-          // Continue with the saved fallback list and OS font fallback.
-        }
+      try {
+        await fontManager.ensureFontsLoaded(
+          family: family,
+          path: fontPath,
+          fallbackFamilies: [
+            ...layer.textFontFallback,
+            ...fontManager.fallbackFamilies,
+          ],
+        );
+      } catch (_) {
+        // Continue with the saved fallback list and OS font fallback.
       }
 
       final content = layer.textContent ?? layer.name;
