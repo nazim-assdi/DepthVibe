@@ -294,6 +294,8 @@ class Software3dRenderer {
           (uv) => uv.dx.isFinite && uv.dy.isFinite,
         );
         final textureIsUsable = triangleHasUvs &&
+            (material.baseColorTextureMap == null ||
+                material.baseColorTextureMap!.texCoord == 0) &&
             mesh.hasTextureCoordinates &&
             (material.baseColorTextureMap == null ||
                 material.baseColorTextureMap!.texCoord == 0) &&
