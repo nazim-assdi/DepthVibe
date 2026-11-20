@@ -243,19 +243,37 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     await _applyLayerFont(font);
   }
 
+  int _fontWeightForStyle(String? style) {
+    final value = (style ?? '').toLowerCase();
+    if (value.contains('thin')) return 100;
+    if (value.contains('extra light') || value.contains('ultra light')) return 200;
+    if (value.contains('light')) return 300;
+    if (value.contains('semi bold') || value.contains('demi')) return 600;
+    if (value.contains('bold')) return 700;
+    if (value.contains('extra bold') || value.contains('ultra bold')) return 800;
+    if (value.contains('black') || value.contains('heavy')) return 900;
+    if (value.contains('medium')) return 500;
+    return 400;
+  }
+
   Future<void> _applyLayerFont(FontCatalogEntry? font) async {
     if (font == null) {
       _controller.updateTextLayer(clearTextFont: true);
       return;
     }
     try {
-      await FontManagerService.instance.ensureFontLoaded(
-        family: font.family,
-        path: font.path,
-      );
+      if (font.isImported) {
+        await FontManagerService.instance.ensureFontLoaded(
+          family: font.family,
+          path: font.path,
+        );
+      }
+      final styleName = (font.styleName ?? '').toLowerCase();
       _controller.updateTextLayer(
         textFontFamily: font.family,
-        textFontAssetUri: font.path,
+        textFontAssetUri: font.isImported ? font.path : null,
+        textFontWeight: _fontWeightForStyle(font.styleName),
+        textItalic: styleName.contains('italic') || styleName.contains('oblique'),
       );
     } catch (error) {
       if (mounted) setState(() => _notice = 'Font could not be loaded: $error');
