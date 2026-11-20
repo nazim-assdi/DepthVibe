@@ -7,6 +7,10 @@ input,textarea,button{box-sizing:border-box;width:100%;margin:5px 0;padding:9px}
 input,textarea{color:#e7edf8;background:#232d40;border:1px solid #3d4a62;border-radius:6px}
 button{border:0;border-radius:6px;color:#fff;background:#536acb;font-weight:700}
 button.secondary{background:#34435b}
+hr{border:0;border-top:1px solid #34435b;margin:12px 0}
+h3{font-size:13px;margin:13px 0 4px}
+.effect-list{max-height:260px;overflow-y:auto;border:1px solid #34435b;border-radius:6px;padding:6px}
+.effect-list .host-effect{text-align:left;font-size:11px;margin:3px 0;padding:7px}
 small,#status{color:#a8b6cc}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#10151f;padding:9px;border-radius:6px}
 </style></head><body>
@@ -19,8 +23,17 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#10151f;padding:9px;b
 <button id="importSnapshot" class="secondary" disabled>Import captured composition into DepthVibe</button>
 <button id="exportScript" class="secondary" disabled>Save editable After Effects import script</button>
 <button id="read" class="secondary" disabled>Read DepthVibe composition</button>
-<button id="effects" class="secondary" disabled>List effects</button>
-<small>Capture reads active composition and layer timing/flags from the After Effects UXP API. It sends metadata only; footage files are not copied.</small>
+<button id="effects" class="secondary" disabled>List DepthVibe effects</button>
+<hr>
+<h3>Installed After Effects effects</h3>
+<button id="refreshHostEffects" class="secondary" disabled>Refresh installed effect catalog</button>
+<input id="hostEffectSearch" placeholder="Search installed effect name, category or match name">
+<div id="hostEffectList" class="effect-list"><small>Connect and refresh to load the host effect catalog.</small></div>
+<h3>After Effects animation presets</h3>
+<button id="ffxImport" class="secondary" disabled>Import .ffx preset to selected layer(s) + DepthVibe</button>
+<button id="ffxExport" class="secondary" disabled>Export selected properties as .ffx</button>
+<small>Installed effects are applied inside After Effects. Their captured parameters and scalar keyframes are then imported into DepthVibe. .ffx is Adobe's native animation-preset format.</small>
+<small>Capture reads active composition and layer properties. Footage files and plug-in binaries are not copied.</small>
 <textarea id="document" rows="6" placeholder="DepthVibe composition JSON"></textarea>
 <button id="send" class="secondary" disabled>Send to DepthVibe</button>
 <p id="status">Not connected.</p><pre id="result"></pre>

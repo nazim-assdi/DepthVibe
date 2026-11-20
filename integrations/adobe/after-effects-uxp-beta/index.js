@@ -1,7 +1,14 @@
 const { entrypoints, host, storage } = require("uxp");
-const { captureActiveComposition } = require("./after-effects-host-adapter");
+const {
+  captureActiveComposition,
+  captureInstalledEffects,
+  applyNativeEffectToSelection,
+  applyFfxPreset,
+  saveFfxPreset
+} = require("./after-effects-host-adapter");
 const DEFAULT_BRIDGE = "http://127.0.0.1:47653";
 let token = null;
+let installedEffects = [];
 
 function bridgeBaseUrl() {
   const field = document.getElementById("bridgeUrl");
@@ -34,7 +41,8 @@ function output(value) {
     typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }
 function setConnected(connected) {
-  ["capture", "read", "effects", "send", "importSnapshot", "exportScript"].forEach(function (id) {
+  ["capture", "read", "effects", "send", "importSnapshot", "exportScript",
+   "refreshHostEffects", "ffxImport", "ffxExport"].forEach(function (id) {
     document.getElementById(id).disabled = !connected;
   });
 }
@@ -55,6 +63,17 @@ async function connect() {
   status("Connected to DepthVibe.");
   output(await api("/v1/session"));
 }
+async function publishHostSnapshot(snapshot) {
+  await api("/v1/adobe/metadata", {
+    method: "POST",
+    body: JSON.stringify({snapshot: snapshot})
+  });
+  const imported = await api("/v1/adobe/import", {
+    method: "POST",
+    body: "{}"
+  });
+  return imported;
+}
 async function captureComposition() {
   status("Reading the active After Effects composition…");
   const snapshot = captureActiveComposition();
@@ -62,6 +81,8 @@ async function captureComposition() {
     method: "POST",
     body: JSON.stringify({snapshot: snapshot})
   });
+  installedEffects = snapshot.payload.installedEffects || [];
+  if (installedEffects.length) renderHostEffectList(document);
   const payload = snapshot.payload;
   output({
     project: payload.project.file,
@@ -74,6 +95,85 @@ async function captureComposition() {
   });
   status("Active After Effects composition metadata sent to DepthVibe.");
 }
+async function refreshHostEffects() {
+  const inventory = captureInstalledEffects();
+  installedEffects = inventory.effects || [];
+  renderHostEffectList(document);
+  if (!inventory.supported) {
+    status("Installed effect inventory requires After Effects 27.0 or later.");
+    output(inventory);
+    return;
+  }
+  status("Found " + installedEffects.length + " installed After Effects effects.");
+  output({installedEffectCount: installedEffects.length, minimumVersion: inventory.minimumVersion});
+}
+function renderHostEffectList(root) {
+  const search = root.querySelector("#hostEffectSearch");
+  const container = root.querySelector("#hostEffectList");
+  if (!container) return;
+  const term = search ? search.value.trim().toLowerCase() : "";
+  const matches = installedEffects.filter(function (effect) {
+    return [effect.displayName, effect.matchName, effect.category, effect.version]
+      .join(" ").toLowerCase().indexOf(term) >= 0;
+  }).slice(0, 250);
+  container.replaceChildren();
+  if (!matches.length) {
+    const note = document.createElement("small");
+    note.textContent = installedEffects.length
+      ? "No matching installed effects."
+      : "Refresh installed effects to read the Adobe effect catalog.";
+    container.appendChild(note);
+    return;
+  }
+  matches.forEach(function (effect) {
+    const button = document.createElement("button");
+    button.className = "secondary host-effect";
+    button.textContent = effect.displayName + " · " + effect.category;
+    button.title = effect.matchName + " · " + (effect.version || "");
+    button.addEventListener("click", async function () {
+      try {
+        status("Applying " + effect.displayName + " to selected layer(s)…");
+        const result = applyNativeEffectToSelection(effect.matchName);
+        const imported = await publishHostSnapshot(result.snapshot);
+        output({
+          effect: effect,
+          applied: result.applied,
+          warnings: result.warnings,
+          depthVibeImport: imported
+        });
+        status("Applied native effect and synchronized its parameters/keyframes to DepthVibe.");
+      } catch (error) {
+        status(error.message);
+        output(error.stack || error.message);
+      }
+    });
+    container.appendChild(button);
+  });
+  const count = document.createElement("small");
+  count.textContent = "Showing " + matches.length + " of " + installedEffects.length + " installed effects";
+  container.appendChild(count);
+}
+async function importFfxPreset() {
+  const file = await storage.localFileSystem.getFileForOpening({types: ["ffx"]});
+  if (!file) return;
+  const path = storage.localFileSystem.getNativePath(file);
+  status("Applying After Effects animation preset…");
+  const result = applyFfxPreset(path);
+  const imported = await publishHostSnapshot(result.snapshot);
+  installedEffects = result.snapshot.payload.installedEffects || installedEffects;
+  renderHostEffectList(document);
+  output({preset: file.name, applied: result.applied, depthVibeImport: imported});
+  status("Applied .ffx preset in After Effects and imported its editable snapshot into DepthVibe.");
+}
+async function exportFfxPreset() {
+  const file = await storage.localFileSystem.getFileForSaving("DepthVibe_Animation.ffx");
+  if (!file) return;
+  const path = storage.localFileSystem.getNativePath(file);
+  const result = saveFfxPreset(path);
+  output({file: file.name, saved: result.saved});
+  status("Selected After Effects properties exported as an .ffx animation preset.");
+}
+
 async function readLatestSnapshot() {
   const result = await api("/v1/adobe/metadata");
   output(result.snapshot || result);
@@ -118,6 +218,18 @@ function bind(root) {
   root.querySelector("#effects").addEventListener("click", async function () {
     try { output(await api("/v1/effects")); status("DepthVibe effect catalog received."); }
     catch (error) { status(error.message); }
+  });
+  root.querySelector("#refreshHostEffects").addEventListener("click", async function () {
+    try { await refreshHostEffects(); } catch (error) { status(error.message); output(error.stack || error.message); }
+  });
+  root.querySelector("#hostEffectSearch").addEventListener("input", function () {
+    renderHostEffectList(root);
+  });
+  root.querySelector("#ffxImport").addEventListener("click", async function () {
+    try { await importFfxPreset(); } catch (error) { status(error.message); output(error.stack || error.message); }
+  });
+  root.querySelector("#ffxExport").addEventListener("click", async function () {
+    try { await exportFfxPreset(); } catch (error) { status(error.message); output(error.stack || error.message); }
   });
   root.querySelector("#send").addEventListener("click", async function () {
     try {
