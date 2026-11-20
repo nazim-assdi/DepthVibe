@@ -156,6 +156,13 @@ class _FontPickerDialogState extends State<FontPickerDialog> {
                                 fontFamily: font.family,
                                 fontFamilyFallback: _fonts.fallbackFamilies,
                                 fontSize: 13,
+                                fontWeight: FontWeight.values[
+                                  ((FontManagerService.suggestedWeight(font.styleName) - 100) ~/ 100)
+                                      .clamp(0, 8)
+                                ],
+                                fontStyle: FontManagerService.isItalicStyle(font.styleName)
+                                    ? FontStyle.italic
+                                    : FontStyle.normal,
                                 color: palette.secondaryText,
                               ),
                             ),
