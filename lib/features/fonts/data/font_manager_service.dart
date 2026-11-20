@@ -157,7 +157,10 @@ class FontManagerService extends ChangeNotifier {
   }
 
   /// Reads family/style metadata from the first face in an SFNT/TTC file.
-  static FontFaceMetadata? readFontFaceMetadata(Uint8List bytes) {
+  static FontFaceMetadata? readFontFaceMetadata(
+    Uint8List bytes, {
+    int faceIndex = 0,
+  }) {
     if (!hasValidFontSignature(bytes) || bytes.length < 12) return null;
 
     final data = ByteData.sublistView(bytes);
@@ -165,8 +168,16 @@ class FontManagerService extends ChangeNotifier {
     if (String.fromCharCodes(bytes.take(4)) == 'ttcf') {
       if (bytes.length < 20) return null;
       final faceCount = data.getUint32(8, Endian.big);
-      if (faceCount == 0 || faceCount > 4096) return null;
-      faceOffset = data.getUint32(12, Endian.big);
+      if (faceCount == 0 ||
+          faceCount > 4096 ||
+          faceIndex < 0 ||
+          faceIndex >= faceCount ||
+          12 + faceCount * 4 > bytes.length) {
+        return null;
+      }
+      faceOffset = data.getUint32(12 + faceIndex * 4, Endian.big);
+    } else if (faceIndex != 0) {
+      return null;
     }
 
     if (faceOffset < 0 || faceOffset + 12 > bytes.length) return null;
@@ -285,6 +296,28 @@ class FontManagerService extends ChangeNotifier {
     );
   }
 
+  static List<FontFaceMetadata> readFontFaces(Uint8List bytes) {
+    if (!hasValidFontSignature(bytes) || bytes.length < 12) {
+      return const <FontFaceMetadata>[];
+    }
+    if (String.fromCharCodes(bytes.take(4)) != 'ttcf') {
+      final face = readFontFaceMetadata(bytes);
+      return face == null ? const <FontFaceMetadata>[] : [face];
+    }
+    if (bytes.length < 20) return const <FontFaceMetadata>[];
+    final data = ByteData.sublistView(bytes);
+    final count = data.getUint32(8, Endian.big);
+    if (count == 0 || count > 4096 || 12 + count * 4 > bytes.length) {
+      return const <FontFaceMetadata>[];
+    }
+    final faces = <FontFaceMetadata>[];
+    for (var index = 0; index < count; index++) {
+      final face = readFontFaceMetadata(bytes, faceIndex: index);
+      if (face != null) faces.add(face);
+    }
+    return faces;
+  }
+
   static String familyAliasFor(FontFaceMetadata? metadata, String fallback) {
     final family = metadata?.family ?? fallback;
     final style = metadata?.style ?? 'Regular';
@@ -365,22 +398,38 @@ class FontManagerService extends ChangeNotifier {
             final bytes = await entity.readAsBytes();
             if (!hasValidFontSignature(bytes)) continue;
 
-            final face = readFontFaceMetadata(bytes);
-            final actualFamily = face?.family ?? _fileStem(entity.path);
-            final style = face?.style ?? 'Regular';
-            final faceKey = (actualFamily + '\u0000' + style).toLowerCase();
-            if (!seenFaces.add(faceKey)) continue;
+            final faces = readFontFaces(bytes);
+            if (faces.isEmpty) {
+              final fallbackFamily = _fileStem(entity.path);
+              final faceKey = (fallbackFamily + '\u0000Regular').toLowerCase();
+              if (seenFaces.add(faceKey)) {
+                entries.add(FontCatalogEntry(
+                  family: fallbackFamily,
+                  displayName: fallbackFamily,
+                  path: entity.path,
+                  isImported: false,
+                  actualFamily: fallbackFamily,
+                  styleName: 'Regular',
+                ));
+              }
+              continue;
+            }
 
-            // System fonts are resolved by their actual family name by the OS.
-            // No private alias or runtime copy is needed for an installed font.
-            entries.add(FontCatalogEntry(
-              family: actualFamily,
-              displayName: face?.displayName ?? _fileStem(entity.path),
-              path: entity.path,
-              isImported: false,
-              actualFamily: actualFamily,
-              styleName: style,
-            ));
+            for (final face in faces) {
+              final faceKey =
+                  (face.family + '\u0000' + face.style).toLowerCase();
+              if (!seenFaces.add(faceKey)) continue;
+
+              // System fonts are resolved by their actual OS family name.
+              entries.add(FontCatalogEntry(
+                family: face.family,
+                displayName: face.displayName,
+                path: entity.path,
+                isImported: false,
+                actualFamily: face.family,
+                styleName: face.style,
+              ));
+            }
           }
         } catch (_) {
           // Some OS font directories contain protected or unreadable entries.
