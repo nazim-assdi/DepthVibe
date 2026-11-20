@@ -254,9 +254,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final layer = _controller.selectedLayer;
     if (layer != null && layer.kind == LayerKind.text &&
         layer.textFontFamily != null && layer.textFontAssetUri != null) {
-      unawaited(FontManagerService.instance.ensureFontLoaded(
-        family: layer.textFontFamily!,
-        path: layer.textFontAssetUri!,
+      unawaited(FontManagerService.instance.ensureFontsLoaded(
+        family: layer.textFontFamily,
+        path: layer.textFontAssetUri,
+        fallbackFamilies: [
+          ...layer.textFontFallback,
+          ...FontManagerService.instance.fallbackFamilies,
+        ],
       ).then<void>(
         (_) { if (mounted) setState(() {}); },
         onError: (Object _) {},
