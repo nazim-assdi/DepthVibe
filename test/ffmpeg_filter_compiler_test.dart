@@ -293,6 +293,116 @@ void main() {
     expect(filters.single, contains("a='alpha(X,Y)'")); 
   });
 
+  test('compiles primary curves into a native FFmpeg curves filter', () {
+    const layer = CompositionLayer(
+      id: 'curve-layer',
+      name: 'Curve layer',
+      kind: LayerKind.video,
+      effects: [
+        EffectInstance(
+          id: 'curve-1',
+          effectId: 'color_curves',
+          name: 'Primary Curves',
+          parameters: {
+            'master_0': 0,
+            'master_1': 0.25,
+            'master_2': 0.5,
+            'master_3': 0.75,
+            'master_4': 1,
+            'red_0': 0,
+            'red_1': 0.2,
+            'red_2': 0.55,
+            'red_3': 0.8,
+            'red_4': 1,
+          },
+        ),
+      ],
+    );
+
+    final filters = const FfmpegFilterCompiler().compileEffects(
+      layer,
+      timeMs: 0,
+    );
+
+    expect(filters, hasLength(1));
+    expect(filters.single, startsWith('curves=master='));
+    expect(filters.single, contains("r='0.00/0.000 0.25/0.200"));
+    expect(filters.single, contains("interp=natural"));
+  });
+
+  test('compiles imported 3D cube LUTs using a quoted file path', () {
+    const layer = CompositionLayer(
+      id: 'lut-layer',
+      name: 'LUT layer',
+      kind: LayerKind.video,
+      effects: [
+        EffectInstance(
+          id: 'lut-1',
+          effectId: 'color_lut',
+          name: '3D LUT',
+          assetUri: '/tmp/DepthVibe LUTs/identity.cube',
+        ),
+      ],
+    );
+
+    final filters = const FfmpegFilterCompiler().compileEffects(
+      layer,
+      timeMs: 0,
+    );
+
+    expect(filters, hasLength(1));
+    expect(filters.single, contains("lut3d=file='/tmp/DepthVibe LUTs/identity.cube'"));
+    expect(filters.single, contains('interp=trilinear'));
+  });
+
+  test('compiles animated primary wheel channels into a frame-evaluated geq pass', () {
+    const layer = CompositionLayer(
+      id: 'animated-wheels',
+      name: 'Animated Wheels',
+      kind: LayerKind.video,
+      effects: [
+        EffectInstance(
+          id: 'grade-wheels',
+          effectId: 'color_grade',
+          name: 'Primary Color Grade',
+          parameters: {
+            'lift_r': 0,
+            'lift_g': 0,
+            'lift_b': 0,
+            'gamma_r': 0,
+            'gamma_g': 0,
+            'gamma_b': 0,
+            'gain_r': 0,
+            'gain_g': 0,
+            'gain_b': 0,
+            'offset_r': 0,
+            'offset_g': 0,
+            'offset_b': 0,
+          },
+          keyframeTracks: [
+            KeyframeTrack(
+              property: 'lift_r',
+              keyframes: [
+                ScalarKeyframe(timeMs: 0, value: 0),
+                ScalarKeyframe(timeMs: 1000, value: 0.5),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final filter = const FfmpegFilterCompiler()
+        .compileEffects(layer, timeMs: 0)
+        .single;
+
+    expect(filter, startsWith('format=rgba,geq='));
+    expect(filter, contains("r='clip(r(X,Y)+"));
+    expect(filter, contains('if(lt(t,'));
+    expect(filter, contains("a='alpha(X,Y)'"));
+    expect(filter, contains(':eval=frame'));
+  });
+
   test('skips disabled effects', () {
     const layer = CompositionLayer(
       id: 'video-1',
