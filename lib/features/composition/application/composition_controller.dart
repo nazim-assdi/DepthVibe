@@ -653,6 +653,28 @@ class CompositionController extends ChangeNotifier {
     ));
   }
 
+  void setEffectAssetInterpolation(
+    String effectInstanceId,
+    String interpolation,
+  ) {
+    const supported = {
+      'nearest',
+      'trilinear',
+      'tetrahedral',
+      'pyramid',
+      'prism',
+    };
+    if (!supported.contains(interpolation)) return;
+    final layer = selectedLayer;
+    if (layer == null) return;
+    _replace(layer.copyWith(
+      effects: layer.effects.map((effect) {
+        if (effect.id != effectInstanceId) return effect;
+        return effect.copyWith(assetInterpolation: interpolation);
+      }).toList(),
+    ));
+  }
+
   void setColorOutputProfile(ColorOutputProfile profile) {
     _document = _document.copyWith(colorOutputProfile: profile);
     notifyListeners();
