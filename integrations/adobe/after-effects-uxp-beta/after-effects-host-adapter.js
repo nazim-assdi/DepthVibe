@@ -56,7 +56,7 @@ function captureActiveComposition() {
     const layer = composition.layer(index);
     const parent = layer.parent;
     const source = layer.source;
-    const footageFile = source && source.file ? source.file : null;
+    const sourcePath = source && typeof source.file === "string" ? source.file : null;
     let textContent = null;
     try {
       const textDocument = layer.property("ADBE Text Properties").property("ADBE Text Document").value;
@@ -82,8 +82,8 @@ function captureActiveComposition() {
       parentLayerName: parent ? parent.name : null,
       hasVideo: layer.hasVideo,
       hasAudio: layer.hasAudio,
-      sourcePath: footageFile && footageFile.fsName ? footageFile.fsName : null,
-      source: source ? { name: source.name || null, width: source.width || null, height: source.height || null, path: footageFile && footageFile.fsName ? footageFile.fsName : null } : null,
+      sourcePath: sourcePath,
+      source: source ? { name: source.name || null, width: source.width || null, height: source.height || null, path: sourcePath } : null,
       textContent: textContent,
       transform: captureTransform(layer),
       effects: captureEffects(layer),
