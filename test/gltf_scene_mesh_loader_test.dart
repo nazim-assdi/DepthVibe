@@ -199,9 +199,10 @@ void main() {
     sourceImage.setPixelRgba(0, 0, 30, 120, 240, 255);
     final pngBytes = img.encodePng(sourceImage);
     final documentJson = fixtureJson(buffer, base64Encode(buffer));
-    documentJson['images'] = [
-      {'uri': 'data:image/png;base64,${base64Encode(pngBytes)}'}
-    ];
+    documentJson['images'] = List<Map<String, String>>.generate(
+      5,
+      (_) => {'uri': 'data:image/png;base64,${base64Encode(pngBytes)}'},
+    );
     final document = await gltf.Gltf.parse(
       jsonEncode(documentJson),
       loader: (_) async => buffer,
