@@ -3,6 +3,35 @@ import 'package:depthvibe/features/composition/domain/composition_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('applies motion presets as editable keyframe tracks', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 5000,
+        layers: [
+          CompositionLayer(
+            id: 'text',
+            name: 'Title',
+            kind: LayerKind.text,
+            transform: LayerTransform(position: Vector3(960, 540, 0)),
+          ),
+        ],
+        selectedLayerId: 'text',
+      ),
+    );
+    controller.applyMotionPreset('slide_in_left');
+    final layer = controller.selectedLayer!;
+    final track = layer.keyframeTracks.singleWhere(
+      (item) => item.property == 'position.x',
+    );
+    expect(track.keyframes, hasLength(2));
+    expect(track.keyframes.first.value, lessThan(0));
+    expect(track.keyframes.last.value, 960);
+    controller.applyMotionPreset('pop_bounce');
+    expect(controller.selectedLayer!.keyframeTracks.any(
+      (item) => item.property == 'scale.x' && item.keyframes.length >= 4,
+    ), isTrue);
+  });
+
   group('CompositionController', () {
     test('creates AE-style layer types and selects the new layer', () {
       final controller = CompositionController();

@@ -23,6 +23,8 @@ import '../../extensions/data/extension_manager_service.dart';
 import '../../extensions/data/adobe_bridge_service.dart';
 import '../data/photoshop_import_service.dart';
 import '../domain/composition_models.dart';
+import '../data/motion_preset_catalog.dart';
+import '../data/transition_catalog.dart';
 import '../domain/color_grade_preset.dart';
 import '../engine/parent_transform_resolver.dart';
 import '../engine/camera_projection_resolver.dart';
@@ -2281,6 +2283,40 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _panelHeader('EFFECT LIBRARY', Icons.auto_awesome),
+        PopupMenuButton<String>(
+          tooltip: 'Apply an editable motion preset at the playhead',
+          onSelected: _controller.applyMotionPreset,
+          itemBuilder: (_) => MotionPresetCatalog.all.map((preset) =>
+            PopupMenuItem<String>(
+              value: preset.id,
+              child: SizedBox(
+                width: 230,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(preset.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    Text(preset.category + ' · ' + preset.description,
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 9, color: Color(0xFF98A7C0))),
+                  ],
+                ),
+              ),
+            )).toList(),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.auto_awesome_motion, size: 16),
+                SizedBox(width: 7),
+                Text('BROWSE 20 MOTION PRESETS'),
+                SizedBox(width: 8),
+                Icon(Icons.expand_more, size: 16),
+              ],
+            ),
+          ),
+        ),
         DropdownButtonFormField<String>(
           initialValue: _effectCategory,
           items: ['All', ...EffectCatalog.categories]
@@ -3303,7 +3339,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           tooltip: 'Add transition to adjacent clip',
           onSelected: _controller.addTransition,
           itemBuilder: (_) => TransitionKind.values
-              .map((kind) => PopupMenuItem(value: kind, child: Text(kind.name)))
+              .map((kind) => PopupMenuItem(value: kind, child: Text(TransitionCatalog.displayName(kind))))
               .toList(),
           child: const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
@@ -3395,7 +3431,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   items: TransitionKind.values
                       .map((kind) => DropdownMenuItem(
                             value: kind,
-                            child: Text(kind.name, overflow: TextOverflow.ellipsis),
+                            child: Text(TransitionCatalog.displayName(kind), overflow: TextOverflow.ellipsis),
                           ))
                       .toList(),
                   onChanged: (kind) => _controller.updateTransition(

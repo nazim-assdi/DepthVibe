@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../data/effect_catalog.dart';
 import '../domain/composition_models.dart';
 import '../domain/color_grade_preset.dart';
+import '../data/motion_preset_catalog.dart';
 import '../engine/transition_frame_validator.dart';
 
 class CompositionController extends ChangeNotifier {
@@ -923,6 +924,51 @@ class CompositionController extends ChangeNotifier {
       ),
       keyframe: true,
     );
+  }
+
+  /// Applies an editable native motion recipe at the current playhead.
+  void applyMotionPreset(String presetId) {
+    final layer = selectedLayer;
+    final preset = MotionPresetCatalog.find(presetId);
+    if (layer == null || layer.locked || preset == null) return;
+    final startMs = _frameAlignedTransitionStart(_document.playheadMs);
+    final remainingMs = (_document.durationMs - startMs)
+        .clamp(1, preset.durationMs).toInt();
+    final durationMs = _frameAlignedTransitionDuration(remainingMs);
+    var tracks = [...layer.keyframeTracks];
+
+    for (final presetTrack in preset.tracks) {
+      final index = tracks.indexWhere((item) => item.property == presetTrack.property);
+      var track = index < 0
+          ? KeyframeTrack(property: presetTrack.property)
+          : tracks[index];
+      final base = layer.transform.valueFor(presetTrack.property);
+      for (final frame in presetTrack.frames) {
+        final timeMs = _frameAlignedTransitionStart(
+          startMs + (durationMs * frame.progress.clamp(0, 1)).round(),
+        );
+        final value = switch (frame.mode) {
+          MotionPresetValueMode.absolute => frame.value,
+          MotionPresetValueMode.offset => base + frame.value,
+          MotionPresetValueMode.multiplier => base * frame.value,
+          MotionPresetValueMode.compositionWidthOffset =>
+            base + _document.width * frame.value,
+          MotionPresetValueMode.compositionHeightOffset =>
+            base + _document.height * frame.value,
+        };
+        track = track.upsert(ScalarKeyframe(
+          timeMs: timeMs,
+          value: value,
+          interpolation: preset.interpolation,
+        ));
+      }
+      if (index < 0) {
+        tracks.add(track);
+      } else {
+        tracks[index] = track;
+      }
+    }
+    _replace(layer.copyWith(keyframeTracks: tracks));
   }
 
   void addKeyframe(String property, {double? value}) {
