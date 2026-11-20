@@ -173,8 +173,11 @@ class _Gpu3dMeshViewState extends State<Gpu3dMeshView> {
     final meshUsesBaseColorTextures = widget.mesh.materials.values.any(
       (material) => material.baseColorTextureBytes != null,
     );
-    if (meshUsesBaseColorTextures &&
-        !_vertexData.canRenderBaseColorTextures) {
+    final meshUsesUnsupportedAlphaMode = widget.mesh.materials.values.any(
+      (material) => material.alphaMode != 'OPAQUE',
+    );
+    if ((meshUsesBaseColorTextures || meshUsesUnsupportedAlphaMode) &&
+        !_vertexData.canRenderGpuMaterialData) {
       return _cpuFallback('multiple glTF base-colour textures');
     }
     if (meshUsesBaseColorTextures &&
