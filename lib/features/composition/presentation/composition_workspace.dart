@@ -2310,7 +2310,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               children: [
                 Icon(Icons.auto_awesome_motion, size: 16),
                 SizedBox(width: 7),
-                Text('BROWSE 20 MOTION PRESETS'),
+                Text('BROWSE ' + MotionPresetCatalog.all.length.toString() + ' MOTION PRESETS'),
                 SizedBox(width: 8),
                 Icon(Icons.expand_more, size: 16),
               ],

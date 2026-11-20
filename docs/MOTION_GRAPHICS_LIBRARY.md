@@ -1,6 +1,6 @@
 # Motion Graphics Library
 
-DepthVibe provides original, editable motion-design recipes and native video effects. It does not bundle Motion Bro packs or redistribute commercial source files.
+DepthVibe provides 21 original, editable motion-design recipes and native video effects. It does not bundle Motion Bro packs or redistribute commercial source files.
 
 ## Motion presets
 
