@@ -39,7 +39,7 @@ Compositor editing also has bounded in-memory Undo/Redo history (80 document sta
 
 ## Global font system
 
-Open the Font Manager from the Compositor toolbar. Import TrueType `.ttf` and OpenType `.otf` files, choose a default font for the full application, manage the ordered glyph fallback chain, and select different fonts per text layer. The text renderer uses Flutter's paragraph/shaping engine for Unicode and bidirectional layout, then exports transparent text PNGs into the FFmpeg composition graph. Project saves embed the chosen font file so its family can be loaded on another computer.
+Open the Font Manager from the Compositor toolbar. Import TrueType `.ttf` and OpenType `.otf` files, choose a default font for the full application, manage the ordered glyph fallback chain, and select different fonts per text layer. The text renderer uses Flutter's paragraph/shaping engine for Unicode and bidirectional layout, then exports transparent text PNGs into the FFmpeg composition graph. Project saves embed the chosen font file so its family can be loaded on another computer. See the [Global Font Manager guide](docs/FONTS.md) for supported locations, file types and licensing limits.
 
 Flutter's runtime `FontLoader` accepts TTF/OTF byte streams; this workflow does not directly import WOFF/WOFF2 or TTC collections. The repository does not bundle every world's font and cannot grant font licences. Device/system fonts and fonts supplied by the user are available subject to platform access and each font's licence. A fallback family only works when its font is present on the device or embedded/loaded by the project; missing glyphs can still display as boxes.
 
