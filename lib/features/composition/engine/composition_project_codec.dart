@@ -156,7 +156,7 @@ class CompositionProjectCodec {
         textFontFallback: (item['textFontFallback'] as List? ?? const [])
             .whereType<String>().take(32).toList(),
         textFontSize: _number(item['textFontSize'], 72).clamp(1, 2000).toDouble(),
-        textFontWeight: _integer(item['textFontWeight'], 700).clamp(100, 900),
+        textFontWeight: _integer(item['textFontWeight'], 700).clamp(100, 900).toInt(),
         textItalic: _boolean(item['textItalic'], false),
         textColor: _string(item['textColor'], '#FFFFFFFF'),
         textLetterSpacing: _number(item['textLetterSpacing'], 0).clamp(-100, 500).toDouble(),
