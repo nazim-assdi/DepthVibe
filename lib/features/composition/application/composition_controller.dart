@@ -971,6 +971,95 @@ class CompositionController extends ChangeNotifier {
     _replace(layer.copyWith(keyframeTracks: tracks));
   }
 
+  /// Applies a portable layer preset at the current playhead. Keyframes are
+  /// time-shifted, transform curves are offset to the target layer baseline,
+  /// and native effect descriptors remain inert host metadata.
+  void applyLayerPreset(CompositionLayer presetLayer) {
+    final target = selectedLayer;
+    if (target == null || target.locked) return;
+    final timeShift = _document.playheadMs - presetLayer.startMs;
+
+    KeyframeTrack remapTrack(KeyframeTrack source, {double valueOffset = 0}) {
+      final frames = source.keyframes.map((frame) {
+        return ScalarKeyframe(
+          timeMs: (frame.timeMs + timeShift)
+              .clamp(0, _document.durationMs - 1).toInt(),
+          value: frame.value + valueOffset,
+          interpolation: frame.interpolation,
+          inTangent: frame.inTangent,
+          outTangent: frame.outTangent,
+          bezier: frame.bezier,
+          metadata: frame.metadata,
+        );
+      }).toList();
+      return KeyframeTrack(
+        property: source.property,
+        keyframes: frames,
+        enabled: source.enabled,
+      );
+    }
+
+    var tracks = [...target.keyframeTracks];
+    for (final source in presetLayer.keyframeTracks) {
+      final offset = target.transform.valueFor(source.property) -
+          presetLayer.transform.valueFor(source.property);
+      final remapped = remapTrack(source, valueOffset: offset);
+      final index = tracks.indexWhere((item) => item.property == source.property);
+      if (index < 0) {
+        tracks.add(remapped);
+      } else {
+        var merged = tracks[index];
+        for (final keyframe in remapped.keyframes) {
+          merged = merged.upsert(keyframe);
+        }
+        tracks[index] = merged;
+      }
+    }
+
+    final effects = [...target.effects];
+    for (final source in presetLayer.effects) {
+      effects.add(EffectInstance(
+        id: _id('preset_effect'),
+        effectId: source.effectId,
+        name: source.name,
+        enabled: source.enabled,
+        parameters: source.parameters,
+        keyframeTracks: source.keyframeTracks
+            .map((track) => remapTrack(track))
+            .toList(),
+        assetUri: source.assetUri,
+        assetInterpolation: source.assetInterpolation,
+        nativeDescriptor: source.nativeDescriptor,
+      ));
+    }
+    _replace(target.copyWith(effects: effects, keyframeTracks: tracks));
+  }
+
+  void setNativeEffectParameter(
+    String effectInstanceId,
+    String parameterMatchName,
+    Object? value,
+  ) {
+    final layer = selectedLayer;
+    if (layer == null || layer.locked) return;
+    final effects = layer.effects.map((effect) {
+      if (effect.id != effectInstanceId) return effect;
+      final descriptor = <String, Object?>{...effect.nativeDescriptor};
+      final rawParameters = descriptor['parameters'];
+      if (rawParameters is! List) return effect;
+      final parameters = rawParameters.map((raw) {
+        if (raw is! Map) return raw;
+        final item = Map<String, Object?>.from(raw);
+        final matchName = item['matchName']?.toString() ?? '';
+        if (matchName == parameterMatchName) item['value'] = value;
+        return item;
+      }).toList();
+      descriptor['parameters'] = parameters;
+      return effect.copyWith(nativeDescriptor: descriptor);
+    }).toList();
+    _replace(layer.copyWith(effects: effects));
+  }
+
   void addKeyframe(String property, {double? value}) {
     final layer = selectedLayer;
     if (layer == null) return;

@@ -3,6 +3,56 @@ import 'package:depthvibe/features/composition/engine/composition_project_codec.
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('round-trips opaque Adobe native effect schemas, values and keyframe data', () {
+    final document = CompositionDocument(
+      layers: [
+        CompositionLayer(
+          id: 'native-layer',
+          name: 'Native layer',
+          kind: LayerKind.video,
+          effects: const [
+            EffectInstance(
+              id: 'effect-1',
+              effectId: 'native_effect',
+              name: 'Third-party glow',
+              nativeDescriptor: {
+                'hostApp': 'aftereffects-beta',
+                'matchName': 'Vendor.Glow',
+                'displayName': 'Glow Plus',
+                'category': 'Stylize',
+                'parameters': [
+                  {
+                    'matchName': 'Vendor.Glow-0001',
+                    'name': 'Radius',
+                    'displayName': 'Radius',
+                    'value': 24.5,
+                    'minValue': 0,
+                    'maxValue': 100,
+                    'unitsText': 'px',
+                    'keyframes': [
+                      {'timeMs': 0, 'value': 10.0},
+                      {'timeMs': 1000, 'value': 24.5},
+                    ],
+                  },
+                ],
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+    final decoded = CompositionProjectCodec.decodeDocument(
+      CompositionProjectCodec.encodeDocument(document),
+    );
+    final descriptor = decoded.layers.single.effects.single.nativeDescriptor;
+    expect(descriptor['matchName'], 'Vendor.Glow');
+    expect((descriptor['parameters'] as List).single['maxValue'], 100);
+    expect(
+      ((descriptor['parameters'] as List).single['keyframes'] as List).length,
+      2,
+    );
+  });
+
   test('round-trips layers, masks, effects, keyframes, audio, transitions and HDR', () {
     const document = CompositionDocument(
       name: 'Feature Film',

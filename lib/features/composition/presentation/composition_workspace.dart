@@ -24,6 +24,7 @@ import '../../extensions/data/adobe_bridge_service.dart';
 import '../data/photoshop_import_service.dart';
 import '../domain/composition_models.dart';
 import '../data/motion_preset_catalog.dart';
+import '../data/motion_preset_package.dart';
 import '../data/transition_catalog.dart';
 import '../domain/color_grade_preset.dart';
 import '../engine/parent_transform_resolver.dart';
@@ -2275,6 +2276,64 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  Widget _buildNativeEffectParameterControl(
+    EffectInstance effect,
+    Map<String, Object?> parameter,
+  ) {
+    final matchName = parameter['matchName']?.toString() ?? '';
+    final displayName = parameter['displayName']?.toString();
+    final label = displayName != null && displayName.isNotEmpty
+        ? displayName
+        : (parameter['name']?.toString() ?? matchName);
+    final value = parameter['value'];
+    if (matchName.isEmpty) return const SizedBox.shrink();
+    if (value is bool) {
+      return SwitchListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        title: Text(label, style: const TextStyle(fontSize: 10)),
+        value: value,
+        onChanged: (next) => _controller.setNativeEffectParameter(
+          effect.id, matchName, next,
+        ),
+      );
+    }
+    if (value is num) {
+      final min = (parameter['minValue'] as num?)?.toDouble();
+      final max = (parameter['maxValue'] as num?)?.toDouble();
+      if (min != null && max != null && max > min && min.isFinite && max.isFinite) {
+        final safeValue = value.toDouble().clamp(min, max).toDouble();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              label + '  ' + safeValue.toStringAsFixed(2) +
+                  (parameter['unitsText'] == null
+                      ? ''
+                      : ' ' + parameter['unitsText'].toString()),
+              style: const TextStyle(fontSize: 10),
+            ),
+            Slider(
+              min: min,
+              max: max,
+              value: safeValue,
+              onChanged: (next) => _controller.setNativeEffectParameter(
+                effect.id, matchName, next,
+              ),
+            ),
+          ],
+        );
+      }
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Text(
+        label + ': ' + (value?.toString() ?? 'Unsupported parameter type'),
+        style: const TextStyle(fontSize: 9, color: Color(0xFF9DABC3)),
+      ),
+    );
+  }
+
   Widget _buildEffectsPanel(CompositionLayer layer) {
     final filtered = EffectCatalog.allEffects
         .where((effect) => _effectCategory == 'All' || effect.category == _effectCategory)
@@ -2283,6 +2342,26 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _panelHeader('EFFECT LIBRARY', Icons.auto_awesome),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _exportMotionPreset(layer),
+                icon: const Icon(Icons.file_download_outlined, size: 15),
+                label: const Text('EXPORT PRESET'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _importMotionPreset,
+                icon: const Icon(Icons.file_upload_outlined, size: 15),
+                label: const Text('IMPORT PRESET'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
         PopupMenuButton<String>(
           tooltip: 'Apply an editable motion preset at the playhead',
           onSelected: _controller.applyMotionPreset,
@@ -2303,16 +2382,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 ),
               ),
             )).toList(),
-          child: const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.auto_awesome_motion, size: 16),
-                SizedBox(width: 7),
+                const Icon(Icons.auto_awesome_motion, size: 16),
+                const SizedBox(width: 7),
                 Text('BROWSE ' + MotionPresetCatalog.all.length.toString() + ' MOTION PRESETS'),
-                SizedBox(width: 8),
-                Icon(Icons.expand_more, size: 16),
+                const SizedBox(width: 8),
+                const Icon(Icons.expand_more, size: 16),
               ],
             ),
           ),
@@ -2357,7 +2436,25 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                         ),
                       ],
                     ),
-                    if (effect.effectId == 'color_grade')
+                    if (effect.nativeDescriptor.isNotEmpty) ...[
+                      Text(
+                        'NATIVE · ' +
+                            (effect.nativeDescriptor['hostApp']?.toString() ?? 'Adobe host') +
+                            ' · ' +
+                            (effect.nativeDescriptor['matchName']?.toString() ?? ''),
+                        style: const TextStyle(
+                          fontSize: 9,
+                          color: Color(0xFF9DABC3),
+                        ),
+                      ),
+                      for (final rawParameter in
+                          (effect.nativeDescriptor['parameters'] as List? ?? const []))
+                        if (rawParameter is Map)
+                          _buildNativeEffectParameterControl(
+                            effect,
+                            Map<String, Object?>.from(rawParameter),
+                          ),
+                    ] else if (effect.effectId == 'color_grade')
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 8),
                         child: Text(
@@ -2767,6 +2864,59 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       if (mounted) {
         setState(() => _notice = 'Color preset import failed: $error');
       }
+    }
+  }
+
+  Future<void> _exportMotionPreset(CompositionLayer layer) async {
+    try {
+      final source = MotionPresetPackage.encode(layer, name: layer.name);
+      final temporary = await getTemporaryDirectory();
+      final safeName = layer.name
+          .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')
+          .replaceAll(RegExp(r'_+'), '_');
+      final output = File(
+        temporary.path + Platform.pathSeparator +
+            'DepthVibe_' + (safeName.isEmpty ? 'Motion' : safeName) + '_' +
+            DateTime.now().microsecondsSinceEpoch.toString() + '.dvmpreset',
+      );
+      await output.writeAsString(source, flush: true);
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(output.path)],
+        text: 'DepthVibe editable motion/effect preset',
+      ));
+      if (mounted) setState(() => _notice =
+          'Preset exported with editable keyframes, effect settings and native Adobe descriptors.');
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Preset export failed: $error');
+    }
+  }
+
+  Future<void> _importMotionPreset() async {
+    try {
+      final picked = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['dvmpreset'],
+      );
+      if (picked == null) return;
+      final path = picked.path;
+      if (path == null || path.isEmpty) {
+        throw StateError('The selected preset has no readable local path.');
+      }
+      final presetLayer = MotionPresetPackage.decode(
+        await File(path).readAsString(),
+      );
+      if (_selected == null) {
+        throw StateError('Select a target layer before applying a preset.');
+      }
+      _controller.applyLayerPreset(presetLayer);
+      if (mounted) {
+        setState(() => _notice =
+            'Imported "' + presetLayer.name + '" with ' +
+            presetLayer.effects.length.toString() + ' effect(s) and ' +
+            presetLayer.keyframeTracks.length.toString() + ' animation track(s).');
+      }
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Preset import failed: $error');
     }
   }
 

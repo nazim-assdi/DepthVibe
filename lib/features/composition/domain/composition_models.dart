@@ -716,6 +716,7 @@ class EffectInstance {
     this.keyframeTracks = const [],
     this.assetUri,
     this.assetInterpolation = 'trilinear',
+    this.nativeDescriptor = const {},
   });
 
   final String id;
@@ -725,6 +726,9 @@ class EffectInstance {
   final Map<String, double> parameters;
   final String? assetUri;
   final String assetInterpolation;
+  /// Inert native Adobe effect metadata retained for host-side re-creation.
+  /// This data is never evaluated as code or expressions.
+  final Map<String, Object?> nativeDescriptor;
   final List<KeyframeTrack> keyframeTracks;
 
   double parameterAt(String key, int timeMs, {double fallback = 0}) {
@@ -740,6 +744,7 @@ class EffectInstance {
     String? assetUri,
     bool clearAssetUri = false,
     String? assetInterpolation,
+    Map<String, Object?>? nativeDescriptor,
   }) =>
       EffectInstance(
         id: id,
@@ -750,6 +755,7 @@ class EffectInstance {
         keyframeTracks: keyframeTracks ?? this.keyframeTracks,
         assetUri: clearAssetUri ? null : (assetUri ?? this.assetUri),
         assetInterpolation: assetInterpolation ?? this.assetInterpolation,
+        nativeDescriptor: nativeDescriptor ?? this.nativeDescriptor,
       );
 }
 

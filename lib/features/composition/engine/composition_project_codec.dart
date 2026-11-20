@@ -74,6 +74,8 @@ class CompositionProjectCodec {
                   effect.keyframeTracks.map((track) => track.toJson()).toList(),
               'assetUri': asset(effect.assetUri),
               'assetInterpolation': effect.assetInterpolation,
+              if (effect.nativeDescriptor.isNotEmpty)
+                'nativeDescriptor': effect.nativeDescriptor,
             }).toList(),
         'keyframeTracks':
             layer.keyframeTracks.map((track) => track.toJson()).toList(),
@@ -140,6 +142,7 @@ class CompositionProjectCodec {
           keyframeTracks: _decodeTracks(effect['keyframeTracks']),
           assetUri: asset(_optionalString(effect['assetUri'])),
           assetInterpolation: _string(effect['assetInterpolation'], 'trilinear'),
+          nativeDescriptor: _safeMetadata(effect['nativeDescriptor']),
         );
       }).toList();
 

@@ -3,6 +3,95 @@ import 'package:depthvibe/features/composition/domain/composition_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('applies a portable native-effect preset with shifted editable keyframes', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 8000,
+        playheadMs: 3000,
+        layers: [
+          CompositionLayer(
+            id: 'target',
+            name: 'Target',
+            kind: LayerKind.video,
+            startMs: 0,
+            transform: LayerTransform(position: Vector3(600, 400, 0)),
+          ),
+        ],
+        selectedLayerId: 'target',
+      ),
+    );
+    final preset = CompositionLayer(
+      id: 'preset',
+      name: 'Native preset',
+      kind: LayerKind.video,
+      startMs: 1000,
+      transform: const LayerTransform(position: Vector3(100, 200, 0)),
+      keyframeTracks: const [
+        KeyframeTrack(
+          property: 'position.x',
+          keyframes: [
+            ScalarKeyframe(timeMs: 1000, value: 100),
+            ScalarKeyframe(timeMs: 1500, value: 200),
+          ],
+        ),
+      ],
+      effects: const [
+        EffectInstance(
+          id: 'source-effect',
+          effectId: 'native_effect',
+          name: 'Third-party Glow',
+          nativeDescriptor: {
+            'hostApp': 'aftereffects-beta',
+            'matchName': 'Vendor.Glow',
+            'parameters': [
+              {'matchName': 'Vendor.Glow-0001', 'name': 'Radius', 'value': 18},
+            ],
+          },
+        ),
+      ],
+    );
+    controller.applyLayerPreset(preset);
+    final layer = controller.selectedLayer!;
+    final track = layer.keyframeTracks.single;
+    expect(track.keyframes.first.timeMs, 3000);
+    expect(track.keyframes.last.timeMs, 3500);
+    expect(track.keyframes.first.value, 600);
+    expect(track.keyframes.last.value, 700);
+    expect(layer.effects.single.nativeDescriptor['matchName'], 'Vendor.Glow');
+  });
+
+  test('updates a captured native effect parameter without discarding its descriptor', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(
+            id: 'target',
+            name: 'Target',
+            kind: LayerKind.video,
+            effects: [
+              EffectInstance(
+                id: 'native-1',
+                effectId: 'native_effect',
+                name: 'Native effect',
+                nativeDescriptor: {
+                  'matchName': 'Vendor.Glow',
+                  'parameters': [
+                    {'matchName': 'Vendor.Glow-0001', 'name': 'Radius', 'value': 18},
+                  ],
+                },
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'target',
+      ),
+    );
+    controller.setNativeEffectParameter('native-1', 'Vendor.Glow-0001', 32);
+    final descriptor = controller.selectedLayer!.effects.single.nativeDescriptor;
+    expect((descriptor['parameters'] as List).single['value'], 32);
+    expect(descriptor['matchName'], 'Vendor.Glow');
+  });
+
   test('applies motion presets as editable keyframe tracks', () {
     final controller = CompositionController(
       document: const CompositionDocument(
