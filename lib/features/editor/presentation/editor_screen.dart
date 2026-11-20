@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../features/composition/presentation/composition_workspace.dart';
 import '../../../features/extensions/presentation/extension_manager_screen.dart';
+import '../../fonts/presentation/font_manager_dialog.dart';
 import '../../../features/media/data/media_picker_service.dart';
 import '../../../features/media/presentation/camera_capture_screen.dart';
 import '../application/editor_controller.dart';
@@ -75,6 +76,15 @@ class _EditorScreenState extends State<EditorScreen> {
       _position = Duration.zero;
       _status = 'Media loaded';
     });
+  }
+
+  Future<void> _openFontManager() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => const FontManagerDialog(),
+    );
+    if (mounted) setState(() {});
   }
 
   void _openExtensions() {
@@ -339,6 +349,18 @@ class _EditorScreenState extends State<EditorScreen> {
               onPressed: _openExtensions,
               icon: const Icon(Icons.extension),
             ),
+          if (MediaQuery.sizeOf(context).width > 720)
+            _toolButton(
+              icon: Icons.font_download_outlined,
+              label: 'Fonts',
+              onPressed: _openFontManager,
+            )
+          else
+            IconButton(
+              tooltip: 'Global Font Manager',
+              onPressed: _openFontManager,
+              icon: const Icon(Icons.font_download_outlined),
+            ),
           _toolButton(
             icon: Icons.layers,
             label: 'Compositor',
@@ -402,12 +424,20 @@ class _EditorScreenState extends State<EditorScreen> {
                         Text(
                           project.title,
                           textAlign: TextAlign.center,
+                          textDirection: RegExp(r'[\u0590-\u08FF\uFB1D-\uFEFF]')
+                                  .hasMatch(project.title)
+                              ? TextDirection.rtl
+                              : TextDirection.ltr,
                           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white, shadows: [Shadow(blurRadius: 8, color: Colors.black)]),
                         ),
                       if (project.caption.isNotEmpty)
                         Text(
                           project.caption,
                           textAlign: TextAlign.center,
+                          textDirection: RegExp(r'[\u0590-\u08FF\uFB1D-\uFEFF]')
+                                  .hasMatch(project.caption)
+                              ? TextDirection.rtl
+                              : TextDirection.ltr,
                           style: const TextStyle(color: Color(0xFFE3E8F2), fontSize: 13),
                         ),
                     ],
