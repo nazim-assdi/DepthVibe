@@ -86,6 +86,8 @@ enum TransitionKind {
 
 enum AudioDuckingRole { none, background, trigger }
 
+enum ColorOutputProfile { rec709, hdr10Pq, hlg }
+
 class AudioSettings {
   const AudioSettings({
     this.gainDb = 0,
@@ -694,6 +696,7 @@ class EffectInstance {
     this.enabled = true,
     this.parameters = const {},
     this.keyframeTracks = const [],
+    this.assetUri,
   });
 
   final String id;
@@ -701,6 +704,7 @@ class EffectInstance {
   final String name;
   final bool enabled;
   final Map<String, double> parameters;
+  final String? assetUri;
   final List<KeyframeTrack> keyframeTracks;
 
   double parameterAt(String key, int timeMs, {double fallback = 0}) {
@@ -713,6 +717,8 @@ class EffectInstance {
     bool? enabled,
     Map<String, double>? parameters,
     List<KeyframeTrack>? keyframeTracks,
+    String? assetUri,
+    bool clearAssetUri = false,
   }) =>
       EffectInstance(
         id: id,
@@ -721,6 +727,7 @@ class EffectInstance {
         enabled: enabled ?? this.enabled,
         parameters: parameters ?? this.parameters,
         keyframeTracks: keyframeTracks ?? this.keyframeTracks,
+        assetUri: clearAssetUri ? null : (assetUri ?? this.assetUri),
       );
 }
 
@@ -1088,6 +1095,7 @@ class CompositionDocument {
     this.height = 1080,
     this.frameRate = 30,
     this.durationMs = 30000,
+    this.colorOutputProfile = ColorOutputProfile.rec709,
     this.layers = const [],
     this.transitions = const [],
     this.audioBuses = const [
@@ -1102,6 +1110,7 @@ class CompositionDocument {
   final int height;
   final double frameRate;
   final int durationMs;
+  final ColorOutputProfile colorOutputProfile;
   final List<CompositionLayer> layers;
   final List<CompositionTransition> transitions;
   final List<AudioBus> audioBuses;
@@ -1114,6 +1123,7 @@ class CompositionDocument {
     int? height,
     double? frameRate,
     int? durationMs,
+    ColorOutputProfile? colorOutputProfile,
     List<CompositionLayer>? layers,
     List<CompositionTransition>? transitions,
     List<AudioBus>? audioBuses,
@@ -1127,6 +1137,7 @@ class CompositionDocument {
         height: height ?? this.height,
         frameRate: frameRate ?? this.frameRate,
         durationMs: durationMs ?? this.durationMs,
+        colorOutputProfile: colorOutputProfile ?? this.colorOutputProfile,
         layers: layers ?? this.layers,
         transitions: transitions ?? this.transitions,
         audioBuses: audioBuses ?? this.audioBuses,
