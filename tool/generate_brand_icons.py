@@ -184,9 +184,14 @@ def generate_ios_icons(master: bytearray, directory: Path) -> None:
     for logical, scale, pixel_size in sizes:
         filename = f"DepthVibe-{pixel_size}.png"
         write_resized_png(master, pixel_size, directory / filename)
+        idiom = (
+            "ios-marketing" if logical == "1024x1024"
+            else "ipad" if logical in ("76x76", "83.5x83.5")
+            else "iphone"
+        )
         images.append({
             "filename": filename,
-            "idiom": "universal" if logical == "1024x1024" else "universal",
+            "idiom": idiom,
             "platform": "ios",
             "size": logical,
             "scale": scale,
@@ -237,7 +242,8 @@ def main() -> None:
         )
 
     windows_icon = ROOT / "windows" / "runner" / "resources" / "app_icon.ico"
-    make_ico(resize_rgba(master, MASTER_SIZE, 256), windows_icon)
+    windows_png = encode_png(256, 256, resize_rgba(master, MASTER_SIZE, 256))
+    make_ico(windows_png, windows_icon)
 
     generate_ios_icons(
         master,
