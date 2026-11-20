@@ -115,13 +115,52 @@ class CompositionProjectService {
       );
 
       await outputFile.parent.create(recursive: true);
-      if (await outputFile.exists()) await outputFile.delete();
+      final temporaryOutput = File(
+        outputFile.path + '.writing_' +
+            DateTime.now().microsecondsSinceEpoch.toString(),
+      );
+      final backupOutput = File(outputFile.path + '.replacing_backup');
       final encoder = ZipFileEncoder();
-      encoder.create(outputFile.path, level: 1);
       try {
-        await encoder.addDirectory(staging, includeDirName: false, level: 1);
+        encoder.create(temporaryOutput.path, level: 1);
+        try {
+          await encoder.addDirectory(staging, includeDirName: false, level: 1);
+        } finally {
+          await encoder.close();
+        }
+      } catch (_) {
+        if (await temporaryOutput.exists()) {
+          await temporaryOutput.delete();
+        }
+        rethrow;
+      }
+
+      var movedExistingOutput = false;
+      try {
+        if (await backupOutput.exists()) {
+          if (!await outputFile.exists()) {
+            await backupOutput.rename(outputFile.path);
+          } else {
+            await backupOutput.delete();
+          }
+        }
+        if (await outputFile.exists()) {
+          await outputFile.rename(backupOutput.path);
+          movedExistingOutput = true;
+        }
+        await temporaryOutput.rename(outputFile.path);
+        if (await backupOutput.exists()) await backupOutput.delete();
+      } catch (_) {
+        if (movedExistingOutput &&
+            await backupOutput.exists() &&
+            !await outputFile.exists()) {
+          await backupOutput.rename(outputFile.path);
+        }
+        rethrow;
       } finally {
-        await encoder.close();
+        if (await temporaryOutput.exists()) {
+          await temporaryOutput.delete();
+        }
       }
       return CompositionProjectExportResult(
         file: outputFile,
@@ -130,6 +169,75 @@ class CompositionProjectService {
       );
     } finally {
       if (await staging.exists()) await staging.delete(recursive: true);
+    }
+  }
+
+  static const maxVersionHistory = 10;
+
+  /// Keeps the previous saved package before replacing it with a new version.
+  Future<CompositionProjectExportResult> exportVersionedProject(
+    CompositionDocument document, {
+    required File outputFile,
+  }) async {
+    if (await outputFile.exists() && await outputFile.length() > 0) {
+      final historyDirectory = Directory(outputFile.path + '.versions');
+      await historyDirectory.create(recursive: true);
+      final stamp = DateTime.now().toUtc().toIso8601String()
+          .replaceAll(':', '-')
+          .replaceAll('.', '-');
+      var versionFile = File(
+        _join(historyDirectory.path, stamp + '_previous.dvproj'),
+      );
+      var suffix = 1;
+      while (await versionFile.exists()) {
+        versionFile = File(
+          _join(historyDirectory.path, stamp + '_previous_' +
+              suffix.toString() + '.dvproj'),
+        );
+        suffix++;
+      }
+      await outputFile.copy(versionFile.path);
+      await _pruneVersions(historyDirectory);
+    }
+    return exportProject(document, outputFile: outputFile);
+  }
+
+  Future<List<CompositionProjectVersion>> listProjectVersions(
+    File projectFile,
+  ) async {
+    final historyDirectory = Directory(projectFile.path + '.versions');
+    if (!await historyDirectory.exists()) {
+      return const <CompositionProjectVersion>[];
+    }
+    final versions = <CompositionProjectVersion>[];
+    await for (final entity in historyDirectory.list(followLinks: false)) {
+      if (entity is! File || !entity.path.toLowerCase().endsWith('.dvproj')) {
+        continue;
+      }
+      final stat = await entity.stat();
+      if (stat.type != FileSystemEntityType.file || stat.size <= 0) continue;
+      versions.add(CompositionProjectVersion(
+        file: entity,
+        modifiedAt: stat.modified,
+        sizeBytes: stat.size,
+      ));
+    }
+    versions.sort((a, b) => b.file.uri.pathSegments.last
+        .compareTo(a.file.uri.pathSegments.last));
+    return List.unmodifiable(versions);
+  }
+
+  Future<void> _pruneVersions(Directory historyDirectory) async {
+    final versions = <File>[];
+    await for (final entity in historyDirectory.list(followLinks: false)) {
+      if (entity is File && entity.path.toLowerCase().endsWith('.dvproj')) {
+        versions.add(entity);
+      }
+    }
+    versions.sort((a, b) => b.uri.pathSegments.last
+        .compareTo(a.uri.pathSegments.last));
+    for (final oldVersion in versions.skip(maxVersionHistory)) {
+      await oldVersion.delete();
     }
   }
 
@@ -364,4 +472,17 @@ class CompositionProjectService {
         ? extension
         : '.bin';
   }
+}
+
+
+class CompositionProjectVersion {
+  const CompositionProjectVersion({
+    required this.file,
+    required this.modifiedAt,
+    required this.sizeBytes,
+  });
+
+  final File file;
+  final DateTime modifiedAt;
+  final int sizeBytes;
 }

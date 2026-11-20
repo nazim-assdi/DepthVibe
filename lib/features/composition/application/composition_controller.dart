@@ -47,6 +47,26 @@ class CompositionController extends ChangeNotifier {
   
   /// Replaces the full composition when a project package is opened.
   /// The ID counter is advanced past every imported numeric suffix.
+  /// Replaces every reference to a missing local asset across the composition.
+  void relinkAssetReference(String oldUri, String newUri) {
+    if (oldUri.isEmpty || newUri.isEmpty || oldUri == newUri) return;
+    final updatedLayers = _document.layers.map((layer) {
+      final updatedEffects = layer.effects.map((effect) {
+        if (effect.assetUri != oldUri) return effect;
+        return effect.copyWith(assetUri: newUri);
+      }).toList();
+      return layer.copyWith(
+        sourceUri: layer.sourceUri == oldUri ? newUri : null,
+        sourceDocumentUri:
+            layer.sourceDocumentUri == oldUri ? newUri : null,
+        smartObjectSourceUri:
+            layer.smartObjectSourceUri == oldUri ? newUri : null,
+        effects: updatedEffects,
+      );
+    }).toList();
+    _set(_document.copyWith(layers: updatedLayers));
+  }
+
   void replaceDocument(CompositionDocument document) {
     _document = document;
     var next = 1;

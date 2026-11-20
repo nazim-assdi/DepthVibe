@@ -93,6 +93,78 @@ void main() {
     expect(await File(temporary.path + '/outside.txt').exists(), isFalse);
   });
 
+  test('keeps project save versions and restores an earlier package', () async {
+    final output = File(temporary.path + '/history.dvproj');
+    const first = CompositionDocument(
+      name: 'Version One',
+      layers: [
+        CompositionLayer(id: 'layer_1', name: 'First', kind: LayerKind.video),
+      ],
+    );
+    const second = CompositionDocument(
+      name: 'Version Two',
+      layers: [
+        CompositionLayer(id: 'layer_1', name: 'Second', kind: LayerKind.video),
+      ],
+    );
+
+    await service.exportVersionedProject(first, outputFile: output);
+    await service.exportVersionedProject(second, outputFile: output);
+
+    final versions = await service.listProjectVersions(output);
+    expect(versions, hasLength(1));
+    final restored = await service.importProject(
+      versions.single.file,
+      projectsDirectory: Directory(temporary.path + '/history_restore'),
+    );
+    expect(restored.document.name, 'Version One');
+  });
+
+  test('retains only the newest ten project history snapshots', () async {
+    final output = File(temporary.path + '/retention.dvproj');
+    for (var index = 0; index < 12; index++) {
+      await service.exportVersionedProject(
+        CompositionDocument(name: 'Version ' + index.toString()),
+        outputFile: output,
+      );
+    }
+    final versions = await service.listProjectVersions(output);
+    expect(versions, hasLength(10));
+  });
+
+  test('failed project export does not replace the last valid package', () async {
+    final output = File(temporary.path + '/atomic.dvproj');
+    await service.exportProject(
+      const CompositionDocument(name: 'Last valid package'),
+      outputFile: output,
+    );
+    final originalBytes = await output.readAsBytes();
+
+    const invalid = CompositionDocument(
+      name: 'Invalid replacement',
+      layers: [
+        CompositionLayer(
+          id: 'layer_1',
+          name: 'Invalid effect',
+          kind: LayerKind.video,
+          effects: [
+            EffectInstance(
+              id: 'effect_1',
+              effectId: 'color_grade',
+              name: 'Grade',
+              parameters: {'contrast': double.infinity},
+            ),
+          ],
+        ),
+      ],
+    );
+    await expectLater(
+      service.exportProject(invalid, outputFile: output),
+      throwsA(isA<FormatException>()),
+    );
+    expect(await output.readAsBytes(), originalBytes);
+  });
+
   test('reports missing linked media and retains its external reference', () async {
     const document = CompositionDocument(
       layers: [

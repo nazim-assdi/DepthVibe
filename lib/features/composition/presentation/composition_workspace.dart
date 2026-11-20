@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:cross_file/cross_file.dart';
+import 'package:flutter/widgets.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
@@ -19,6 +20,7 @@ import '../engine/parent_transform_resolver.dart';
 import '../engine/camera_projection_resolver.dart';
 import '../engine/composition_export_service.dart';
 import '../engine/composition_project_service.dart';
+import '../engine/composition_recovery_service.dart';
 import '../engine/obj_mesh_loader.dart';
 import '../engine/scene_mesh_loader.dart';
 import '../engine/software_3d_renderer.dart';
@@ -39,7 +41,8 @@ class CompositionWorkspace extends StatefulWidget {
   State<CompositionWorkspace> createState() => _CompositionWorkspaceState();
 }
 
-class _CompositionWorkspaceState extends State<CompositionWorkspace> {
+class _CompositionWorkspaceState extends State<CompositionWorkspace>
+    with WidgetsBindingObserver {
   final CompositionController _controller = CompositionController();
   final PhotoshopImportService _photoshop = const PhotoshopImportService();
   final CompositionExportService _exporter = const CompositionExportService();
@@ -165,7 +168,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
   String _effectCategory = 'All';
   String? _notice;
   final CompositionProjectService _projectService = const CompositionProjectService();
+  final CompositionRecoveryService _recoveryService = const CompositionRecoveryService();
   bool _projectBusy = false;
+  bool _recoverySaving = false;
+  bool _recoveryDirty = false;
+  int _documentRevision = 0;
+  Timer? _recoveryTimer;
+  File? _currentProjectFile;
+  String _autosaveStatus = 'Autosave ready';
 
   static const _layerButtons = <(LayerKind, String, IconData)>[
     (LayerKind.video, 'Video', Icons.movie_outlined),
@@ -183,6 +193,321 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
   ];
 
   CompositionLayer? get _selected => _controller.selectedLayer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _controller.addListener(_onCompositionChanged);
+    _recoveryTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _autosaveIfNeeded(),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_checkForCrashRecovery());
+    });
+  }
+
+  void _onCompositionChanged() {
+    _documentRevision++;
+    _recoveryDirty = true;
+    _autosaveStatus = 'Unsaved changes';
+  }
+
+  Future<Directory> _recoveryDirectory() async {
+    final documents = await getApplicationDocumentsDirectory();
+    return Directory(
+      documents.path + Platform.pathSeparator +
+          'DepthVibe' + Platform.pathSeparator + 'Recovery',
+    );
+  }
+
+  Future<void> _autosaveIfNeeded() async {
+    if (_recoverySaving ||
+        !_recoveryDirty ||
+        _projectBusy ||
+        _rendering) {
+      return;
+    }
+    _recoverySaving = true;
+    final revision = _documentRevision;
+    final snapshot = _controller.document;
+    try {
+      final directory = await _recoveryDirectory();
+      await _recoveryService.save(snapshot, recoveryDirectory: directory);
+      if (revision == _documentRevision) {
+        _recoveryDirty = false;
+        _autosaveStatus = 'Autosaved ' + DateTime.now().toLocal().toString();
+        if (mounted) setState(() {});
+      }
+    } catch (error) {
+      _autosaveStatus = 'Autosave failed';
+      if (mounted) {
+        setState(() => _notice = 'Autosave failed: ' + error.toString());
+      }
+    } finally {
+      _recoverySaving = false;
+    }
+  }
+
+  Future<void> _checkForCrashRecovery() async {
+    try {
+      final directory = await _recoveryDirectory();
+      final snapshot = await _recoveryService.load(
+        recoveryDirectory: directory,
+      );
+      if (snapshot == null || !mounted) return;
+      final recover = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('RECOVER UNSAVED PROJECT?'),
+          content: Text(
+            'DepthVibe found an autosave from ' +
+                snapshot.savedAt.toLocal().toString() +
+                '. Restore ' + snapshot.document.name +
+                ' with ' + snapshot.document.layers.length.toString() +
+                ' layers?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('DISCARD'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('RECOVER PROJECT'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      if (recover == true) {
+        _controller.replaceDocument(snapshot.document);
+        _recoveryDirty = false;
+        _currentProjectFile = null;
+        _autosaveStatus = 'Recovered unsaved project';
+        setState(() {
+          _notice = 'Recovered "' + snapshot.document.name +
+              '" from crash-recovery autosave. Save a .dvproj copy to keep it portable.';
+        });
+      } else {
+        await _recoveryService.clear(recoveryDirectory: directory);
+        _recoveryDirty = false;
+        _autosaveStatus = 'Recovery discarded';
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _notice = 'Crash recovery could not be opened: ' +
+            error.toString());
+      }
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      unawaited(_autosaveIfNeeded());
+    }
+  }
+
+  String _localAssetPath(String path) {
+    if (path.toLowerCase().startsWith('file://')) {
+      try {
+        return Uri.parse(path).toFilePath();
+      } on FormatException {
+        return path;
+      }
+    }
+    return path;
+  }
+
+  Future<List<String>> _missingMediaPaths() async {
+    final candidates = <String>{};
+    for (final layer in _controller.document.layers) {
+      for (final path in [
+        layer.sourceUri,
+        layer.sourceDocumentUri,
+        layer.smartObjectSourceUri,
+        for (final effect in layer.effects) effect.assetUri,
+      ]) {
+        if (path != null &&
+            path.isNotEmpty &&
+            !path.startsWith('http://') &&
+            !path.startsWith('https://')) {
+          candidates.add(path);
+        }
+      }
+    }
+    final missing = <String>[];
+    for (final path in candidates) {
+      if (!await File(_localAssetPath(path)).exists()) missing.add(path);
+    }
+    missing.sort();
+    return missing;
+  }
+
+  Future<void> _relinkMissingMedia() async {
+    if (_projectBusy || _rendering) return;
+    final missing = await _missingMediaPaths();
+    if (missing.isEmpty) {
+      if (mounted) setState(() => _notice = 'All local media references are available.');
+      return;
+    }
+
+    var relinked = 0;
+    try {
+      for (final oldPath in missing) {
+        if (!mounted) return;
+        setState(() {
+          _projectBusy = true;
+          _notice = 'Relink ' + (relinked + 1).toString() +
+              ' of ' + missing.length.toString() + ': ' + oldPath;
+        });
+        final picked = await FilePicker.pickFile(type: FileType.any);
+        if (picked == null) break;
+        final pickedPath = picked.path;
+        if (pickedPath == null || pickedPath.isEmpty) {
+          throw StateError('The selected replacement file has no local path.');
+        }
+        final source = File(pickedPath);
+        if (!await source.exists()) {
+          throw StateError('The selected replacement file does not exist.');
+        }
+
+        final documents = await getApplicationDocumentsDirectory();
+        final targetDirectory = Directory(
+          documents.path + Platform.pathSeparator +
+              'DepthVibe' + Platform.pathSeparator + 'RelinkedAssets',
+        );
+        await targetDirectory.create(recursive: true);
+        final originalName = picked.name.replaceAll(
+          RegExp(r'[^A-Za-z0-9._-]'),
+          '_',
+        );
+        final safeName = originalName.isEmpty ? 'media.bin' : originalName;
+        final destination = File(
+          targetDirectory.path + Platform.pathSeparator +
+              DateTime.now().microsecondsSinceEpoch.toString() +
+              '_' + safeName,
+        );
+        final copied = await source.copy(destination.path);
+        _controller.relinkAssetReference(oldPath, copied.path);
+        relinked++;
+      }
+      if (mounted) {
+        setState(() {
+          _notice = 'Relinked ' + relinked.toString() + ' of ' +
+              missing.length.toString() + ' missing media references.';
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _notice = 'Media relink failed: ' + error.toString());
+      }
+    } finally {
+      if (mounted) setState(() => _projectBusy = false);
+    }
+  }
+
+  Future<void> _showProjectVersionHistory() async {
+    final projectFile = _currentProjectFile;
+    if (projectFile == null) {
+      setState(() => _notice = 'Save this composition as a .dvproj first to create version history.');
+      return;
+    }
+    try {
+      final versions = await _projectService.listProjectVersions(projectFile);
+      if (!mounted) return;
+      if (versions.isEmpty) {
+        setState(() => _notice = 'No previous project versions have been saved yet.');
+        return;
+      }
+      final selected = await showDialog<CompositionProjectVersion>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('PROJECT VERSION HISTORY'),
+          content: SizedBox(
+            width: 460,
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final version in versions)
+                  ListTile(
+                    leading: const Icon(Icons.history),
+                    title: Text(version.modifiedAt.toLocal().toString()),
+                    subtitle: Text(
+                      (version.sizeBytes / (1024 * 1024)).toStringAsFixed(1) +
+                          ' MB · ' + version.file.uri.pathSegments.last,
+                    ),
+                    onTap: () => Navigator.of(dialogContext).pop(version),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('CLOSE'),
+            ),
+          ],
+        ),
+      );
+      if (selected == null || !mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('RESTORE THIS VERSION?'),
+          content: const Text(
+            'The selected version will replace the current composition. Save the current state first if you need to keep it.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('CANCEL'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('RESTORE'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      setState(() {
+        _projectBusy = true;
+        _notice = 'Restoring project version…';
+      });
+      final documents = await getApplicationDocumentsDirectory();
+      final imported = await _projectService.importProject(
+        selected.file,
+        projectsDirectory: Directory(
+          documents.path + Platform.pathSeparator +
+              'DepthVibe' + Platform.pathSeparator + 'Projects' +
+              Platform.pathSeparator + 'HistoryRestores',
+        ),
+      );
+      _controller.replaceDocument(imported.document);
+      final recovery = await _recoveryDirectory();
+      await _recoveryService.clear(recoveryDirectory: recovery);
+      _recoveryDirty = true;
+      if (mounted) {
+        setState(() {
+          _currentProjectFile = projectFile;
+          _notice = 'Restored version of "' + imported.document.name + '".';
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _notice = 'Version restore failed: ' + error.toString());
+      }
+    } finally {
+      if (mounted) setState(() => _projectBusy = false);
+    }
+  }
+
 
   Future<void> _runMotionTracking() async {
     final layer = _selected;
@@ -456,6 +781,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
 
   @override
   void dispose() {
+    _recoveryTimer?.cancel();
+    _controller.removeListener(_onCompositionChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_autosaveIfNeeded());
     _controller.dispose();
     super.dispose();
   }
@@ -490,6 +819,27 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
                     ? null
                     : _saveCompositionProject,
                 icon: const Icon(Icons.save_alt),
+              ),
+              IconButton(
+                tooltip: 'Autosave now · $_autosaveStatus',
+                onPressed: _projectBusy || _rendering
+                    ? null
+                    : () => _autosaveIfNeeded(),
+                icon: const Icon(Icons.cloud_done_outlined),
+              ),
+              IconButton(
+                tooltip: 'Project version history',
+                onPressed: _projectBusy || _rendering
+                    ? null
+                    : _showProjectVersionHistory,
+                icon: const Icon(Icons.history),
+              ),
+              IconButton(
+                tooltip: 'Relink missing media',
+                onPressed: _projectBusy || _rendering
+                    ? null
+                    : _relinkMissingMedia,
+                icon: const Icon(Icons.link),
               ),
               IconButton(
                 tooltip: 'Import Photoshop PSD / PSB layers',
@@ -1759,43 +2109,50 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
     if (_projectBusy || _rendering) return;
     setState(() {
       _projectBusy = true;
-      _notice = 'Packaging composition and linked media…';
+      _notice = 'Saving project and creating a version checkpoint…';
     });
     try {
-      final documents = await getApplicationDocumentsDirectory();
-      final projectDirectory = Directory(
-        documents.path + Platform.pathSeparator +
-            'DepthVibe' + Platform.pathSeparator +
-            'Projects' + Platform.pathSeparator + 'Exports',
-      );
-      await projectDirectory.create(recursive: true);
-      final safeName = _controller.document.name
-          .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-          .replaceAll(RegExp(r'\s+'), '_');
-      final fileName = (safeName.isEmpty ? 'Untitled_Composition' : safeName) +
-          '.dvproj';
-      final output = File(
-        projectDirectory.path + Platform.pathSeparator + fileName,
-      );
-      final result = await _projectService.exportProject(
-        _controller.document,
+      final document = _controller.document;
+      final revision = _documentRevision;
+      File output;
+      if (_currentProjectFile != null) {
+        output = _currentProjectFile!;
+      } else {
+        final documents = await getApplicationDocumentsDirectory();
+        Directory targetDirectory;
+        if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+          final selectedDirectory = await FilePicker.pickDirectory();
+          targetDirectory = selectedDirectory == null
+              ? Directory(
+                  documents.path + Platform.pathSeparator +
+                      'DepthVibe' + Platform.pathSeparator +
+                      'Projects' + Platform.pathSeparator + 'Exports',
+                )
+              : Directory(selectedDirectory.toFilePath());
+        } else {
+          targetDirectory = Directory(
+            documents.path + Platform.pathSeparator +
+                'DepthVibe' + Platform.pathSeparator +
+                'Projects' + Platform.pathSeparator + 'Exports',
+          );
+        }
+        final safeName = document.name
+            .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
+            .replaceAll(RegExp(r'\s+'), '_');
+        final fileName = (safeName.isEmpty ? 'Untitled_Composition' : safeName) +
+            '.dvproj';
+        output = File(
+          targetDirectory.path + Platform.pathSeparator + fileName,
+        );
+      }
+
+      final result = await _projectService.exportVersionedProject(
+        document,
         outputFile: output,
       );
-
-      String savedPath = result.file.path;
+      _currentProjectFile = output;
       var shared = false;
-      if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-        final selectedDirectory = await FilePicker.pickDirectory();
-        if (selectedDirectory != null) {
-          final targetDirectory = Directory(selectedDirectory.toFilePath());
-          await targetDirectory.create(recursive: true);
-          final destination = File(
-            targetDirectory.path + Platform.pathSeparator + fileName,
-          );
-          if (await destination.exists()) await destination.delete();
-          savedPath = (await result.file.copy(destination.path)).path;
-        }
-      } else {
+      if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) {
         try {
           await SharePlus.instance.share(
             ShareParams(
@@ -1805,29 +2162,40 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
           );
           shared = true;
         } catch (_) {
-          // The project remains in the app's Projects/Exports folder.
+          // The package remains saved in the app's Projects folder.
         }
       }
 
+      if (revision == _documentRevision) {
+        final recovery = await _recoveryDirectory();
+        await _recoveryService.clear(recoveryDirectory: recovery);
+        _recoveryDirty = false;
+        _autosaveStatus = 'Project saved';
+      }
       if (!mounted) return;
       setState(() {
         final base = 'Project saved · ' +
-            result.embeddedAssetCount.toString() + ' assets embedded.';
-        final destinationNotice = shared
-            ? ' Use the share sheet to copy it to Files or Drive.'
-            : ' File: ' + savedPath;
+            result.embeddedAssetCount.toString() + ' assets embedded.' +
+            ' Version history keeps up to ' +
+            CompositionProjectService.maxVersionHistory.toString() +
+            ' earlier saves.';
+        final destination = shared
+            ? ' Copied through the share sheet.'
+            : ' File: ' + output.path;
         _notice = result.missingAssetPaths.isEmpty
-            ? base + destinationNotice
+            ? base + destination
             : base + ' ' + result.missingAssetPaths.length.toString() +
-                ' linked files were missing and remain external.' +
-                destinationNotice;
+                ' linked files were missing and remain external.' + destination;
       });
     } catch (error) {
       if (mounted) {
         setState(() => _notice = 'Project save failed: ' + error.toString());
       }
     } finally {
-      if (mounted) setState(() => _projectBusy = false);
+      if (mounted) {
+        setState(() => _projectBusy = false);
+        if (_recoveryDirty) unawaited(_autosaveIfNeeded());
+      }
     }
   }
 
@@ -1859,11 +2227,40 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace> {
         projectsDirectory: projects,
       );
       _controller.replaceDocument(imported.document);
+      final stableName = picked.name.replaceAll(
+        RegExp(r'[^A-Za-z0-9._-]'),
+        '_',
+      );
+      final stableBase = stableName.toLowerCase().endsWith('.dvproj')
+          ? stableName.substring(0, stableName.length - 6)
+          : stableName;
+      final stableFileName =
+          (stableBase.isEmpty ? 'Opened_Project' : stableBase) +
+          '_local_' + DateTime.now().millisecondsSinceEpoch.toString() +
+          '.dvproj';
+      final stableCopy = File(
+        projects.path + Platform.pathSeparator + stableFileName,
+      );
+      final sourceProject = File(path);
+      if (sourceProject.absolute.path != stableCopy.absolute.path) {
+        if (await stableCopy.exists()) await stableCopy.delete();
+        await sourceProject.copy(stableCopy.path);
+      }
+      _currentProjectFile = stableCopy;
+      final recoveryDirectory = await _recoveryDirectory();
+      await _recoveryService.clear(recoveryDirectory: recoveryDirectory);
+      _recoveryDirty = false;
+      _autosaveStatus = 'Project opened';
+      final missingAssets = await _missingMediaPaths();
       if (!mounted) return;
       setState(() {
         _notice = 'Opened "' + imported.document.name + '" · ' +
             imported.document.layers.length.toString() + ' layers · ' +
-            imported.extractedAssetCount.toString() + ' restored assets.';
+            imported.extractedAssetCount.toString() + ' restored assets.' +
+            (missingAssets.isEmpty
+                ? ''
+                : ' ' + missingAssets.length.toString() +
+                    ' external media references need relinking.');
       });
     } catch (error) {
       if (mounted) {
