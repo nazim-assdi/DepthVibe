@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'depthvibe_brand_mark.dart';
 import 'depthvibe_settings.dart';
 
 class DepthVibeSettingsDialog extends StatefulWidget {
@@ -49,8 +50,8 @@ class _DepthVibeSettingsDialogState extends State<DepthVibeSettingsDialog> {
                     children: [
                       const Row(
                         children: [
-                          Icon(Icons.settings_outlined, size: 18),
-                          SizedBox(width: 9),
+                          DepthVibeBrandMark(size: 30, showWordmark: false),
+                          SizedBox(width: 10),
                           Text(
                             'SETTINGS',
                             style: TextStyle(
@@ -62,8 +63,8 @@ class _DepthVibeSettingsDialogState extends State<DepthVibeSettingsDialog> {
                         ],
                       ),
                       const SizedBox(height: 24),
-                      _navItem('General', Icons.tune, false),
-                      _navItem('View', Icons.visibility_outlined, true),
+                      _navItem('General', Icons.tune),
+                      _navItem('View', Icons.visibility_outlined),
                       const Spacer(),
                       Text(
                         'DEPTHVIBE  •  N TECH',
@@ -246,7 +247,7 @@ class _DepthVibeSettingsDialogState extends State<DepthVibeSettingsDialog> {
     );
   }
 
-  Widget _navItem(String label, IconData icon, bool enabled) {
+  Widget _navItem(String label, IconData icon) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     final active = _section == label;
     return Padding(
