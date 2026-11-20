@@ -321,7 +321,7 @@ class AdobeInterchangeService {
   static String _premiereFiltersXml(CompositionLayer layer) {
     if (layer.kind == LayerKind.audio || layer.effects.isEmpty) return '';
     String number(double value) => value.toStringAsFixed(4)
-        .replaceFirst(RegExp(r'\\.?0+$'), '');
+        .replaceFirst(RegExp(r'\.?0+$'), '');
     final filters = <String>[];
     for (final effect in layer.effects) {
       if (effect.effectId != 'gaussian_blur' ||
@@ -419,6 +419,11 @@ class AdobeInterchangeService {
   var outMode=meta.outInterpolation||key.interpolation;
   try { property.setInterpolationTypeAtKey(keyIndex,interpolation(inMode),interpolation(outMode)); }
   catch(err) { warnings.push("Interpolation metadata skipped: "+String(err)); }
+  try { if(typeof meta.temporalAutoBezier==="boolean") property.setTemporalAutoBezierAtKey(keyIndex,meta.temporalAutoBezier); } catch(_) {}
+  try { if(typeof meta.temporalContinuous==="boolean") property.setTemporalContinuousAtKey(keyIndex,meta.temporalContinuous); } catch(_) {}
+  try { if(typeof meta.spatialAutoBezier==="boolean") property.setSpatialAutoBezierAtKey(keyIndex,meta.spatialAutoBezier); } catch(_) {}
+  try { if(typeof meta.spatialContinuous==="boolean") property.setSpatialContinuousAtKey(keyIndex,meta.spatialContinuous); } catch(_) {}
+  // Restore explicit ease/tangent values after auto-Bezier flags.
   try {
    var incoming=easeObjects(meta.inTemporalEase),outgoing=easeObjects(meta.outTemporalEase);
    if(incoming && outgoing) property.setTemporalEaseAtKey(keyIndex,incoming,outgoing);
@@ -429,10 +434,6 @@ class AdobeInterchangeService {
       typeof property.setSpatialTangentsAtKey==="function")
     property.setSpatialTangentsAtKey(keyIndex,spatialIn,spatialOut);
   } catch(err) { warnings.push("Spatial tangent skipped: "+String(err)); }
-  try { if(typeof meta.temporalAutoBezier==="boolean") property.setTemporalAutoBezierAtKey(keyIndex,meta.temporalAutoBezier); } catch(_) {}
-  try { if(typeof meta.temporalContinuous==="boolean") property.setTemporalContinuousAtKey(keyIndex,meta.temporalContinuous); } catch(_) {}
-  try { if(typeof meta.spatialAutoBezier==="boolean") property.setSpatialAutoBezierAtKey(keyIndex,meta.spatialAutoBezier); } catch(_) {}
-  try { if(typeof meta.spatialContinuous==="boolean") property.setSpatialContinuousAtKey(keyIndex,meta.spatialContinuous); } catch(_) {}
   try { if(typeof meta.roving==="boolean") property.setRovingAtKey(keyIndex,meta.roving); } catch(_) {}
  }
  function applyScalarTrack(property,track) {
