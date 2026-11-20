@@ -263,6 +263,76 @@ DOMAIN_MAX 1.0 1.0 1.0
     await _expectFilterPasses(filter);
   });
 
+  test('FFmpeg emits tagged 10-bit ProRes for PQ and HLG output profiles', () async {
+    if (!ffmpegAvailable) return;
+    final directory = await Directory.systemTemp.createTemp(
+      'depthvibe-hdr-output-',
+    );
+    temporaryDirectories.add(directory);
+
+    for (final profile in const [
+      (name: 'HDR10 PQ', transfer: 'smpte2084'),
+      (name: 'HLG', transfer: 'arib-std-b67'),
+    ]) {
+      final output = File(
+        directory.path + Platform.pathSeparator +
+            profile.name.replaceAll(' ', '_') + '.mov',
+      );
+      final filter = 'zscale=primariesin=bt709:transferin=bt709:'
+          'matrixin=bt709:primaries=bt2020:transfer=' + profile.transfer +
+          ':matrix=bt2020nc:range=limited:npl=1000,format=yuv422p10le';
+      final result = await _runFfmpeg([
+        ..._frameInput,
+        '-vf',
+        filter,
+        '-frames:v',
+        '3',
+        '-c:v',
+        'prores_ks',
+        '-profile:v',
+        '3',
+        '-vendor',
+        'apl0',
+        '-pix_fmt',
+        'yuv422p10le',
+        '-color_primaries',
+        'bt2020',
+        '-color_trc',
+        profile.transfer,
+        '-colorspace',
+        'bt2020nc',
+        output.path,
+      ]);
+      expect(
+        result.exitCode,
+        0,
+        reason: profile.name + ' export failed: ' + result.stderr.toString(),
+      );
+      final probe = await Process.run(
+        'ffprobe',
+        [
+          '-v',
+          'error',
+          '-select_streams',
+          'v:0',
+          '-show_entries',
+          'stream=codec_name,pix_fmt,color_primaries,color_transfer,color_space',
+          '-of',
+          'default=noprint_wrappers=1',
+          output.path,
+        ],
+        runInShell: false,
+      ).timeout(const Duration(seconds: 8));
+      expect(probe.exitCode, 0, reason: probe.stderr.toString());
+      final metadata = probe.stdout.toString();
+      expect(metadata, contains('codec_name=prores'));
+      expect(metadata, contains('pix_fmt=yuv422p10le'));
+      expect(metadata, contains('color_primaries=bt2020'));
+      expect(metadata, contains('color_transfer=' + profile.transfer));
+      expect(metadata, contains('color_space=bt2020nc'));
+    }
+  });
+
   test('color processing timeout kills a deliberately slow FFmpeg process', () async {
     if (!ffmpegAvailable) return;
     final stopwatch = Stopwatch()..start();
