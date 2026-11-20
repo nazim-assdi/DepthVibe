@@ -139,8 +139,15 @@ class FontManagerService extends ChangeNotifier {
             inspected++;
             if (inspected > 2500) break;
             final name = _fileName(entity.path);
+            final baseFamily = _familyAlias(name);
+            var family = baseFamily;
+            var suffix = 2;
+            while (entries.any((font) => font.family == family)) {
+              family = baseFamily + '_' + suffix.toString();
+              suffix++;
+            }
             entries.add(FontCatalogEntry(
-              family: _familyAlias(name),
+              family: family,
               displayName: name,
               path: entity.path,
               isImported: false,
@@ -197,7 +204,8 @@ class FontManagerService extends ChangeNotifier {
     final base = _familyAlias(_fileName(destination.path));
     var family = base;
     var familySuffix = 2;
-    while (_importedFonts.any((font) => font.family == family)) {
+    while (_availableFonts.any((font) => font.family == family) ||
+        _importedFonts.any((font) => font.family == family)) {
       family = base + '_' + familySuffix.toString();
       familySuffix++;
     }
