@@ -529,8 +529,8 @@ class CreativeAssetPackService extends ChangeNotifier {
       installed.directoryPath + Platform.pathSeparator + 'files',
     );
     if (!await folder.exists()) return const [];
-    const imageExtensions = {'png','jpg','jpeg','webp','bmp','gif','svg'};
-    const videoExtensions = {'mp4','mov','m4v','webm','mkv','avi'};
+    const imageExtensions = {'png','jpg','jpeg','webp','bmp','svg'};
+    const videoExtensions = {'mp4','mov','m4v','webm','mkv','avi','gif'};
     const audioExtensions = {'wav','mp3','m4a','aac','flac','ogg','opus'};
     const lutExtensions = {'cube','3dl','look'};
     final result = <CreativeAssetFile>[];
