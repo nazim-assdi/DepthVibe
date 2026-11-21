@@ -1955,6 +1955,373 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     }
   }
 
+  String _formatAssetBytes(int bytes) {
+    const gb = 1000 * 1000 * 1000;
+    const mb = 1000 * 1000;
+    if (bytes >= gb) return (bytes / gb).toStringAsFixed(2) + ' GB';
+    if (bytes >= mb) return (bytes / mb).toStringAsFixed(1) + ' MB';
+    if (bytes >= 1000) return (bytes / 1000).toStringAsFixed(0) + ' KB';
+    return bytes.toString() + ' B';
+  }
+
+  Future<bool> _confirmAssetPackDownload({
+    required String title,
+    required String detail,
+    required String size,
+    required String licence,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(detail),
+              const SizedBox(height: 10),
+              Text('Download size: ' + size,
+                style: const TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 5),
+              Text('Licence: ' + licence,
+                style: const TextStyle(fontSize: 11, color: Color(0xFFB7C4D8))),
+              const SizedBox(height: 10),
+              const Text(
+                'Files will be extracted to DepthVibe local storage and remain available offline. The source archive licence and attribution notices are kept with the pack.',
+                style: TextStyle(fontSize: 10, color: Color(0xFF9EADC4)),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('DOWNLOAD & INSTALL'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  Future<void> _installCreativeAssetPack(
+    CreativeAssetPackDefinition definition,
+  ) async {
+    if (_creativePackBusy || _creativeAssetPacks.isInstalled(definition.id)) return;
+    final confirmed = await _confirmAssetPackDownload(
+      title: 'Install ' + definition.name + '?',
+      detail: definition.description,
+      size: definition.sizeLabel,
+      licence: definition.licenseLabel,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() {
+      _creativePackBusy = true;
+      _creativePackReceived = 0;
+      _creativePackTotal = definition.exactBytes ?? definition.estimatedBytes;
+      _notice = 'Downloading ' + definition.name + '…';
+    });
+    try {
+      final installed = await _creativeAssetPacks.install(
+        definition,
+        onProgress: (received, total) {
+          if (!mounted) return;
+          setState(() {
+            _creativePackReceived = received;
+            if (total > 0) _creativePackTotal = total;
+          });
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _installedCreativePacks = _creativeAssetPacks.installed;
+          _notice = 'Installed ' + installed.name + ': ' +
+              installed.fileCount.toString() + ' files · ' +
+              _formatAssetBytes(installed.expandedBytes) +
+              '. Files are ready offline.';
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Asset pack install stopped: ' + error.toString());
+    } finally {
+      if (mounted) {
+        setState(() {
+          _creativePackBusy = false;
+          _creativePackReceived = 0;
+          _creativePackTotal = 0;
+        });
+      }
+    }
+  }
+
+  Future<void> _installAllCreativeAssetPacks() async {
+    if (_creativePackBusy) return;
+    final missing = CreativeAssetPackCatalog.all
+        .where((pack) => !_creativeAssetPacks.isInstalled(pack.id))
+        .toList();
+    if (missing.isEmpty) {
+      setState(() => _notice = 'All downloadable packs are already installed.');
+      return;
+    }
+    final totalBytes = missing.fold<int>(
+      0,
+      (total, pack) => total + pack.estimatedBytes,
+    );
+    final confirmed = await _confirmAssetPackDownload(
+      title: 'Install all ' + missing.length.toString() + ' downloadable packs?',
+      detail: 'This includes every catalogued DAEDAL CC0 pack and both complete CLR open-audio volumes. It is a large offline collection and needs several gigabytes of free disk space.',
+      size: _formatAssetBytes(totalBytes),
+      licence: 'DAEDAL: CC0 1.0 · CLR: mixed item-level public domain / CC BY / CC BY-SA',
+    );
+    if (!confirmed || !mounted) return;
+    var installedCount = 0;
+    setState(() {
+      _creativePackBusy = true;
+      _notice = 'Installing the full offline asset collection…';
+    });
+    try {
+      for (final pack in missing) {
+        if (_creativeAssetPacks.isInstalled(pack.id)) continue;
+        if (mounted) {
+          setState(() {
+            _creativePackReceived = 0;
+            _creativePackTotal = pack.exactBytes ?? pack.estimatedBytes;
+            _notice = 'Downloading ' + pack.name + '…';
+          });
+        }
+        final installed = await _creativeAssetPacks.install(
+          pack,
+          onProgress: (received, total) {
+            if (!mounted) return;
+            setState(() {
+              _creativePackReceived = received;
+              if (total > 0) _creativePackTotal = total;
+            });
+          },
+        );
+        installedCount++;
+        if (mounted) {
+          setState(() {
+            _installedCreativePacks = _creativeAssetPacks.installed;
+            _notice = 'Installed ' + installed.name + ' · ' +
+                installed.fileCount.toString() +
+                ' files. Continuing with the next pack…';
+          });
+        }
+      }
+      if (mounted) {
+        setState(() => _notice = 'Offline asset installation complete: ' +
+            installedCount.toString() + ' packs installed.');
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _notice = 'Installed ' + installedCount.toString() +
+            ' packs. Remaining downloads can be resumed later. Error: ' +
+            error.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _creativePackBusy = false;
+          _creativePackReceived = 0;
+          _creativePackTotal = 0;
+        });
+      }
+    }
+  }
+
+  Future<void> _importExternalAssetZip() async {
+    if (_creativePackBusy) return;
+    try {
+      final picked = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['zip'],
+      );
+      if (picked == null) return;
+      final path = picked.path;
+      if (path == null || path.isEmpty) {
+        throw StateError('The selected ZIP has no readable local path.');
+      }
+      final confirmed = await _confirmAssetPackDownload(
+        title: 'Import ' + picked.name + '?',
+        detail: 'This imports a user-selected asset archive (for example, a selected AssetPolish CC0 ZIP). Its embedded licence file must be present.',
+        size: _formatAssetBytes(await File(path).length()),
+        licence: 'User supplied · archive licence is preserved',
+      );
+      if (!confirmed || !mounted) return;
+      setState(() {
+        _creativePackBusy = true;
+        _notice = 'Importing the selected asset ZIP and checking its licence…';
+      });
+      final packName = picked.name.toLowerCase().endsWith('.zip')
+          ? picked.name.substring(0, picked.name.length - 4)
+          : picked.name;
+      final imported = await _creativeAssetPacks.importArchive(
+        File(path),
+        name: packName,
+        licenseLabel: 'User imported · licence retained from archive',
+      );
+      if (mounted) {
+        setState(() {
+          _installedCreativePacks = _creativeAssetPacks.installed;
+          _notice = 'Imported ' + imported.name + ': ' +
+              imported.fileCount.toString() +
+              ' files. Licence/source file retained.';
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Asset ZIP import failed: ' + error.toString());
+    } finally {
+      if (mounted) setState(() => _creativePackBusy = false);
+    }
+  }
+
+  Future<void> _addCreativeAssetFile(CreativeAssetFile asset) async {
+    final path = asset.file.path;
+    final extension = path.split('.').last.toLowerCase();
+    try {
+      switch (asset.kind) {
+        case 'image':
+          var imagePath = path;
+          var width = 0;
+          var height = 0;
+          if (extension == 'svg') {
+            final svg = await File(path).readAsString();
+            if (svg.length > 12 * 1024 * 1024) {
+              throw const FormatException('SVG exceeds the 12 MiB import limit.');
+            }
+            final picture = await vg.loadPicture(vg.SvgStringLoader(svg), null);
+            try {
+              final natural = picture.size;
+              if (natural.width <= 0 || natural.height <= 0 ||
+                  !natural.width.isFinite || !natural.height.isFinite) {
+                throw const FormatException('SVG has no valid intrinsic dimensions.');
+              }
+              final scale = math.min(1.0, 4096 / math.max(natural.width, natural.height));
+              width = (natural.width * scale).round().clamp(1, 4096).toInt();
+              height = (natural.height * scale).round().clamp(1, 4096).toInt();
+              final rendered = await picture.picture.toImage(width, height);
+              try {
+                final data = await rendered.toByteData(format: ui.ImageByteFormat.png);
+                if (data == null) throw const FormatException('Could not rasterize SVG asset.');
+                final support = await getApplicationSupportDirectory();
+                final folder = Directory(
+                  support.path + Platform.pathSeparator + 'DepthVibe' +
+                  Platform.pathSeparator + 'ImportedOverlays',
+                );
+                await folder.create(recursive: true);
+                imagePath = folder.path + Platform.pathSeparator +
+                    DateTime.now().microsecondsSinceEpoch.toString() + '.png';
+                await File(imagePath).writeAsBytes(data.buffer.asUint8List(), flush: true);
+              } finally {
+                rendered.dispose();
+              }
+            } finally {
+              picture.picture.dispose();
+            }
+          } else {
+            final decoded = img.decodeImage(await asset.file.readAsBytes());
+            if (decoded == null) throw FormatException('Could not decode ' + path + '.');
+            width = decoded.width;
+            height = decoded.height;
+          }
+          _controller.addLayer(
+            LayerKind.image,
+            name: asset.name,
+            sourceUri: imagePath,
+            sourceWidth: width,
+            sourceHeight: height,
+          );
+          break;
+        case 'video':
+          _controller.addLayer(
+            LayerKind.video,
+            name: asset.name,
+            sourceUri: path,
+          );
+          break;
+        case 'audio':
+          _controller.addLayer(
+            LayerKind.audio,
+            name: asset.name,
+            sourceUri: path,
+          );
+          break;
+        case 'lut':
+          final layer = _selected;
+          if (layer == null || layer.locked ||
+              !{LayerKind.video, LayerKind.image, LayerKind.photoshopLayer,
+                LayerKind.adjustment}.contains(layer.kind)) {
+            throw StateError('Select an unlocked visual layer before adding a LUT.');
+          }
+          final info = CubeLutValidator.parse(await asset.file.readAsString());
+          var lut = layer.effects
+              .where((item) => item.effectId == 'color_lut')
+              .lastOrNull;
+          if (lut == null) {
+            _controller.addEffect('color_lut');
+            lut = _selected?.effects
+                .where((item) => item.effectId == 'color_lut')
+                .lastOrNull;
+          }
+          if (lut == null) throw StateError('Could not create the 3D LUT effect.');
+          _controller.setEffectAssetUri(lut.id, path);
+          if (mounted) {
+            setState(() => _notice = 'Applied ' + info.title + ' · ' +
+                info.size.toString() + '³ LUT.');
+          }
+          return;
+        default:
+          return;
+      }
+      if (mounted) {
+        setState(() => _notice = 'Added ' + asset.name + ' from the offline asset pack.');
+      }
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Could not add ' + asset.name + ': ' + error.toString());
+    }
+  }
+
+  Future<void> _uninstallCreativeAssetPack(InstalledCreativeAssetPack pack) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Remove ' + pack.name + '?'),
+        content: Text('This removes ' + pack.fileCount.toString() +
+            ' local files (' + _formatAssetBytes(pack.expandedBytes) +
+            ') from DepthVibe storage.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('REMOVE PACK'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _creativeAssetPacks.uninstall(pack.id);
+      if (mounted) {
+        setState(() {
+          _installedCreativePacks = _creativeAssetPacks.installed;
+          _notice = 'Removed ' + pack.name + ' from local asset storage.';
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Could not remove asset pack: ' + error.toString());
+    }
+  }
+
   Future<void> _importLibraryOverlayImage() async {
     try {
       final picked = await FilePicker.pickFile(
