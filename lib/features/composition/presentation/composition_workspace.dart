@@ -19,6 +19,8 @@ import '../../fonts/data/font_manager_service.dart';
 import '../../fonts/presentation/font_manager_dialog.dart';
 import '../../fonts/presentation/font_picker_dialog.dart';
 import '../data/effect_catalog.dart';
+import '../data/audio_preset_catalog.dart';
+import '../data/color_preset_catalog.dart';
 import '../data/effect_preset_catalog.dart';
 import '../../extensions/data/extension_manager_service.dart';
 import '../../extensions/data/adobe_bridge_service.dart';
@@ -26,6 +28,8 @@ import '../../extensions/presentation/extension_marketplace_screen.dart';
 import '../data/photoshop_import_service.dart';
 import '../domain/composition_models.dart';
 import '../data/motion_preset_catalog.dart';
+import '../data/title_preset_catalog.dart';
+import '../data/overlay_sticker_catalog.dart';
 import '../data/motion_preset_package.dart';
 import '../data/motion_bro_pack_service.dart';
 import '../data/transition_catalog.dart';
@@ -1763,7 +1767,179 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       durationMs: preset.durationMs,
     );
     if (mounted) {
-      setState(() => _notice = 'Applied ${preset.name} transition.');
+      setState(() => _notice = 'Applied \${preset.name} transition.');
+    }
+  }
+
+  Color _libraryColor(String value) {
+    final normalized = value.replaceFirst('#', '');
+    final parsed = int.tryParse(normalized, radix: 16);
+    if (parsed == null) return const Color(0xFFFFFFFF);
+    return Color(normalized.length == 6 ? 0xFF000000 | parsed : parsed);
+  }
+
+  void _createLibraryTextLayer({
+    required String name,
+    required String text,
+    required double fontSize,
+    required int fontWeight,
+    required String textColor,
+    required double letterSpacing,
+    required double positionX,
+    required double positionY,
+    required String motionPresetId,
+    String textAlign = 'center',
+    double lineHeight = 1.05,
+  }) {
+    final document = _controller.document;
+    final id = _controller.addLayer(LayerKind.text, name: name);
+    _controller.updateTextLayer(
+      textContent: text,
+      textFontSize: fontSize,
+      textFontWeight: fontWeight,
+      textColor: textColor,
+      textLetterSpacing: letterSpacing,
+      textLineHeight: lineHeight,
+      textAlign: textAlign,
+      textBoxWidth: document.width * 0.86,
+    );
+    _controller.setTransformValue(
+      'position.x',
+      (positionX / 1920 * document.width).clamp(0, document.width).toDouble(),
+    );
+    _controller.setTransformValue(
+      'position.y',
+      (positionY / 1080 * document.height).clamp(0, document.height).toDouble(),
+    );
+    _controller.selectLayer(id);
+    if (MotionPresetCatalog.find(motionPresetId) != null) {
+      _controller.applyMotionPreset(motionPresetId);
+    }
+    if (mounted) setState(() => _notice = 'Added editable "$name" text layer.');
+  }
+
+  void _applyOverlaySticker(OverlayStickerDefinition asset, CompositionLayer? layer) {
+    final effectId = asset.effectId;
+    if (effectId != null) {
+      if (layer == null || layer.locked ||
+          !{LayerKind.video, LayerKind.image, LayerKind.photoshopLayer,
+            LayerKind.text, LayerKind.adjustment}.contains(layer.kind)) {
+        setState(() => _notice = 'Select an unlocked visual layer to apply this overlay.');
+        return;
+      }
+      _controller.addEffect(effectId);
+      if (mounted) setState(() => _notice = 'Applied \${asset.name} overlay effect.');
+      return;
+    }
+    _createLibraryTextLayer(
+      name: asset.name,
+      text: asset.textContent,
+      fontSize: asset.fontSize,
+      fontWeight: asset.fontWeight,
+      textColor: asset.textColor,
+      letterSpacing: asset.letterSpacing,
+      positionX: asset.positionX,
+      positionY: asset.positionY,
+      motionPresetId: asset.motionPresetId,
+    );
+  }
+
+  void _applyTitlePreset(TitlePresetDefinition preset) {
+    _createLibraryTextLayer(
+      name: preset.name,
+      text: preset.sampleText,
+      fontSize: preset.fontSize,
+      fontWeight: preset.fontWeight,
+      textColor: preset.textColor,
+      letterSpacing: preset.letterSpacing,
+      positionX: preset.positionX,
+      positionY: preset.positionY,
+      motionPresetId: preset.motionPresetId,
+      textAlign: preset.textAlign,
+      lineHeight: preset.lineHeight,
+    );
+  }
+
+  void _applyAudioPreset(AudioPresetDefinition preset, CompositionLayer? layer) {
+    if (layer == null || layer.locked ||
+        (layer.kind != LayerKind.audio && layer.kind != LayerKind.video)) {
+      setState(() => _notice = 'Select an audio or video layer to apply an audio preset.');
+      return;
+    }
+    _controller.setAudioSettings(preset.applyTo(layer.audioSettings));
+    if (mounted) setState(() => _notice = 'Applied \${preset.name} audio settings.');
+  }
+
+  void _applyColorPreset(ColorPresetDefinition preset, CompositionLayer? layer) {
+    if (layer == null || layer.locked ||
+        !{LayerKind.video, LayerKind.image, LayerKind.photoshopLayer,
+          LayerKind.text, LayerKind.adjustment}.contains(layer.kind)) {
+      setState(() => _notice = 'Select an unlocked visual layer to apply a color preset.');
+      return;
+    }
+    _controller.applyColorGradePreset(
+      ColorGradePreset(
+        name: preset.name,
+        outputProfile: _controller.document.colorOutputProfile,
+        primary: ColorGradePresetEffect(
+          enabled: true,
+          parameters: preset.parameters,
+        ),
+      ),
+    );
+    if (mounted) setState(() => _notice = 'Applied \${preset.name} color grade.');
+  }
+
+  Future<void> _importLibraryOverlayImage() async {
+    try {
+      final picked = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['png', 'jpg', 'jpeg', 'webp'],
+      );
+      if (picked == null) return;
+      final path = picked.path;
+      if (path == null || path.isEmpty) {
+        throw StateError('The selected image has no readable local path.');
+      }
+      final bytes = await File(path).readAsBytes();
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) {
+        throw const FormatException('The selected file is not a supported image.');
+      }
+      final name = path.split(RegExp(r'[/\\]')).last;
+      _controller.addLayer(
+        LayerKind.image,
+        name: name,
+        sourceUri: path,
+        sourceWidth: decoded.width,
+        sourceHeight: decoded.height,
+      );
+      if (mounted) setState(() => _notice = 'Imported $name as an editable overlay/image layer.');
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Image import failed: $error');
+    }
+  }
+
+  Future<void> _importLibraryAudio() async {
+    try {
+      final picked = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['wav', 'mp3', 'm4a', 'aac', 'flac', 'ogg'],
+      );
+      if (picked == null) return;
+      final path = picked.path;
+      if (path == null || path.isEmpty || !await File(path).exists()) {
+        throw StateError('The selected audio has no readable local file.');
+      }
+      final name = path.split(RegExp(r'[/\\]')).last;
+      _controller.addLayer(
+        LayerKind.audio,
+        name: name,
+        sourceUri: path,
+      );
+      if (mounted) setState(() => _notice = 'Imported $name as an audio layer.');
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Audio import failed: $error');
     }
   }
 
@@ -1776,6 +1952,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     required List<Color> colors,
     required String actionLabel,
     required VoidCallback? onApply,
+    String? sampleText,
+    Color? sampleColor,
   }) {
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -1786,6 +1964,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             Container(
               width: 72,
               height: 62,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
                 gradient: LinearGradient(
@@ -1794,7 +1973,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   colors: colors,
                 ),
               ),
-              child: Icon(icon, size: 28, color: Colors.white),
+              child: sampleText == null
+                  ? Icon(icon, size: 28, color: Colors.white)
+                  : FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        sampleText,
+                        maxLines: 2,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900,
+                          color: sampleColor ?? Colors.white,
+                        ),
+                      ),
+                    ),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -1824,38 +2017,150 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  Widget _buildStickerTile(
+    OverlayStickerDefinition asset, {
+    required VoidCallback? onApply,
+  }) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Row(
+          children: [
+            Container(
+              width: 72,
+              height: 62,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF3B4369), Color(0xFF20283D)],
+                ),
+              ),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  asset.textContent,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    color: _libraryColor(asset.textColor),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(asset.name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+                  Text(asset.category.toUpperCase(),
+                    style: const TextStyle(fontSize: 8, color: Color(0xFF9FAFC9), fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 3),
+                  Text(asset.description, maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 9, color: Color(0xFFB5C1D4))),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Add \${asset.name} sticker',
+              onPressed: onApply,
+              icon: const Icon(Icons.add_circle_outline, color: Color(0xFFBBAEFF)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTitlePresetTile(
+    TitlePresetDefinition preset, {
+    required VoidCallback? onApply,
+  }) {
+    return _buildAssetLibraryTile(
+      title: preset.name,
+      category: preset.category,
+      description: preset.description,
+      countLabel: preset.motionPresetId,
+      icon: Icons.title,
+      colors: const [Color(0xFF574B83), Color(0xFF27314D)],
+      actionLabel: 'ADD',
+      onApply: onApply,
+      sampleText: preset.sampleText,
+      sampleColor: _libraryColor(preset.textColor),
+    );
+  }
+
   Widget _buildAssetLibraryPanel(CompositionLayer? layer) {
-    const filters = ['All', 'Effects', 'Motion', 'Transitions'];
+    const filters = [
+      'All',
+      'Overlays & Stickers',
+      'Motion',
+      'Audio Presets',
+      'Titles & Lower Thirds',
+      'Color Presets',
+      'Video Effects & Filters',
+      'Transitions',
+    ];
     final query = _librarySearch.trim().toLowerCase();
-    final canApplyToLayer = layer != null && !layer.locked;
-    final visualCount = _controller.document.layers
-        .where((item) =>
-            item.enabled &&
-            (item.kind == LayerKind.video ||
-                item.kind == LayerKind.image ||
-                item.kind == LayerKind.photoshopLayer))
-        .length;
+    bool matches(Iterable<String> fields) =>
+        query.isEmpty || fields.join(' ').toLowerCase().contains(query);
+    final canApplyLayer = layer != null && !layer.locked;
+    final isAudioTarget = canApplyLayer &&
+        (layer.kind == LayerKind.audio || layer.kind == LayerKind.video);
+    final isVisualTarget = canApplyLayer &&
+        {LayerKind.video, LayerKind.image, LayerKind.photoshopLayer,
+          LayerKind.text, LayerKind.adjustment}.contains(layer.kind);
+    final visualCount = _controller.document.layers.where((item) =>
+      item.enabled &&
+      {LayerKind.video, LayerKind.image, LayerKind.photoshopLayer}.contains(item.kind)
+    ).length;
     final canApplyTransition = visualCount >= 2;
 
-    final effectPresets = EffectPresetCatalog.all.where((preset) =>
-      query.isEmpty ||
-      (preset.name + ' ' + preset.category + ' ' + preset.description)
-          .toLowerCase().contains(query)).toList();
-    final motionPresets = MotionPresetCatalog.all.where((preset) =>
-      query.isEmpty ||
-      (preset.name + ' ' + preset.category + ' ' + preset.description)
-          .toLowerCase().contains(query)).toList();
-    final transitionPresets = TransitionPresetCatalog.all.where((preset) =>
-      query.isEmpty ||
-      (preset.name + ' ' + preset.category + ' ' + preset.description)
-          .toLowerCase().contains(query)).toList();
+    final overlays = OverlayStickerCatalog.all.where((item) =>
+      matches([item.name, item.category, item.description, item.textContent])
+    ).toList();
+    final motion = MotionPresetCatalog.all.where((item) =>
+      matches([item.name, item.category, item.description])
+    ).toList();
+    final audio = AudioPresetCatalog.all.where((item) =>
+      matches([item.name, item.category, item.description])
+    ).toList();
+    final titles = TitlePresetCatalog.all.where((item) =>
+      matches([item.name, item.category, item.description, item.sampleText])
+    ).toList();
+    final colors = ColorPresetCatalog.all.where((item) =>
+      matches([item.name, item.category, item.description])
+    ).toList();
+    final looks = EffectPresetCatalog.all.where((item) =>
+      matches([item.name, item.category, item.description])
+    ).toList();
+    final effects = EffectCatalog.all.where((item) =>
+      matches([item.name, item.category, item.description, item.ffmpegFilter])
+    ).toList();
+    final transitions = TransitionPresetCatalog.all.where((item) =>
+      matches([item.name, item.category, item.description])
+    ).toList();
+
+    final showAll = _libraryFilter == 'All';
+    final showOverlays = showAll || _libraryFilter == 'Overlays & Stickers';
+    final showMotion = showAll || _libraryFilter == 'Motion';
+    final showAudio = showAll || _libraryFilter == 'Audio Presets';
+    final showTitles = showAll || _libraryFilter == 'Titles & Lower Thirds';
+    final showColors = showAll || _libraryFilter == 'Color Presets';
+    final showEffects = showAll || _libraryFilter == 'Video Effects & Filters';
+    final showTransitions = showAll || _libraryFilter == 'Transitions';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _panelHeader('DEPTHVIBE ASSET LIBRARY', Icons.video_library_outlined),
+        _panelHeader('DEPTHVIBE CREATIVE ASSET LIBRARY', Icons.video_library_outlined),
         const Text(
-          'Original professional-style collections, already built into DepthVibe. No separate effect plug-in is needed for these assets.',
+          'A searchable collection of editable overlays, animated stickers, motion, audio, titles, color looks, effects and transitions. Built-in recipes work offline; external packs keep their own source and licence.',
           style: TextStyle(fontSize: 10, color: Color(0xFF9EADC4)),
         ),
         const SizedBox(height: 8),
@@ -1865,7 +2170,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           children: [
             for (final filter in filters)
               ChoiceChip(
-                label: Text(filter, style: const TextStyle(fontSize: 10)),
+                label: Text(filter, style: const TextStyle(fontSize: 9)),
                 selected: _libraryFilter == filter,
                 onSelected: (_) => setState(() => _libraryFilter = filter),
                 visualDensity: VisualDensity.compact,
@@ -1878,7 +2183,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           decoration: const InputDecoration(
             isDense: true,
             prefixIcon: Icon(Icons.search, size: 17),
-            hintText: 'Search looks, animation recipes and transitions…',
+            hintText: 'Search every category, preset and asset…',
           ),
         ),
         const SizedBox(height: 8),
@@ -1886,10 +2191,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           spacing: 6,
           runSpacing: 6,
           children: [
-            _assetCountChip(Icons.auto_awesome, '${EffectPresetCatalog.all.length} effect looks'),
-            _assetCountChip(Icons.animation, '${MotionPresetCatalog.all.length} motion presets'),
-            _assetCountChip(Icons.swap_horiz, '${TransitionPresetCatalog.all.length} transition recipes'),
-            _assetCountChip(Icons.layers, '${EffectCatalog.all.length} native effects'),
+            _assetCountChip(Icons.layers_outlined, '\${OverlayStickerCatalog.all.length} overlay/sticker assets'),
+            _assetCountChip(Icons.animation, '\${MotionPresetCatalog.all.length} motion recipes'),
+            _assetCountChip(Icons.graphic_eq, '\${AudioPresetCatalog.all.length} audio presets'),
+            _assetCountChip(Icons.title, '\${TitlePresetCatalog.all.length} title styles'),
+            _assetCountChip(Icons.color_lens_outlined, '\${ColorPresetCatalog.all.length + EffectPresetCatalog.all.length} color looks'),
+            _assetCountChip(Icons.auto_awesome, '\${EffectCatalog.all.length} native effects'),
+            _assetCountChip(Icons.swap_horiz, '\${TransitionPresetCatalog.all.length} transition recipes'),
           ],
         ),
         const SizedBox(height: 8),
@@ -1897,88 +2205,176 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           const Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: Text(
-              'Select a layer to apply effect looks or motion presets. Transition recipes can be applied when the composition has at least two enabled visual clips.',
+              'Select a visual layer for effect/color presets or an audio/video layer for audio presets. Titles and typographic stickers can be added as new editable text layers.',
               style: TextStyle(fontSize: 9, color: Color(0xFFE2C58E)),
             ),
           ),
-        if (_libraryFilter == 'All' || _libraryFilter == 'Effects') ...[
-          _panelHeader('PRO LOOKS & EFFECT STACKS', Icons.color_lens_outlined),
-          for (final preset in effectPresets)
+        if (showOverlays) ...[
+          _panelHeader('OVERLAYS & STICKERS', Icons.layers_outlined),
+          for (final asset in overlays.where((item) => item.isEffectOverlay))
             EffectPreviewTile(
-              effect: EffectCatalog.find(preset.steps.first.effectId)!,
-              titleOverride: preset.name,
-              subtitleOverride: '${preset.category} · ${preset.steps.length}-effect stack preview',
-              onApply: canApplyToLayer ? () {
-                _controller.applyEffectPreset(preset.id);
-                setState(() => _notice = 'Applied ${preset.name} effect stack.');
-              } : null,
+              effect: EffectCatalog.find(asset.effectId!)!,
+              titleOverride: asset.name,
+              subtitleOverride: '\${asset.category} · native overlay effect',
+              onApply: isVisualTarget ? () => _applyOverlaySticker(asset, layer) : null,
             ),
-          if (effectPresets.isEmpty)
-            const Text('No effect looks match this search.', style: TextStyle(fontSize: 10)),
-        ],
-        if (_libraryFilter == 'All' || _libraryFilter == 'Motion') ...[
-          const Divider(height: 20),
-          _panelHeader('MOTION & TYPOGRAPHY PRESETS', Icons.animation),
-          for (final preset in motionPresets)
-            _buildAssetLibraryTile(
-              title: preset.name,
-              category: preset.category,
-              description: preset.description,
-              countLabel: '${preset.tracks.length} animated tracks',
-              icon: Icons.motion_photos_on_outlined,
-              colors: const [Color(0xFF3C927E), Color(0xFF174C57)],
-              actionLabel: 'APPLY',
-              onApply: canApplyToLayer ? () {
-                _controller.applyMotionPreset(preset.id);
-                setState(() => _notice = 'Applied ${preset.name} keyframe animation.');
-              } : null,
+          for (final asset in overlays.where((item) => !item.isEffectOverlay))
+            _buildStickerTile(
+              asset,
+              onApply: () => _applyOverlaySticker(asset, layer),
             ),
-          if (motionPresets.isEmpty)
-            const Text('No motion presets match this search.', style: TextStyle(fontSize: 10)),
-        ],
-        if (_libraryFilter == 'All' || _libraryFilter == 'Transitions') ...[
-          const Divider(height: 20),
-          _panelHeader('TRANSITION RECIPES', Icons.swap_horiz),
-          for (final preset in transitionPresets)
-            TransitionPreviewTile(
-              kind: preset.kind,
-              titleOverride: preset.name,
-              subtitleOverride: '${preset.category} · ${preset.durationMs} ms',
-              onApply: canApplyTransition ? () => _applyTransitionPreset(preset) : null,
-            ),
-          if (!canApplyTransition)
-            const Text('Add or enable two video/image clips to use transition recipes.', style: TextStyle(fontSize: 9, color: Color(0xFFE2C58E))),
-          if (transitionPresets.isEmpty)
-            const Text('No transition recipes match this search.', style: TextStyle(fontSize: 10)),
-        ],
-        const Divider(height: 20),
-        _panelHeader('PORTABLE PRESETS & ONLINE PACKS', Icons.cloud_download_outlined),
-        if (layer != null)
+          if (overlays.isEmpty)
+            const Text('No overlay or sticker assets match this search.', style: TextStyle(fontSize: 10)),
           Wrap(
             spacing: 8,
             runSpacing: 6,
             children: [
               OutlinedButton.icon(
-                onPressed: () => _exportMotionPreset(layer),
-                icon: const Icon(Icons.file_download_outlined, size: 15),
-                label: const Text('EXPORT LAYER PRESET'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _importMotionPreset,
-                icon: const Icon(Icons.file_upload_outlined, size: 15),
-                label: const Text('IMPORT .DVMPRESET'),
+                onPressed: _importLibraryOverlayImage,
+                icon: const Icon(Icons.add_photo_alternate_outlined, size: 15),
+                label: const Text('IMPORT PNG / JPG OVERLAY'),
               ),
             ],
-          )
-        else
-          const Text('Select a layer to import or export a portable .dvmpreset.', style: TextStyle(fontSize: 9, color: Color(0xFF9EADC4))),
-        const SizedBox(height: 6),
-        OutlinedButton.icon(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ExtensionMarketplaceScreen()),
           ),
-          icon: const Icon(Icons.storefront_outlined, size: 16),
-          label: const Text('OPEN SIGNED ONLINE MARKETPLACE'),
+        ],
+        if (showMotion) ...[
+          const Divider(height: 20),
+          _panelHeader('MOTION', Icons.animation),
+          for (final preset in motion)
+            _buildAssetLibraryTile(
+              title: preset.name,
+              category: preset.category,
+              description: preset.description,
+              countLabel: '\${preset.tracks.length} tracks · \${preset.durationMs} ms',
+              icon: Icons.motion_photos_on_outlined,
+              colors: const [Color(0xFF3C927E), Color(0xFF174C57)],
+              actionLabel: 'APPLY',
+              onApply: canApplyLayer ? () {
+                _controller.applyMotionPreset(preset.id);
+                setState(() => _notice = 'Applied \${preset.name} keyframe animation.');
+              } : null,
+            ),
+          if (motion.isEmpty)
+            const Text('No motion recipes match this search.', style: TextStyle(fontSize: 10)),
+        ],
+        if (showAudio) ...[
+          const Divider(height: 20),
+          _panelHeader('AUDIO PRESETS', Icons.graphic_eq),
+          for (final preset in audio)
+            _buildAssetLibraryTile(
+              title: preset.name,
+              category: preset.category,
+              description: preset.description,
+              countLabel: 'EQ · gain · fades',
+              icon: Icons.equalizer,
+              colors: const [Color(0xFF287D87), Color(0xFF18384E)],
+              actionLabel: 'APPLY',
+              onApply: isAudioTarget ? () => _applyAudioPreset(preset, layer) : null,
+              sampleText: 'L  ▂▅▃▆  R',
+            ),
+          if (!isAudioTarget)
+            const Text('Select an audio or video layer before applying an audio preset.', style: TextStyle(fontSize: 9, color: Color(0xFFE2C58E))),
+          if (audio.isEmpty)
+            const Text('No audio presets match this search.', style: TextStyle(fontSize: 10)),
+          OutlinedButton.icon(
+            onPressed: _importLibraryAudio,
+            icon: const Icon(Icons.audio_file_outlined, size: 15),
+            label: const Text('IMPORT AUDIO FILE'),
+          ),
+        ],
+        if (showTitles) ...[
+          const Divider(height: 20),
+          _panelHeader('TITLES & LOWER THIRDS', Icons.title),
+          for (final preset in titles)
+            _buildTitlePresetTile(
+              preset,
+              onApply: () => _applyTitlePreset(preset),
+            ),
+          if (titles.isEmpty)
+            const Text('No title presets match this search.', style: TextStyle(fontSize: 10)),
+        ],
+        if (showColors) ...[
+          const Divider(height: 20),
+          _panelHeader('COLOR PRESETS', Icons.color_lens_outlined),
+          for (final preset in colors)
+            _buildAssetLibraryTile(
+              title: preset.name,
+              category: preset.category,
+              description: preset.description,
+              countLabel: 'primary grade',
+              icon: Icons.palette_outlined,
+              colors: const [Color(0xFFB66E4E), Color(0xFF4F557D)],
+              actionLabel: 'APPLY',
+              onApply: isVisualTarget ? () => _applyColorPreset(preset, layer) : null,
+              sampleText: 'Aa',
+            ),
+          if (colors.isEmpty)
+            const Text('No color presets match this search.', style: TextStyle(fontSize: 10)),
+          const Divider(height: 12),
+          _panelHeader('MULTI-EFFECT COLOR LOOKS', Icons.auto_awesome),
+          for (final preset in looks)
+            EffectPreviewTile(
+              effect: EffectCatalog.find(preset.steps.first.effectId)!,
+              titleOverride: preset.name,
+              subtitleOverride: '\${preset.category} · \${preset.steps.length}-effect stack',
+              onApply: canApplyLayer ? () {
+                _controller.applyEffectPreset(preset.id);
+                setState(() => _notice = 'Applied \${preset.name} effect stack.');
+              } : null,
+            ),
+          if (looks.isEmpty)
+            const Text('No multi-effect looks match this search.', style: TextStyle(fontSize: 10)),
+        ],
+        if (showEffects) ...[
+          const Divider(height: 20),
+          _panelHeader('VIDEO EFFECTS & FILTERS', Icons.auto_awesome),
+          for (final effect in effects)
+            EffectPreviewTile(
+              effect: effect,
+              onApply: isVisualTarget ? () {
+                _controller.addEffect(effect.id);
+                setState(() => _notice = 'Added \${effect.name} effect.');
+              } : null,
+            ),
+          if (!isVisualTarget)
+            const Text('Select an unlocked video, image or text layer to apply a video effect.', style: TextStyle(fontSize: 9, color: Color(0xFFE2C58E))),
+          if (effects.isEmpty)
+            const Text('No video effects match this search.', style: TextStyle(fontSize: 10)),
+        ],
+        if (showTransitions) ...[
+          const Divider(height: 20),
+          _panelHeader('TRANSITIONS', Icons.swap_horiz),
+          for (final preset in transitions)
+            TransitionPreviewTile(
+              kind: preset.kind,
+              titleOverride: preset.name,
+              subtitleOverride: '\${preset.category} · \${preset.durationMs} ms',
+              onApply: canApplyTransition ? () => _applyTransitionPreset(preset) : null,
+            ),
+          if (!canApplyTransition)
+            const Text('Add or enable two video/image clips to use transition recipes.', style: TextStyle(fontSize: 9, color: Color(0xFFE2C58E))),
+          if (transitions.isEmpty)
+            const Text('No transition recipes match this search.', style: TextStyle(fontSize: 10)),
+        ],
+        const Divider(height: 20),
+        _panelHeader('IMPORT & ONLINE LIBRARIES', Icons.cloud_download_outlined),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ExtensionMarketplaceScreen()),
+              ),
+              icon: const Icon(Icons.storefront_outlined, size: 16),
+              label: const Text('SIGNED ONLINE MARKETPLACE'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _importMotionPreset(),
+              icon: const Icon(Icons.file_upload_outlined, size: 15),
+              label: const Text('IMPORT .DVMPRESET'),
+            ),
+          ],
         ),
         const SizedBox(height: 6),
         _buildMotionBroPackBrowser(),
