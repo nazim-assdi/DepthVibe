@@ -1,6 +1,7 @@
 import 'package:depthvibe/features/composition/data/effect_catalog.dart';
 import 'package:depthvibe/features/composition/data/motion_preset_catalog.dart';
 import 'package:depthvibe/features/composition/data/transition_catalog.dart';
+import 'package:depthvibe/features/composition/domain/composition_models.dart';
 import 'package:depthvibe/features/composition/presentation/transition_preview_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
