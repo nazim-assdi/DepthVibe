@@ -3,6 +3,7 @@ import 'package:depthvibe/features/composition/data/motion_preset_catalog.dart';
 import 'package:depthvibe/features/composition/data/transition_catalog.dart';
 import 'package:depthvibe/features/composition/domain/composition_models.dart';
 import 'package:depthvibe/features/composition/presentation/transition_preview_tile.dart';
+import 'package:depthvibe/features/composition/presentation/effect_preview_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -78,6 +79,26 @@ void main() {
 
     expect(find.text('Cross Dissolve'), findsOneWidget);
     await tester.tap(find.byTooltip('Apply Cross Dissolve'));
+    await tester.pump();
+    expect(applied, 1);
+  });
+
+  testWidgets('effect preview tile applies the selected effect', (tester) async {
+    var applied = 0;
+    final effect = EffectCatalog.findBuiltin('sepia')!;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EffectPreviewTile(
+            effect: effect,
+            onApply: () => applied++,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Sepia Tone'), findsOneWidget);
+    await tester.tap(find.byTooltip('Add Sepia Tone'));
     await tester.pump();
     expect(applied, 1);
   });
