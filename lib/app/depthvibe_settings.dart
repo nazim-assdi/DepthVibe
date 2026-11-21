@@ -20,15 +20,15 @@ enum DepthVibePerformanceMode {
   final double gpuRenderScale;
 
   String get title => switch (this) {
-        compatibility => 'Compatibility',
-        balanced => 'Balanced',
-        quality => 'Quality',
+        DepthVibePerformanceMode.compatibility => 'Compatibility',
+        DepthVibePerformanceMode.balanced => 'Balanced',
+        DepthVibePerformanceMode.quality => 'Quality',
       };
 
   String get description => switch (this) {
-        compatibility => '320 px 3D preview · lowest preview pixel load',
-        balanced => '480 px 3D preview · recommended for most PCs',
-        quality => '640 px 3D preview · sharper detail, higher GPU load',
+        DepthVibePerformanceMode.compatibility => '320 px 3D preview · lowest preview pixel load',
+        DepthVibePerformanceMode.balanced => '480 px 3D preview · recommended for most PCs',
+        DepthVibePerformanceMode.quality => '640 px 3D preview · sharper detail, higher GPU load',
       };
 }
 
