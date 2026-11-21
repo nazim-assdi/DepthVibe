@@ -3,6 +3,7 @@ const {
   captureActiveComposition,
   captureInstalledEffects,
   applyNativeEffectToSelection,
+  syncNativeEffectsToSelection,
   applyFfxPreset,
   saveFfxPreset
 } = require("./after-effects-host-adapter");
@@ -43,7 +44,7 @@ function output(value) {
 }
 function setConnected(connected) {
   ["capture", "read", "effects", "send", "importSnapshot", "exportScript",
-   "refreshHostEffects", "ffxImport", "ffxExport", "refreshMotionBroAssets"].forEach(function (id) {
+   "refreshHostEffects", "syncNativeEffects", "ffxImport", "ffxExport", "refreshMotionBroAssets"].forEach(function (id) {
     document.getElementById(id).disabled = !connected;
   });
 }
@@ -215,6 +216,14 @@ function renderMotionBroAssets(root) {
   container.appendChild(count);
 }
 
+async function syncDepthVibeNativeEffects() {
+  status("Reading the current DepthVibe composition…");
+  const response = await api("/v1/composition");
+  const result = syncNativeEffectsToSelection(response.document || {});
+  const imported = await publishHostSnapshot(result.snapshot);
+  output({applied: result.applied, warnings: result.warnings, importedIntoDepthVibe: imported});
+  status("DepthVibe native effect values/keyframes synchronized to selected After Effects layers.");
+}
 async function importFfxPreset() {
   const file = await storage.localFileSystem.getFileForOpening({types: ["ffx"]});
   if (!file) return;
@@ -286,6 +295,9 @@ function bind(root) {
   });
   root.querySelector("#hostEffectSearch").addEventListener("input", function () {
     renderHostEffectList(root);
+  });
+  root.querySelector("#syncNativeEffects").addEventListener("click", async function () {
+    try { await syncDepthVibeNativeEffects(); } catch (error) { status(error.message); output(error.stack || error.message); }
   });
   root.querySelector("#ffxImport").addEventListener("click", async function () {
     try { await importFfxPreset(); } catch (error) { status(error.message); output(error.stack || error.message); }

@@ -272,16 +272,185 @@ function applyNativeEffectToSelection(matchName) {
   }
   return { applied: applied, warnings: warnings, snapshot: captureActiveComposition() };
 }
+function nativePropertyForDescriptor(group, descriptor) {
+  if (!group || !descriptor) return null;
+  const path = Array.isArray(descriptor.path) && descriptor.path.length
+    ? descriptor.path
+    : [descriptor.matchName || descriptor.name || ""];
+  let current = group;
+  for (let index = 0; index < path.length; index += 1) {
+    const part = String(path[index] || "");
+    if (!part) continue;
+    let next = null;
+    try { next = current.property(part); } catch (_) {}
+    if (!next) {
+      const count = Math.min(Number(current.numProperties) || 0, 512);
+      for (let child = 1; child <= count; child += 1) {
+        let candidate = null;
+        try { candidate = current.property(child); } catch (_) {}
+        if (candidate && (candidate.matchName === part || candidate.name === part)) {
+          next = candidate;
+          break;
+        }
+      }
+    }
+    if (!next) return null;
+    current = next;
+  }
+  return current;
+}
+
+function applyNativeParameters(group, parameters, warnings, stats) {
+  if (!group || !Array.isArray(parameters)) return;
+  for (let index = 0; index < parameters.length; index += 1) {
+    const descriptor = parameters[index];
+    if (!descriptor || typeof descriptor !== "object") continue;
+    const property = nativePropertyForDescriptor(group, descriptor);
+    if (!property) {
+      warnings.push("Native parameter unavailable: " +
+        String(descriptor.displayName || descriptor.name || descriptor.matchName || index));
+      continue;
+    }
+    if (Array.isArray(descriptor.parameters)) {
+      applyNativeParameters(property, descriptor.parameters, warnings, stats);
+      continue;
+    }
+    const keyframes = Array.isArray(descriptor.keyframes) ? descriptor.keyframes : [];
+    try {
+      if (keyframes.length) {
+        for (let keyIndex = 0; keyIndex < Math.min(keyframes.length, 10000); keyIndex += 1) {
+          const key = keyframes[keyIndex];
+          const time = Number(key.timeMs) / 1000;
+          const value = key.value;
+          const scalar = typeof value === "number" && Number.isFinite(value);
+          const vector = Array.isArray(value) && value.length > 0 &&
+            value.every((part) => typeof part === "number" && Number.isFinite(part));
+          if (!Number.isFinite(time) || (!scalar && !vector)) continue;
+          property.setValueAtTime(time, value);
+          if (stats) stats.keyframes += 1;
+        }
+        continue;
+      }
+      const value = descriptor.value;
+      if (value === null || value === undefined) continue;
+      if (typeof value === "number" && !Number.isFinite(value)) continue;
+      if (Array.isArray(value) &&
+          !value.every((part) => typeof part === "number" && Number.isFinite(part))) continue;
+      property.setValue(value);
+      if (stats) stats.parameters += 1;
+    } catch (error) {
+      warnings.push("Native parameter " +
+        String(descriptor.displayName || descriptor.name || descriptor.matchName) +
+        " skipped: " + String(error));
+    }
+  }
+}
+
+function syncNativeEffectsToSelection(documentData) {
+  const project = afterEffects.project;
+  const composition = project && project.activeItem;
+  if (!composition || !Array.isArray(composition.selectedLayers) ||
+      composition.selectedLayers.length === 0) {
+    throw new Error("Select the target After Effects layer(s) first.");
+  }
+  const documentLayers = documentData && Array.isArray(documentData.layers)
+    ? documentData.layers : [];
+  if (!documentLayers.length) throw new Error("DepthVibe has no composition layers to synchronize.");
+  const selected = composition.selectedLayers.slice();
+  const applied = [], warnings = [];
+  afterEffects.beginUndoGroup("DepthVibe · Sync Native Effect Parameters");
+  try {
+    for (let layerIndex = 0; layerIndex < selected.length; layerIndex += 1) {
+      const hostLayer = selected[layerIndex];
+      const sourceLayer = documentLayers.find((item) =>
+        String(item.externalSourceId || "") === String(hostLayer.id) &&
+        (item.externalHostApp === "aftereffects-beta" || item.externalHostApp === "aftereffects"));
+      if (!sourceLayer) {
+        warnings.push(hostLayer.name + ": no matching DepthVibe source layer ID. Capture/import this composition again first.");
+        continue;
+      }
+      let parade = null;
+      try { parade = hostLayer.property("ADBE Effect Parade"); } catch (_) {}
+      if (!parade) {
+        warnings.push(hostLayer.name + ": the layer has no Effect Parade.");
+        continue;
+      }
+      const effects = Array.isArray(sourceLayer.effects) ? sourceLayer.effects : [];
+      for (let effectIndex = 0; effectIndex < effects.length; effectIndex += 1) {
+        const instance = effects[effectIndex];
+        const descriptor = instance && instance.nativeDescriptor || {};
+        if (descriptor.hostApp !== "aftereffects-beta" &&
+            descriptor.hostApp !== "aftereffects") continue;
+        const matchName = String(descriptor.matchName || "");
+        if (!matchName) {
+          warnings.push(hostLayer.name + ": a native effect has no matchName.");
+          continue;
+        }
+        try {
+          let nativeEffect = null;
+          const count = Math.min(Number(parade.numProperties) || 0, 256);
+          for (let existingIndex = 1; existingIndex <= count; existingIndex += 1) {
+            let candidate = null;
+            try { candidate = parade.property(existingIndex); } catch (_) {}
+            if (candidate && candidate.matchName === matchName) {
+              nativeEffect = candidate;
+              break;
+            }
+          }
+          let created = false;
+          if (!nativeEffect) {
+            if (!parade.canAddProperty(matchName)) {
+              warnings.push(hostLayer.name + ": effect is not installed: " + matchName);
+              continue;
+            }
+            nativeEffect = parade.addProperty(matchName);
+            created = true;
+          }
+          try { nativeEffect.enabled = instance.enabled !== false; } catch (_) {}
+          const stats = {parameters: 0, keyframes: 0};
+          applyNativeParameters(nativeEffect,
+            Array.isArray(descriptor.parameters) ? descriptor.parameters : [],
+            warnings, stats);
+          applied.push({
+            layerId: hostLayer.id,
+            layerName: hostLayer.name,
+            matchName: matchName,
+            created: created,
+            parameterCount: stats.parameters,
+            keyframeCount: stats.keyframes
+          });
+        } catch (error) {
+          warnings.push(hostLayer.name + ": " + matchName + " · " + String(error));
+        }
+      }
+    }
+  } finally {
+    afterEffects.endUndoGroup();
+  }
+  return { applied: applied, warnings: warnings, snapshot: captureActiveComposition() };
+}
+
 function applyFfxPreset(path) {
   const project = afterEffects.project;
   const composition = project && project.activeItem;
-  if (!composition || typeof composition.applyPreset !== "function") {
-    throw new Error("The active composition does not support UXP animation presets. After Effects 27.0 or later is required.");
+  if (!composition || !Array.isArray(composition.selectedLayers) ||
+      composition.selectedLayers.length === 0) {
+    throw new Error("Select one or more target layers in the active composition first.");
   }
   if (!path || typeof path !== "string") throw new Error("Choose a valid .ffx preset file.");
-  const applied = composition.applyPreset(path);
-  if (!applied) throw new Error("After Effects did not apply the selected .ffx preset. Select target layers first.");
-  return { applied: true, snapshot: captureActiveComposition() };
+  const target = composition.selectedLayers[0];
+  if (!target || typeof target.applyPreset !== "function") {
+    throw new Error("Layer.applyPreset is unavailable. After Effects 27.0 or later is required.");
+  }
+  const applied = target.applyPreset(path);
+  if (applied === false) {
+    throw new Error("After Effects did not apply the selected .ffx preset. Check the preset file and selected layers.");
+  }
+  return {
+    applied: true,
+    targetLayerCount: composition.selectedLayers.length,
+    snapshot: captureActiveComposition()
+  };
 }
 function saveFfxPreset(path) {
   const project = afterEffects.project;
@@ -394,6 +563,7 @@ module.exports = {
   captureActiveComposition,
   captureInstalledEffects,
   applyNativeEffectToSelection,
+  syncNativeEffectsToSelection,
   applyFfxPreset,
   saveFfxPreset
 };

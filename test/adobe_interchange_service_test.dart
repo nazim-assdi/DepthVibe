@@ -259,6 +259,8 @@ void main() {
       final script = AdobeInterchangeService.buildAfterEffectsScript(restored);
       expect(script, contains('Vendor.SuperGlow'));
       expect(script, contains('applyNativeParameters'));
+      expect(script, contains('effectProperty(group,item)'));
+      expect(script, contains('nativeDescriptor.parameters'));
       expect(script, contains('setValueAtTime'));
     });
 
