@@ -247,7 +247,7 @@ def configure_linux_branding() -> None:
     if app_source.exists():
         text = app_source.read_text(encoding="utf-8")
         title_pattern = re.compile(
-            r'(gtk_window_set_title\\(window,\\s*")[^"]*("\\s*\\);)'
+            r'(gtk_window_set_title\(window,\s*")[^"]*("\s*\);)'
         )
         text, _ = title_pattern.subn(
             lambda match: match.group(1) + "DepthVibe" + match.group(2),
@@ -257,13 +257,13 @@ def configure_linux_branding() -> None:
         icon_call = 'gtk_window_set_icon_name(window, "depthvibe");'
         if icon_call not in text:
             title_call = re.search(
-                r'(?m)^(?P<indent>\\s*)gtk_window_set_title\\([^;]*;',
+                r'(?m)^(?P<indent>\s*)gtk_window_set_title\([^;]*;',
                 text,
             )
             if title_call is not None:
                 replacement = (
                     title_call.group(0) +
-                    "\\n" + title_call.group("indent") + icon_call
+                    "\n" + title_call.group("indent") + icon_call
                 )
                 text = text[:title_call.start()] + replacement + text[title_call.end():]
         app_source.write_text(text, encoding="utf-8")
@@ -275,7 +275,7 @@ def configure_windows_branding() -> None:
     main_cpp = runner / "main.cpp"
     if main_cpp.exists():
         text = main_cpp.read_text(encoding="utf-8")
-        pattern = re.compile(r'(window\\.Create\\s*\\(\\s*)L"[^"]*"')
+        pattern = re.compile(r'(window\.Create\s*\(\s*)L"[^"]*"')
         updated, count = pattern.subn(
             lambda match: match.group(1) + 'L"DepthVibe"',
             text,
@@ -293,7 +293,7 @@ def configure_windows_branding() -> None:
         text = resource.read_text(encoding="utf-8")
         for field in ("FileDescription", "ProductName"):
             pattern = re.compile(
-                r'(VALUE "' + field + r'",\\s*")[^"]*(")',
+                r'(VALUE "' + field + r'",\s*")[^"]*(")',
                 flags=re.IGNORECASE,
             )
             text = pattern.sub(
