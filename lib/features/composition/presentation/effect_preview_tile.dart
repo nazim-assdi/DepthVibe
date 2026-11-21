@@ -18,7 +18,7 @@ class EffectPreviewTile extends StatefulWidget {
   });
 
   final EffectDefinition effect;
-  final VoidCallback onApply;
+  final VoidCallback? onApply;
   final String? titleOverride;
   final String? subtitleOverride;
 
