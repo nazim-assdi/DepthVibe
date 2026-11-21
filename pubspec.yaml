@@ -14,6 +14,7 @@ dependencies:
     sdk: flutter
   material_ui: ^1.11.1
   image: ^4.13.1
+  flutter_svg: ^2.5.0
   psdkit: ^0.6.3
   camera: ^0.11.3
   camera_desktop: ^2.0.0
