@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:cross_file/cross_file.dart';
 import 'package:flutter/widgets.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image/image.dart' as img;
+import 'package:flutter_svg/flutter_svg.dart' as vg;
 import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:material_ui/material_ui.dart';
@@ -1924,29 +1926,118 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     try {
       final picked = await FilePicker.pickFile(
         type: FileType.custom,
-        allowedExtensions: const ['png', 'jpg', 'jpeg', 'webp'],
+        allowedExtensions: const ['png', 'jpg', 'jpeg', 'webp', 'svg'],
       );
       if (picked == null) return;
       final path = picked.path;
-      if (path == null || path.isEmpty) {
+      if (path == null || path.isEmpty || !await File(path).exists()) {
         throw StateError('The selected image has no readable local path.');
       }
-      final bytes = await File(path).readAsBytes();
-      final decoded = img.decodeImage(bytes);
-      if (decoded == null) {
-        throw const FormatException('The selected file is not a supported image.');
-      }
+      final source = File(path);
       final name = path.split(RegExp(r'[/\\]')).last;
+      var storedPath = path;
+      var sourceWidth = 0;
+      var sourceHeight = 0;
+
+      if (name.toLowerCase().endsWith('.svg')) {
+        final svgSource = await source.readAsString();
+        if (svgSource.length > 12 * 1024 * 1024) {
+          throw const FormatException('The SVG file exceeds the 12 MiB import limit.');
+        }
+        final pictureInfo = await vg.vg.loadPicture(
+          vg.SvgStringLoader(svgSource),
+          null,
+        );
+        try {
+          final natural = pictureInfo.size;
+          if (!natural.width.isFinite ||
+              !natural.height.isFinite ||
+              natural.width <= 0 ||
+              natural.height <= 0) {
+            throw const FormatException('The SVG has no valid intrinsic size.');
+          }
+          final longestSide = math.max(natural.width, natural.height);
+          final scale = math.min(1.0, 4096 / longestSide);
+          sourceWidth = (natural.width * scale).round().clamp(1, 4096).toInt();
+          sourceHeight = (natural.height * scale).round().clamp(1, 4096).toInt();
+          final rendered = await pictureInfo.picture.toImage(
+            sourceWidth,
+            sourceHeight,
+          );
+          try {
+            final png = await rendered.toByteData(format: ui.ImageByteFormat.png);
+            if (png == null) {
+              throw const FormatException('Could not rasterize the SVG.');
+            }
+            final support = await getApplicationSupportDirectory();
+            final folder = Directory(
+              support.path + Platform.pathSeparator +
+              'DepthVibe' + Platform.pathSeparator + 'ImportedOverlays',
+            );
+            await folder.create(recursive: true);
+            final safeBaseName = name
+                .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')
+                .replaceAll(RegExp(r'\.svg$', caseSensitive: false), '');
+            storedPath = folder.path + Platform.pathSeparator +
+                DateTime.now().microsecondsSinceEpoch.toString() +
+                '_' + safeBaseName + '.png';
+            await File(storedPath).writeAsBytes(
+              png.buffer.asUint8List(),
+              flush: true,
+            );
+          } finally {
+            rendered.dispose();
+          }
+        } finally {
+          pictureInfo.picture.dispose();
+        }
+      } else {
+        final bytes = await source.readAsBytes();
+        final decoded = img.decodeImage(bytes);
+        if (decoded == null) {
+          throw const FormatException('The selected file is not a supported image.');
+        }
+        sourceWidth = decoded.width;
+        sourceHeight = decoded.height;
+      }
+
       _controller.addLayer(
         LayerKind.image,
         name: name,
-        sourceUri: path,
-        sourceWidth: decoded.width,
-        sourceHeight: decoded.height,
+        sourceUri: storedPath,
+        sourceWidth: sourceWidth,
+        sourceHeight: sourceHeight,
       );
-      if (mounted) setState(() => _notice = 'Imported $name as an editable overlay/image layer.');
+      if (mounted) {
+        setState(() => _notice = name.toLowerCase().endsWith('.svg')
+            ? 'Imported $name as a rasterized SVG image layer.'
+            : 'Imported $name as an editable overlay/image layer.');
+      }
     } catch (error) {
       if (mounted) setState(() => _notice = 'Image import failed: $error');
+    }
+  }
+
+  Future<void> _importLibraryVideoOverlay() async {
+    try {
+      final picked = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['mp4', 'mov', 'm4v', 'webm', 'mkv', 'gif'],
+      );
+      if (picked == null) return;
+      final path = picked.path;
+      if (path == null || path.isEmpty || !await File(path).exists()) {
+        throw StateError('The selected video has no readable local path.');
+      }
+      final name = path.split(RegExp(r'[/\\]')).last;
+      _controller.addLayer(
+        LayerKind.video,
+        name: name,
+        sourceUri: path,
+      );
+      if (mounted) setState(() => _notice = 'Imported $name as a video overlay layer.');
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Video overlay import failed: $error');
     }
   }
 
@@ -2265,7 +2356,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               OutlinedButton.icon(
                 onPressed: _importLibraryOverlayImage,
                 icon: const Icon(Icons.add_photo_alternate_outlined, size: 15),
-                label: const Text('IMPORT PNG / JPG OVERLAY'),
+                label: const Text('IMPORT IMAGE / SVG'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _importLibraryVideoOverlay,
+                icon: const Icon(Icons.video_library_outlined, size: 15),
+                label: const Text('IMPORT VIDEO / GIF OVERLAY'),
               ),
             ],
           ),
