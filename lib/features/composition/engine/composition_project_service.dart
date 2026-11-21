@@ -41,12 +41,10 @@ class CompositionProjectImportResult {
 
 class _ProjectAssetPackContext {
   const _ProjectAssetPackContext({
-    required this.root,
     required this.files,
     required this.metadata,
   });
 
-  final Directory root;
   final Directory files;
   final Map<String, Object?> metadata;
 }
@@ -547,7 +545,6 @@ class CompositionProjectService {
             final canonicalFiles = await files.resolveSymbolicLinks();
             if (_isInside(canonicalFiles, canonicalSource)) {
               return _ProjectAssetPackContext(
-                root: current,
                 files: files,
                 metadata: metadata,
               );
