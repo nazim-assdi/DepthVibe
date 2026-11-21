@@ -49,7 +49,7 @@ class OverlayStickerCatalog {
     OverlayStickerDefinition(id:'overlay_vhs',name:'VHS Tape Warp',category:'Retro Overlays',description:'Analog tape distortion and noise.',effectId:'vhs_warp'),
     OverlayStickerDefinition(id:'overlay_rgb_split',name:'RGB Split',category:'Retro Overlays',description:'Offset the red, green and blue channels.',effectId:'rgb_split'),
     OverlayStickerDefinition(id:'overlay_glitch',name:'Digital Glitch',category:'Retro Overlays',description:'Noisy digital signal corruption.',effectId:'analog_glitch'),
-    OverlayStickerDefinition(id:'overlay_film_flicker',name:'Film Flicker',category:'Retro Overlays',description:'Old projector style flashing exposure.',effectId:'deflicker'),
+    OverlayStickerDefinition(id:'overlay_film_flicker',name:'Flicker Reduction',category:'Retro Overlays',description:'Reduce unwanted frame-to-frame exposure flicker.',effectId:'deflicker'),
     OverlayStickerDefinition(id:'overlay_flash',name:'Camera Flash',category:'Light & Lens',description:'Flash-frame highlight accent.',effectId:'camera_flash'),
     OverlayStickerDefinition(id:'overlay_glow',name:'Soft Light Bloom',category:'Light & Lens',description:'Glow bright highlights.',effectId:'glow'),
     OverlayStickerDefinition(id:'overlay_edge_glow',name:'Neon Edge Light',category:'Light & Lens',description:'Glowing edge accents.',effectId:'edge_glow'),
@@ -106,7 +106,7 @@ class OverlayStickerCatalog {
     OverlayStickerDefinition(id:'sticker_wow',name:'WOW',category:'Comic & Speech',description:'Large surprise sticker.',textContent:'WOW!',fontSize:110,textColor:'#FFFFD77F',letterSpacing:2,motionPresetId:'zoom_bounce'),
     OverlayStickerDefinition(id:'sticker_omg',name:'OMG',category:'Comic & Speech',description:'Playful reaction text sticker.',textContent:'OMG!',fontSize:104,textColor:'#FFBFA9FF',letterSpacing:1,motionPresetId:'wobble'),
     OverlayStickerDefinition(id:'sticker_bang',name:'BANG',category:'Comic & Speech',description:'Impact word sticker.',textContent:'BANG!',fontSize:96,textColor:'#FFFFA56E',letterSpacing:2,motionPresetId:'squash_stomp'),
-    OverlayStickerDefinition(id:'sticker_question_bubble',name:'Question Prompt',category:'Comic & Speech',description:'Question prompt with a speech-bubble glyph.',textContent:'❖  WHY?',fontSize:80,textColor:'#FFFFFFFF',motionPresetId:'pop_bounce'),
+    OverlayStickerDefinition(id:'sticker_question_bubble',name:'Question Prompt',category:'Comic & Speech',description:'Question prompt with a decorative speech-style mark.',textContent:'❖  WHY?',fontSize:80,textColor:'#FFFFFFFF',motionPresetId:'pop_bounce'),
     // DECORATIVE / FRAMES
     OverlayStickerDefinition(id:'sticker_corner_tl',name:'Corner Ornament TL',category:'Decorative Frames',description:'Upper-left corner decoration.',textContent:'⌜',fontSize:150,textColor:'#FFFFFFFF',motionPresetId:'fade_in',positionX:120,positionY:100),
     OverlayStickerDefinition(id:'sticker_corner_tr',name:'Corner Ornament TR',category:'Decorative Frames',description:'Upper-right corner decoration.',textContent:'⌝',fontSize:150,textColor:'#FFFFFFFF',motionPresetId:'fade_in',positionX:1800,positionY:100),
