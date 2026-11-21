@@ -60,9 +60,24 @@ function mogrtTextDescriptor(value) {
   }
   return result;
 }
-function nativeParameterValue(value) {
+function isPointKeyframe(value) {
+  if (!value || typeof value !== "object") return false;
+  const Constructor = premiere.PointKeyframe;
+  if (typeof Constructor === "function") {
+    try { if (value instanceof Constructor) return true; } catch (_) {}
+  }
+  const keyValue = safeRead(() => value.value, null);
+  const coordinates = keyValue && Array.isArray(keyValue.value) ? keyValue.value : keyValue;
+  return Array.isArray(coordinates) && coordinates.length === 2 &&
+    coordinates.every((item) => typeof item === "number" && Number.isFinite(item));
+}
+function nativeParameterValue(value, pointHint) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" || typeof value === "boolean") return value;
+  if (pointHint === true && Array.isArray(value) && value.length === 2 &&
+      value.every((item) => typeof item === "number" && Number.isFinite(item))) {
+    return {kind: "point", x: value[0], y: value[1]};
+  }
   if (Array.isArray(value) && value.length <= 16 &&
       value.every((item) => typeof item === "number" && Number.isFinite(item))) return value.slice();
   if (isMogrtText(value)) return mogrtTextDescriptor(value);
@@ -111,22 +126,30 @@ function valueTypeOf(value) {
   return typeof value;
 }
 async function readParameterValue(param, timeSeconds, startValue) {
+  const initialPointHint = isPointKeyframe(startValue);
   const time = tickTime(timeSeconds);
   if (time) {
     const sampled = await optional(() => param.getValueAtTime(time), null);
     if (sampled && Object.prototype.hasOwnProperty.call(sampled, "value")) {
-      const normalized = nativeParameterValue(unwrapPremiereValue(sampled.value));
+      const normalized = nativeParameterValue(
+        unwrapPremiereValue(sampled.value), initialPointHint
+      );
       if (normalized !== null) return normalized;
     }
     const key = await optional(() => param.getKeyframePtr(time), null);
     if (key) {
-      const normalized = nativeParameterValue(unwrapPremiereValue(key.value));
+      const normalized = nativeParameterValue(
+        unwrapPremiereValue(key.value), isPointKeyframe(key) || initialPointHint
+      );
       if (normalized !== null) return normalized;
     }
   }
   const initial = startValue === undefined
     ? await optional(() => param.getStartValue(), null) : startValue;
-  return nativeParameterValue(unwrapPremiereValue(initial));
+  return nativeParameterValue(
+    unwrapPremiereValue(initial),
+    isPointKeyframe(initial)
+  );
 }
 async function componentIsTimeVarying(param) {
   if (typeof param.isTimeVarying === "function") {
