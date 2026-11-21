@@ -268,6 +268,113 @@ void main() {
       expect(script, contains('setRovingAtKey'));
     });
 
+    test('preserves Premiere keyframes and editable MOGRT source text controls', () {
+      final report = AdobeInterchangeService.importSnapshot({
+        'schemaVersion': 1,
+        'hostApp': 'premierepro',
+        'payload': {
+          'sequence': {
+            'name': 'Motion Graphics',
+            'width': 1920,
+            'height': 1080,
+            'timebase': '8467200000',
+            'durationSeconds': 5,
+          },
+          'videoTracks': [
+            {
+              'index': 0,
+              'id': 'V1',
+              'name': 'V1',
+              'clips': [
+                {
+                  'id': 'mogrt-1',
+                  'name': 'Title Template',
+                  'startSeconds': 0,
+                  'durationSeconds': 5,
+                  'effects': [
+                    {
+                      'matchName': 'AE.ADBE Capsule',
+                      'name': 'Motion Graphics Template',
+                      'displayName': 'Motion Graphics Template',
+                      'isMotionGraphicsTemplate': true,
+                      'parameterSchemaVersion': 2,
+                      'parameters': [
+                        {
+                          'index': 0,
+                          'matchName': '0',
+                          'parameterId': 'AE.ADBE Capsule#0:Source Text',
+                          'componentMatchName': 'AE.ADBE Capsule',
+                          'path': ['AE.ADBE Capsule', '0'],
+                          'name': 'Source Text',
+                          'displayName': 'Source Text',
+                          'valueType': 'mogrtText',
+                          'isMogrtText': true,
+                          'value': {
+                            'kind': 'mogrtText',
+                            'text': 'Hello World',
+                            'uniformStyling': true,
+                            'fontName': 'Arial',
+                            'fontSize': 72,
+                            'fontNameEditable': true,
+                            'fontSizeEditable': true,
+                            'fauxStylesEditable': true,
+                            'fauxBold': true,
+                          },
+                          'keyframesSupported': false,
+                          'isTimeVarying': false,
+                          'keyframes': [],
+                        },
+                      ],
+                    },
+                    {
+                      'matchName': 'PR.ADBE Gaussian Blur',
+                      'name': 'Gaussian Blur',
+                      'displayName': 'Gaussian Blur',
+                      'parameters': [
+                        {
+                          'index': 0,
+                          'matchName': '0',
+                          'parameterId': 'PR.ADBE Gaussian Blur#0:Blurriness',
+                          'componentMatchName': 'PR.ADBE Gaussian Blur',
+                          'path': ['PR.ADBE Gaussian Blur', '0'],
+                          'name': 'Blurriness',
+                          'displayName': 'Blurriness',
+                          'value': 12.0,
+                          'valueType': 'number',
+                          'keyframesSupported': true,
+                          'isTimeVarying': true,
+                          'keyframes': [
+                            {'timeSeconds': 0.5, 'value': 2.0, 'interpolationMode': 0, 'interpolation': 'linear'},
+                            {'timeSeconds': 1.5, 'value': 12.0, 'interpolationMode': 1, 'interpolation': 'bezier'},
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      final layer = report.document.layers.single;
+      final mogrt = layer.effects.firstWhere(
+        (effect) => effect.nativeDescriptor['isMotionGraphicsTemplate'] == true,
+      );
+      expect(mogrt.nativeDescriptor['matchName'], 'AE.ADBE Capsule');
+      final sourceText = (mogrt.nativeDescriptor['parameters'] as List).single as Map;
+      expect(sourceText['parameterId'], 'AE.ADBE Capsule#0:Source Text');
+      expect((sourceText['value'] as Map)['kind'], 'mogrtText');
+      expect((sourceText['value'] as Map)['text'], 'Hello World');
+
+      final blur = layer.effects.firstWhere((effect) => effect.effectId == 'gaussian_blur');
+      expect(blur.nativeDescriptor['matchName'], 'PR.ADBE Gaussian Blur');
+      final blurParameter = (blur.nativeDescriptor['parameters'] as List).single as Map;
+      expect((blurParameter['keyframes'] as List), hasLength(2));
+      expect(((blurParameter['keyframes'] as List).last as Map)['interpolation'], 'bezier');
+    });
+
     test('imports Premiere video and audio plugins with media-specific native descriptors', () {
       final report = AdobeInterchangeService.importSnapshot({
         'schemaVersion': 1,

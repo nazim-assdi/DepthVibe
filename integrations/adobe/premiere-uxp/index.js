@@ -284,9 +284,21 @@ function renderMotionBroMogrts(root) {
           inserted: result.inserted,
           videoTrackIndex: result.videoTrackIndex,
           audioTrackIndex: result.audioTrackIndex,
+          insertedTrackItemIds: result.insertedTrackItemIds || [],
+          editableControls: result.insertedClips || [],
+          controlsCaptured: (result.insertedClips || []).reduce(
+            function (total, clip) { return total + (clip.editableControlCount || 0); }, 0
+          ),
+          textControlsCaptured: (result.insertedClips || []).reduce(
+            function (total, clip) { return total + (clip.textControlCount || 0); }, 0
+          ),
           depthVibeImport: imported
         });
-        setStatus("MOGRT inserted into Premiere and sequence snapshot imported into DepthVibe.");
+        const controlCount = (result.insertedClips || []).reduce(
+          function (total, clip) { return total + (clip.editableControlCount || 0); }, 0
+        );
+        setStatus("MOGRT inserted. Captured " + controlCount +
+          " exposed template control(s) into DepthVibe; edit them in the selected clip's Effects panel.");
       } catch (error) {
         setStatus(error.message);
         showResult(error.stack || error.message);
@@ -348,13 +360,15 @@ async function syncDepthVibeNativeSettings() {
       return {
         matchName: item.matchName,
         parametersApplied: item.parametersApplied,
+        animationKeyframesApplied: item.animationKeyframesApplied,
+        actionCount: item.actionCount,
         createdNewComponent: item.createdNewComponent,
         skippedParameters: item.skippedParameters
       };
     }),
     depthVibeImport: imported
   });
-  setStatus("DepthVibe native effect values sent to Premiere. Animated/keyframed values remain retained in DepthVibe metadata.");
+  setStatus("DepthVibe native effect values and supported keyframes synchronized to Premiere. Review the skipped-parameter list for host-limited controls.");
 }
 
 async function readLatestSnapshot() {

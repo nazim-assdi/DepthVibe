@@ -14,85 +14,172 @@ async function optional(call, fallback) {
   }
 }
 
+function safeRead(call, fallback) {
+  try {
+    const value = call();
+    return value === undefined || value === null ? fallback : value;
+  } catch (_) {
+    return fallback;
+  }
+}
+function isMogrtText(value) {
+  const Constructor = premiere.MogrtText;
+  if (typeof Constructor === "function") {
+    try { if (value instanceof Constructor) return true; } catch (_) {}
+  }
+  return !!value && typeof value.getText === "function" &&
+    typeof value.isUniformStyling === "function";
+}
+function isMogrtComment(value) {
+  const Constructor = premiere.MogrtComment;
+  if (typeof Constructor === "function") {
+    try { if (value instanceof Constructor) return true; } catch (_) {}
+  }
+  return !!value && typeof value.getText === "function" &&
+    typeof value.isUniformStyling !== "function";
+}
+function mogrtTextDescriptor(value) {
+  const result = {
+    kind: "mogrtText",
+    text: safeRead(() => value.getText(), ""),
+    uniformStyling: safeRead(() => value.isUniformStyling(), false),
+    fontNameEditable: safeRead(() => value.isFontNameEditable(), false),
+    fontSizeEditable: safeRead(() => value.isFontSizeEditable(), false),
+    fauxStylesEditable: safeRead(() => value.isFauxStylesEditable(), false)
+  };
+  if (result.uniformStyling) {
+    const optionalFields = [
+      ["fontName", "getFontName"], ["fontSize", "getFontSize"],
+      ["allCaps", "getAllCaps"], ["fauxBold", "getFauxBold"],
+      ["fauxItalic", "getFauxItalic"], ["smallCaps", "getSmallCaps"]
+    ];
+    for (const entry of optionalFields) {
+      const fieldValue = safeRead(() => value[entry[1]](), undefined);
+      if (fieldValue !== undefined) result[entry[0]] = fieldValue;
+    }
+  }
+  return result;
+}
 function nativeParameterValue(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" || typeof value === "boolean") return value;
   if (Array.isArray(value) && value.length <= 16 &&
       value.every((item) => typeof item === "number" && Number.isFinite(item))) return value.slice();
+  if (isMogrtText(value)) return mogrtTextDescriptor(value);
+  if (isMogrtComment(value)) {
+    return {kind: "mogrtComment", text: safeRead(() => value.getText(), ""), readOnly: true};
+  }
   if (value && typeof value === "object") {
-    if (typeof value.x === "number" && typeof value.y === "number") return [value.x, value.y];
+    if (typeof value.x === "number" && typeof value.y === "number") {
+      return {kind: "point", x: value.x, y: value.y};
+    }
     if (typeof value.red === "number" && typeof value.green === "number" &&
         typeof value.blue === "number") {
-      return {
-        red: value.red, green: value.green, blue: value.blue,
-        alpha: typeof value.alpha === "number" ? value.alpha : 1
-      };
+      return {kind: "color", red: value.red, green: value.green, blue: value.blue,
+        alpha: typeof value.alpha === "number" ? value.alpha : 1};
     }
     if (typeof value.text === "string") return value.text;
   }
   return null;
+}
+function unwrapPremiereValue(value) {
+  let current = value;
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (!current || typeof current !== "object" ||
+        !Object.prototype.hasOwnProperty.call(current, "value")) break;
+    current = current.value;
+  }
+  return current;
 }
 function tickTime(seconds) {
   const factory = premiere.TickTime;
   if (!factory || typeof factory.createWithSeconds !== "function") return null;
   return factory.createWithSeconds(Number.isFinite(seconds) ? seconds : 0);
 }
-async function readParameterValue(param, timeSeconds) {
+function interpolationDescriptor(mode) {
+  const modes = premiere.Constants && premiere.Constants.InterpolationMode
+    ? premiere.Constants.InterpolationMode : {};
+  for (const name of Object.keys(modes)) {
+    if (modes[name] === mode) return {name: name.toLowerCase(), value: mode};
+  }
+  return {name: "unknown", value: typeof mode === "number" ? mode : null};
+}
+function valueTypeOf(value) {
+  if (value && typeof value === "object" && typeof value.kind === "string") return value.kind;
+  if (Array.isArray(value)) return "vector";
+  if (value === null || value === undefined) return "unknown";
+  return typeof value;
+}
+async function readParameterValue(param, timeSeconds, startValue) {
   const time = tickTime(timeSeconds);
   if (time) {
     const sampled = await optional(() => param.getValueAtTime(time), null);
     if (sampled && Object.prototype.hasOwnProperty.call(sampled, "value")) {
-      return nativeParameterValue(sampled.value);
+      const normalized = nativeParameterValue(unwrapPremiereValue(sampled.value));
+      if (normalized !== null) return normalized;
+    }
+    const key = await optional(() => param.getKeyframePtr(time), null);
+    if (key) {
+      const normalized = nativeParameterValue(unwrapPremiereValue(key.value));
+      if (normalized !== null) return normalized;
     }
   }
-  const initial = await optional(() => param.getStartValue(), null);
-  if (initial && Object.prototype.hasOwnProperty.call(initial, "value")) {
-    return nativeParameterValue(initial.value);
-  }
-  return null;
+  const initial = startValue === undefined
+    ? await optional(() => param.getStartValue(), null) : startValue;
+  return nativeParameterValue(unwrapPremiereValue(initial));
 }
-async function captureComponentParameters(component, timeSeconds) {
+async function componentIsTimeVarying(param) {
+  if (typeof param.isTimeVarying === "function") {
+    return await optional(() => param.isTimeVarying(), false);
+  }
+  return await optional(async () => param.isTimeVarying, false);
+}
+async function captureComponentParameters(component, timeSeconds, componentMatchName) {
   const paramCount = await optional(() => component.getParamCount(), 0);
   const parameters = [];
   for (let index = 0; index < Math.min(Number(paramCount) || 0, 256); index += 1) {
     const param = await optional(() => component.getParam(index), null);
     if (!param) continue;
-    const displayName = await optional(
-      async () => param.displayName,
-      "Parameter " + (index + 1)
-    );
-    const [value, supportsKeyframes, isTimeVarying] = await Promise.all([
-      readParameterValue(param, timeSeconds),
+    const displayName = await optional(async () => param.displayName, "Parameter " + (index + 1));
+    const [startValue, supportsKeyframes, isTimeVarying] = await Promise.all([
+      optional(() => param.getStartValue(), null),
       optional(() => param.areKeyframesSupported(), false),
-      optional(async () => param.isTimeVarying, false)
+      componentIsTimeVarying(param)
     ]);
+    const value = await readParameterValue(param, timeSeconds, startValue);
     const keyframes = [];
     if (supportsKeyframes) {
       const times = await optional(() => param.getKeyframeListAsTickTimes(), []);
       for (const time of (Array.isArray(times) ? times : []).slice(0, 2048)) {
         if (!time || typeof time.seconds !== "number") continue;
-        const keyValue = await readParameterValue(param, time.seconds);
+        const keyValue = await readParameterValue(param, time.seconds, startValue);
         if (keyValue !== null) {
           const key = await optional(() => param.getKeyframePtr(time), null);
-          const interpolationMode = key
-            ? await optional(() => key.getTemporalInterpolationMode(), null)
-            : null;
+          const rawMode = key ? await optional(() => key.getTemporalInterpolationMode(), null) : null;
+          const interpolation = interpolationDescriptor(rawMode);
           keyframes.push({
             timeSeconds: time.seconds,
             value: keyValue,
-            interpolationMode: interpolationMode
+            interpolationMode: interpolation.value,
+            interpolation: interpolation.name
           });
         }
       }
     }
     if (value !== null || keyframes.length) {
+      const parameterName = String(displayName || ("Parameter " + (index + 1)));
       parameters.push({
         index: index,
         matchName: String(index),
-        name: String(displayName || ("Parameter " + (index + 1))),
-        displayName: String(displayName || ("Parameter " + (index + 1))),
+        parameterId: String(componentMatchName || "component") + "#" + index + ":" + parameterName,
+        componentMatchName: String(componentMatchName || ""),
+        path: [String(componentMatchName || ""), String(index)],
+        name: parameterName,
+        displayName: parameterName,
         value: value,
-        valueType: value === null ? "unknown" : Array.isArray(value) ? "vector" : typeof value,
+        valueType: valueTypeOf(value),
+        isMogrtText: isMogrtText(startValue),
+        isMogrtComment: isMogrtComment(startValue),
         keyframesSupported: supportsKeyframes === true,
         isTimeVarying: isTimeVarying === true,
         keyframes: keyframes
@@ -101,7 +188,7 @@ async function captureComponentParameters(component, timeSeconds) {
   }
   return parameters;
 }
-async function captureEffects(trackItem, startSeconds, mediaType) {
+async function captureEffects(async function captureEffects(trackItem, startSeconds, mediaType) {
   const chain = await optional(() => trackItem.getComponentChain(), null);
   if (!chain) return [];
   const count = await optional(() => chain.getComponentCount(), 0);
@@ -111,8 +198,9 @@ async function captureEffects(trackItem, startSeconds, mediaType) {
     if (!component) continue;
     const matchName = await optional(() => component.getMatchName(), "");
     const name = await optional(() => component.getDisplayName(), matchName || "Premiere Effect");
+    const isMotionGraphicsTemplate = String(matchName) === "AE.ADBE Capsule";
     const parameters = await captureComponentParameters(
-      component, Number.isFinite(startSeconds) ? startSeconds : 0
+      component, Number.isFinite(startSeconds) ? startSeconds : 0, matchName
     );
     effects.push({
       matchName: String(matchName || ""),
@@ -121,6 +209,9 @@ async function captureEffects(trackItem, startSeconds, mediaType) {
       enabled: true,
       hostApp: "premierepro",
       mediaType: mediaType || "video",
+      isMotionGraphicsTemplate: isMotionGraphicsTemplate,
+      parameterSchemaVersion: 2,
+      parameterTree: parameters,
       properties: parameters,
       parameters: parameters
     });
@@ -193,68 +284,155 @@ async function findTrackItem(sequence, clipId, mediaType) {
   }
   return null;
 }
+function materializeNativeParameterValue(rawValue) {
+  if (rawValue === null || rawValue === undefined) return null;
+  if (typeof rawValue !== "object") return nativeParameterValue(rawValue);
+  if (rawValue.kind === "mogrtComment" || rawValue.readOnly === true) {
+    throw new Error("MOGRT comment parameters are informational/read-only in Premiere UXP.");
+  }
+  if (rawValue.kind === "mogrtText") {
+    if (typeof premiere.MogrtText !== "function") {
+      throw new Error("Editable MogrtText requires Premiere Pro 27.0 or later.");
+    }
+    const text = new premiere.MogrtText();
+    if (typeof text.setText === "function" && typeof rawValue.text === "string") text.setText(rawValue.text);
+    if (rawValue.fauxStylesEditable === true) {
+      const setters = [["allCaps","setAllCaps"],["fauxBold","setFauxBold"],
+        ["fauxItalic","setFauxItalic"],["smallCaps","setSmallCaps"]];
+      for (const entry of setters) {
+        if (typeof rawValue[entry[0]] === "boolean" && typeof text[entry[1]] === "function") {
+          text[entry[1]](rawValue[entry[0]]);
+        }
+      }
+    }
+    if (rawValue.fontNameEditable === true && typeof rawValue.fontName === "string" &&
+        typeof text.setFontName === "function") text.setFontName(rawValue.fontName);
+    if (rawValue.fontSizeEditable === true && Number.isFinite(Number(rawValue.fontSize)) &&
+        typeof text.setFontSize === "function") text.setFontSize(Number(rawValue.fontSize));
+    return text;
+  }
+  if (rawValue.kind === "color" ||
+      (typeof rawValue.red === "number" && typeof rawValue.green === "number" &&
+       typeof rawValue.blue === "number")) {
+    if (typeof premiere.Color !== "function") throw new Error("Premiere Color constructor is unavailable.");
+    return new premiere.Color(Number(rawValue.red), Number(rawValue.green), Number(rawValue.blue),
+      Number.isFinite(Number(rawValue.alpha)) ? Number(rawValue.alpha) : 1);
+  }
+  if (rawValue.kind === "point" ||
+      (typeof rawValue.x === "number" && typeof rawValue.y === "number")) {
+    if (typeof premiere.PointF !== "function") throw new Error("Premiere PointF constructor is unavailable.");
+    return new premiere.PointF(Number(rawValue.x), Number(rawValue.y));
+  }
+  return nativeParameterValue(rawValue);
+}
+async function resolveComponentParameterIndex(component, descriptor, paramCount, skipped) {
+  const rawIndex = Number(descriptor.index !== undefined ? descriptor.index : descriptor.matchName);
+  const expectedName = String(descriptor.displayName || descriptor.name || "");
+  if (Number.isInteger(rawIndex) && rawIndex >= 0 && rawIndex < Number(paramCount)) {
+    const candidate = await optional(() => component.getParam(rawIndex), null);
+    const candidateName = candidate ? String(await optional(async () => candidate.displayName, "")) : "";
+    if (!expectedName || candidateName === expectedName) return rawIndex;
+  }
+  if (expectedName) {
+    const matches = [];
+    for (let index = 0; index < Math.min(Number(paramCount) || 0, 256); index += 1) {
+      const candidate = await optional(() => component.getParam(index), null);
+      const candidateName = candidate ? String(await optional(async () => candidate.displayName, "")) : "";
+      if (candidateName === expectedName) matches.push(index);
+    }
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) {
+      skipped.push(expectedName + ": duplicate display names in the current effect schema; parameter was not guessed.");
+      return null;
+    }
+  }
+  skipped.push(expectedName || "Parameter " + rawIndex + ": parameter schema no longer matches the installed effect.");
+  return null;
+}
+function interpolationModeForFrame(frame) {
+  if (frame && typeof frame.interpolationMode === "number") return frame.interpolationMode;
+  const modes = premiere.Constants && premiere.Constants.InterpolationMode
+    ? premiere.Constants.InterpolationMode : {};
+  const name = String(frame && frame.interpolation || "").toUpperCase();
+  return name && typeof modes[name] === "number" ? modes[name] : null;
+}
 async function appendNativeParameterActions(param, descriptor, actions, skipped) {
   const label = String(descriptor.displayName || descriptor.name || "Parameter");
   const frames = Array.isArray(descriptor.keyframes) ? descriptor.keyframes : [];
+  let keyframesApplied = 0;
+  let parametersApplied = 0;
   if (frames.length) {
-    const supportsKeyframes = await optional(() => param.areKeyframesSupported(), false);
-    if (!supportsKeyframes ||
-        typeof param.createSetTimeVaryingAction !== "function" ||
+    const supports = await optional(() => param.areKeyframesSupported(), false);
+    if (!supports || typeof param.createSetTimeVaryingAction !== "function" ||
         typeof param.createAddKeyframeAction !== "function") {
       skipped.push(label + ": host parameter cannot be animated");
-      return;
+      return {keyframesApplied: 0, parametersApplied: 0};
     }
     try {
-      const timeVaryingAction = param.createSetTimeVaryingAction(true);
-      if (timeVaryingAction) actions.push(timeVaryingAction);
+      const enableAction = param.createSetTimeVaryingAction(true);
+      if (enableAction) actions.push(enableAction);
     } catch (error) {
       skipped.push(label + ": could not enable keyframes: " + String(error));
-      return;
+      return {keyframesApplied: 0, parametersApplied: 0};
     }
     for (const frame of frames.slice(0, 2048)) {
       const time = tickTime(Number(frame.timeSeconds));
-      const value = nativeParameterValue(frame.value);
+      let value = null;
+      try { value = materializeNativeParameterValue(frame.value); }
+      catch (error) {
+        skipped.push(label + " at " + frame.timeSeconds + "s: " + String(error));
+        continue;
+      }
       if (!time || value === null) {
         skipped.push(label + ": invalid keyframe time/value");
         continue;
       }
       try {
         if (typeof param.createRemoveKeyframeAction === "function") {
-          const remove = param.createRemoveKeyframeAction(time, true);
-          if (remove) actions.push(remove);
+          const removeAction = param.createRemoveKeyframeAction(time, true);
+          if (removeAction) actions.push(removeAction);
         }
         const keyframe = param.createKeyframe(value);
         keyframe.position = time;
-        const add = param.createAddKeyframeAction(keyframe);
-        if (add) actions.push(add);
-        if (typeof frame.interpolationMode === "number" &&
-            typeof param.createSetInterpolationAtKeyframeAction === "function") {
-          const interpolation = param.createSetInterpolationAtKeyframeAction(
-            time, frame.interpolationMode, true
-          );
-          if (interpolation) actions.push(interpolation);
+        const addAction = param.createAddKeyframeAction(keyframe);
+        if (addAction) {
+          actions.push(addAction);
+          keyframesApplied += 1;
+        }
+        const mode = interpolationModeForFrame(frame);
+        if (mode !== null && typeof param.createSetInterpolationAtKeyframeAction === "function") {
+          const interpolationAction = param.createSetInterpolationAtKeyframeAction(time, mode, true);
+          if (interpolationAction) actions.push(interpolationAction);
         }
       } catch (error) {
         skipped.push(label + " at " + frame.timeSeconds + "s: " + String(error));
       }
     }
-    return;
+    return {keyframesApplied: keyframesApplied, parametersApplied: 0};
   }
-
-  const timeVarying = await optional(async () => param.isTimeVarying, false);
-  if (timeVarying) {
+  const isAnimated = await componentIsTimeVarying(param);
+  if (isAnimated) {
     skipped.push(label + ": parameter is animated in Premiere but no keyframes were returned");
-    return;
+    return {keyframesApplied: 0, parametersApplied: 0};
   }
-  const value = nativeParameterValue(descriptor.value);
-  if (value === null) return;
+  let value = null;
+  try { value = materializeNativeParameterValue(descriptor.value); }
+  catch (error) {
+    skipped.push(label + ": " + String(error));
+    return {keyframesApplied: 0, parametersApplied: 0};
+  }
+  if (value === null) return {keyframesApplied: 0, parametersApplied: 0};
   try {
     const keyframe = param.createKeyframe(value);
     const action = param.createSetValueAction(keyframe, true);
-    if (action) actions.push(action);
+    if (action) {
+      actions.push(action);
+      parametersApplied = 1;
+    }
   } catch (error) {
     skipped.push(label + ": " + String(error));
   }
+  return {keyframesApplied: 0, parametersApplied: parametersApplied};
 }
 
 async function applyNativeVideoEffect(clipId, matchName, parameters) {
@@ -283,13 +461,17 @@ async function applyNativeVideoEffect(clipId, matchName, parameters) {
 
   const skippedParameters = [];
   const actions = [];
+  let animationKeyframesApplied = 0;
+  let parametersApplied = 0;
   const paramCount = await optional(() => component.getParamCount(), 0);
   for (const descriptor of (Array.isArray(parameters) ? parameters : [])) {
-    const index = Number(descriptor.index !== undefined ? descriptor.index : descriptor.matchName);
-    if (!Number.isInteger(index) || index < 0 || index >= Number(paramCount)) continue;
+    const index = await resolveComponentParameterIndex(component, descriptor, paramCount, skippedParameters);
+    if (index === null) continue;
     const param = await optional(() => component.getParam(index), null);
     if (!param) continue;
-    await appendNativeParameterActions(param, descriptor, actions, skippedParameters);
+    const appliedCounts = await appendNativeParameterActions(param, descriptor, actions, skippedParameters);
+    animationKeyframesApplied += appliedCounts.keyframesApplied;
+    parametersApplied += appliedCounts.parametersApplied;
   }
 
   let success = false;
@@ -312,7 +494,9 @@ async function applyNativeVideoEffect(clipId, matchName, parameters) {
   return {
     matchName: matchName,
     appliedToClipId: String(clipId),
-    parametersApplied: actions.length,
+    parametersApplied: parametersApplied,
+    animationKeyframesApplied: animationKeyframesApplied,
+    actionCount: actions.length,
     createdNewComponent: isNewComponent,
     skippedParameters: skippedParameters,
     capturedEffect: importedClip && importedClip.effects
@@ -353,13 +537,17 @@ async function applyNativeAudioEffect(clipId, displayName, parameters) {
 
   const skippedParameters = [];
   const actions = [];
+  let animationKeyframesApplied = 0;
+  let parametersApplied = 0;
   const paramCount = await optional(() => component.getParamCount(), 0);
   for (const descriptor of (Array.isArray(parameters) ? parameters : [])) {
-    const index = Number(descriptor.index !== undefined ? descriptor.index : descriptor.matchName);
-    if (!Number.isInteger(index) || index < 0 || index >= Number(paramCount)) continue;
+    const index = await resolveComponentParameterIndex(component, descriptor, paramCount, skippedParameters);
+    if (index === null) continue;
     const param = await optional(() => component.getParam(index), null);
     if (!param) continue;
-    await appendNativeParameterActions(param, descriptor, actions, skippedParameters);
+    const appliedCounts = await appendNativeParameterActions(param, descriptor, actions, skippedParameters);
+    animationKeyframesApplied += appliedCounts.keyframesApplied;
+    parametersApplied += appliedCounts.parametersApplied;
   }
 
   let success = false;
@@ -378,7 +566,9 @@ async function applyNativeAudioEffect(clipId, displayName, parameters) {
   return {
     displayName: displayName,
     appliedToClipId: String(clipId),
-    parametersApplied: actions.length,
+    parametersApplied: parametersApplied,
+    animationKeyframesApplied: animationKeyframesApplied,
+    actionCount: actions.length,
     createdNewComponent: isNewComponent,
     skippedParameters: skippedParameters,
     snapshot: snapshot
@@ -406,15 +596,57 @@ async function insertMotionBroMogrt(path) {
   const videoTrackIndex = Math.max(0, Number(videoCount) - 1);
   const audioTrackIndex = Math.max(0, Number(audioCount) - 1);
   const result = await sequenceEditor.insertMogrtFromPath(
-    path,
-    position,
-    videoTrackIndex,
-    audioTrackIndex
+    path, position, videoTrackIndex, audioTrackIndex
   );
+  const insertedItems = Array.isArray(result) ? result : (result ? [result] : []);
+  const insertedIds = [];
+  for (const item of insertedItems) {
+    if (item && typeof item.getId === "function") {
+      const itemId = await optional(() => item.getId(), null);
+      if (itemId !== null && itemId !== undefined) insertedIds.push(String(itemId));
+    }
+  }
   const snapshot = await capturePremiereSequence();
+  const insertedClips = [];
+  for (const track of (snapshot.payload.videoTracks || [])) {
+    for (const clip of (track.clips || [])) {
+      const idMatch = insertedIds.indexOf(String(clip.id)) >= 0;
+      const timeMatch = typeof clip.startSeconds === "number" &&
+        Math.abs(clip.startSeconds - Number(position.seconds || 0)) < 0.05;
+      const mogrtMatch = (clip.effects || []).some((effect) =>
+        effect.matchName === "AE.ADBE Capsule" || effect.isMotionGraphicsTemplate === true);
+      if (idMatch || (timeMatch && mogrtMatch)) {
+        clip.mogrtTemplate = {
+          assetPath: path,
+          fileName: String(path).split(/[\\/]/).pop(),
+          insertedAtSeconds: Number(position.seconds || 0),
+          isEditableTemplate: mogrtMatch
+        };
+        insertedClips.push({
+          id: clip.id,
+          name: clip.name,
+          trackName: track.name,
+          editableControlCount: (clip.effects || []).reduce((total, effect) =>
+            total + (Array.isArray(effect.parameters) ? effect.parameters.length : 0), 0),
+          textControlCount: (clip.effects || []).reduce((total, effect) =>
+            total + (effect.parameters || []).filter((parameter) =>
+              parameter.value && parameter.value.kind === "mogrtText").length, 0)
+        });
+      }
+    }
+  }
+  snapshot.payload.insertedMotionGraphicsTemplates = [{
+    assetPath: path,
+    fileName: String(path).split(/[\\/]/).pop(),
+    insertedAtSeconds: Number(position.seconds || 0),
+    insertedTrackItemIds: insertedIds,
+    matchedClips: insertedClips
+  }];
   return {
-    inserted: Array.isArray(result) ? result.length > 0 : !!result,
+    inserted: insertedItems.length > 0,
     insertionResult: result,
+    insertedTrackItemIds: insertedIds,
+    insertedClips: insertedClips,
     videoTrackIndex: videoTrackIndex,
     audioTrackIndex: audioTrackIndex,
     snapshot: snapshot

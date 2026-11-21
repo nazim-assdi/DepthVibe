@@ -2464,159 +2464,323 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     Map<String, Object?> parameter,
   ) {
     final matchName = parameter['matchName']?.toString() ?? '';
-    final displayName = parameter['displayName']?.toString();
-    final label = displayName != null && displayName.isNotEmpty
-        ? displayName
-        : (parameter['name']?.toString() ?? matchName);
+    final label = parameter['displayName']?.toString() ??
+        parameter['name']?.toString() ?? matchName;
     final value = parameter['value'];
     final rawPath = parameter['path'];
     final parameterPath = rawPath is List
         ? rawPath.map((part) => part.toString()).toList()
         : null;
     void update(Object? next) => _controller.setNativeEffectParameter(
-          effect.id, matchName, next, parameterPath: parameterPath,
-        );
+      effect.id, matchName, next, parameterPath: parameterPath,
+    );
+
     if (matchName.isEmpty) return const SizedBox.shrink();
     final rawFrames = parameter['keyframes'];
     final keyframeCount = rawFrames is List ? rawFrames.length : 0;
-    final keyframeNote = keyframeCount == 0
-        ? null
-        : Padding(
-            padding: const EdgeInsets.only(top: 2, bottom: 4),
-            child: Text(
-              'Host animation · ' + keyframeCount.toString() + ' keyframe(s)',
-              style: const TextStyle(fontSize: 9, color: Color(0xFF91A6C4)),
-            ),
-          );
-    if (value is bool) {
-      return Column(
+    final keyframeEditor = rawFrames is List && rawFrames.isNotEmpty
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Divider(height: 10),
+              Text('ANIMATED VALUES · ' + keyframeCount.toString() + ' KEYFRAME(S)',
+                style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+                  color: Color(0xFF91A6C4))),
+              for (var i = 0; i < rawFrames.length && i < 32; i++)
+                if (rawFrames[i] is Map)
+                  _buildNativeParameterKeyframeRow(
+                    effect: effect,
+                    parameterMatchName: matchName,
+                    parameterPath: parameterPath,
+                    frame: Map<String, Object?>.from(rawFrames[i] as Map),
+                  ),
+              if (rawFrames.length > 32)
+                Text('+ ' + (rawFrames.length - 32).toString() + ' more keyframes retained',
+                  style: const TextStyle(fontSize: 9, color: Color(0xFF91A6C4))),
+            ],
+          )
+        : const SizedBox.shrink();
+    Widget withFrames(Widget child) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [child, keyframeEditor],
+    );
+
+    if (value is Map && value['kind'] == 'mogrtText') {
+      final data = Map<String, Object?>.from(value);
+      final uniform = data['uniformStyling'] == true;
+      return withFrames(Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SwitchListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: Text(label, style: const TextStyle(fontSize: 10)),
-            value: value,
-            onChanged: update,
+          Row(children: [
+            const Icon(Icons.title, size: 14),
+            const SizedBox(width: 5),
+            Expanded(child: Text('MOGRT SOURCE TEXT · ' + label,
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700))),
+            const Text('EDITABLE', style: TextStyle(fontSize: 8, color: Color(0xFF79C8B0))),
+          ]),
+          const SizedBox(height: 5),
+          TextFormField(
+            key: ValueKey<String>(effect.id + matchName + 'mogrt-text'),
+            initialValue: data['text']?.toString() ?? '',
+            minLines: 1, maxLines: 3,
+            decoration: const InputDecoration(labelText: 'Text content', isDense: true),
+            onFieldSubmitted: (next) => update({...data, 'text': next}),
           ),
-          if (keyframeNote != null) keyframeNote,
+          if (data['fontNameEditable'] == true)
+            TextFormField(
+              key: ValueKey<String>(effect.id + matchName + 'mogrt-font'),
+              initialValue: data['fontName']?.toString() ?? '',
+              decoration: const InputDecoration(labelText: 'Font family', isDense: true),
+              onFieldSubmitted: (next) => update({...data, 'fontName': next}),
+            ),
+          if (data['fontSizeEditable'] == true)
+            TextFormField(
+              key: ValueKey<String>(effect.id + matchName + 'mogrt-size'),
+              initialValue: data['fontSize']?.toString() ?? '',
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Font size', isDense: true),
+              onFieldSubmitted: (raw) {
+                final next = double.tryParse(raw);
+                if (next != null && next > 0 && next.isFinite) {
+                  update({...data, 'fontSize': next});
+                }
+              },
+            ),
+          if (data['fauxStylesEditable'] == true && uniform)
+            for (final setting in const [
+              ('allCaps', 'All caps'), ('fauxBold', 'Bold'),
+              ('fauxItalic', 'Italic'), ('smallCaps', 'Small caps'),
+            ])
+              SwitchListTile(
+                dense: true, contentPadding: EdgeInsets.zero,
+                title: Text(setting.$2, style: const TextStyle(fontSize: 10)),
+                value: data[setting.$1] == true,
+                onChanged: (next) => update({...data, setting.$1: next}),
+              ),
+          if (!uniform)
+            const Text('Mixed character styling is retained; per-run editing depends on the MOGRT author.',
+              style: TextStyle(fontSize: 9, color: Color(0xFF91A6C4))),
         ],
-      );
+      ));
+    }
+    if (value is Map && value['kind'] == 'mogrtComment') {
+      return withFrames(Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Text(label + ': ' + (value['text']?.toString() ?? '') + ' · Read-only MOGRT comment',
+          style: const TextStyle(fontSize: 9, color: Color(0xFF91A6C4))),
+      ));
+    }
+    if (value is Map && value['kind'] == 'color') {
+      final data = Map<String, Object?>.from(value);
+      return withFrames(Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(label + ' · RGBA', style: const TextStyle(fontSize: 10)),
+          Wrap(spacing: 6, children: [
+            for (final channel in const [
+              ('red', 'R'), ('green', 'G'), ('blue', 'B'), ('alpha', 'A'),
+            ])
+              SizedBox(width: 66, height: 38, child: TextFormField(
+                key: ValueKey<String>(effect.id + matchName + channel.$1),
+                initialValue: ((data[channel.$1] as num?) ?? 1).toStringAsFixed(3),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(labelText: channel.$2, isDense: true),
+                onFieldSubmitted: (raw) {
+                  final parsed = double.tryParse(raw);
+                  if (parsed != null && parsed.isFinite) {
+                    update({...data, channel.$1: parsed.clamp(0, 1).toDouble()});
+                  }
+                },
+              )),
+          ]),
+        ],
+      ));
+    }
+    if (value is Map && value['kind'] == 'point') {
+      final data = Map<String, Object?>.from(value);
+      return withFrames(Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(label + ' · Point', style: const TextStyle(fontSize: 10)),
+          Wrap(spacing: 6, children: [
+            for (final axis in const [('x', 'X'), ('y', 'Y')])
+              SizedBox(width: 76, height: 34, child: TextFormField(
+                key: ValueKey<String>(effect.id + matchName + axis.$1),
+                initialValue: ((data[axis.$1] as num?) ?? 0).toStringAsFixed(3),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                decoration: InputDecoration(labelText: axis.$2, isDense: true),
+                onFieldSubmitted: (raw) {
+                  final parsed = double.tryParse(raw);
+                  if (parsed != null && parsed.isFinite) update({...data, axis.$1: parsed});
+                },
+              )),
+          ]),
+        ],
+      ));
+    }
+    if (value is bool) {
+      return withFrames(SwitchListTile(
+        dense: true, contentPadding: EdgeInsets.zero,
+        title: Text(label, style: const TextStyle(fontSize: 10)),
+        value: value, onChanged: update,
+      ));
     }
     final options = parameter['options'];
-    if (options is List &&
-        options.isNotEmpty &&
-        options.every((item) => item is String || item is num || item is bool) &&
+    if (options is List && options.isNotEmpty &&
+        options.every((entry) => entry is String || entry is num || entry is bool) &&
         options.contains(value)) {
-      return Padding(
+      return withFrames(Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: DropdownButtonFormField<Object?>(
-          initialValue: value,
-          isExpanded: true,
+          initialValue: value, isExpanded: true,
           decoration: InputDecoration(labelText: label, isDense: true),
           items: options.map((option) => DropdownMenuItem<Object?>(
             value: option,
             child: Text(option.toString(), overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 10)),
           )).toList(),
-          onChanged: (next) {
-            if (next != null) update(next);
-          },
+          onChanged: (next) { if (next != null) update(next); },
         ),
-      );
+      ));
     }
     if (value is num) {
       final min = (parameter['minValue'] as num?)?.toDouble();
       final max = (parameter['maxValue'] as num?)?.toDouble();
       if (min != null && max != null && max > min && min.isFinite && max.isFinite) {
-        final safeValue = value.toDouble().clamp(min, max).toDouble();
-        return Column(
+        final safe = value.toDouble().clamp(min, max).toDouble();
+        return withFrames(Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(label + '  ' + safeValue.toStringAsFixed(2) +
-                (parameter['unitsText'] == null ? '' : ' ' + parameter['unitsText'].toString()),
-                style: const TextStyle(fontSize: 10)),
-            Slider(min: min, max: max, value: safeValue, onChanged: update),
-            if (keyframeNote != null) keyframeNote,
+            Text(label + '  ' + safe.toStringAsFixed(2) +
+              (parameter['unitsText'] == null ? '' : ' ' + parameter['unitsText'].toString()),
+              style: const TextStyle(fontSize: 10)),
+            Slider(min: min, max: max, value: safe, onChanged: update),
           ],
-        );
+        ));
       }
-      return Column(
+      return withFrames(Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(label, style: const TextStyle(fontSize: 10)),
-          SizedBox(
-            height: 34,
-            child: TextFormField(
-              key: ValueKey<String>(effect.id + matchName + value.toString()),
-              initialValue: value.toString(),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-              decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
-              onFieldSubmitted: (raw) {
-                final next = double.tryParse(raw);
-                if (next != null && next.isFinite) update(next);
-              },
-            ),
-          ),
-          if (keyframeNote != null) keyframeNote,
+          SizedBox(height: 34, child: TextFormField(
+            key: ValueKey<String>(effect.id + matchName + value.toString()),
+            initialValue: value.toString(),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+            decoration: const InputDecoration(isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+            onFieldSubmitted: (raw) {
+              final parsed = double.tryParse(raw);
+              if (parsed != null && parsed.isFinite) update(parsed);
+            },
+          )),
         ],
-      );
+      ));
     }
-    if (value is List && value.isNotEmpty && value.every((item) => item is num)) {
-      final values = value.map((item) => (item as num).toDouble()).toList();
-      return Column(
+    if (value is List && value.isNotEmpty && value.every((entry) => entry is num)) {
+      final values = value.map((entry) => (entry as num).toDouble()).toList();
+      return withFrames(Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(label + ' · ' + values.length.toString() + ' channels',
-              style: const TextStyle(fontSize: 10)),
-          Wrap(
-            spacing: 6, runSpacing: 4,
-            children: [
-              for (var index = 0; index < values.length; index++)
-                SizedBox(
-                  width: 76, height: 34,
-                  child: TextFormField(
-                    key: ValueKey<String>(effect.id + matchName + index.toString() + values[index].toString()),
-                    initialValue: values[index].toStringAsFixed(3),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                    decoration: InputDecoration(
-                      labelText: ['X', 'Y', 'Z', 'W'][index.clamp(0, 3).toInt()],
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-                    ),
-                    onFieldSubmitted: (raw) {
-                      final next = double.tryParse(raw);
-                      if (next == null || !next.isFinite) return;
-                      final updated = [...values]..[index] = next;
-                      update(updated);
-                    },
-                  ),
+            style: const TextStyle(fontSize: 10)),
+          Wrap(spacing: 6, runSpacing: 4, children: [
+            for (var index = 0; index < values.length; index++)
+              SizedBox(width: 76, height: 34, child: TextFormField(
+                key: ValueKey<String>(effect.id + matchName + index.toString() + values[index].toString()),
+                initialValue: values[index].toStringAsFixed(3),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                decoration: InputDecoration(
+                  labelText: ['X', 'Y', 'Z', 'W'][index.clamp(0, 3).toInt()],
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
                 ),
-            ],
-          ),
-          if (keyframeNote != null) keyframeNote,
+                onFieldSubmitted: (raw) {
+                  final parsed = double.tryParse(raw);
+                  if (parsed == null || !parsed.isFinite) return;
+                  final copy = [...values]..[index] = parsed;
+                  update(copy);
+                },
+              )),
+          ]),
         ],
-      );
+      ));
     }
-    final options = parameter['options'];
-    if (options is List && options.isNotEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Text(label + ': ' +
-            (parameter['valueText']?.toString() ?? value?.toString() ?? 'Host option'),
-            style: const TextStyle(fontSize: 9, color: Color(0xFF9DABC3))),
-      );
+    return withFrames(Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Text(label + ': ' + (value?.toString() ?? 'Unsupported parameter type'),
+        style: const TextStyle(fontSize: 9, color: Color(0xFF9DABC3))),
+    ));
+  }
+
+  Widget _buildNativeParameterKeyframeRow({
+    required EffectInstance effect,
+    required String parameterMatchName,
+    required List<String>? parameterPath,
+    required Map<String, Object?> frame,
+  }) {
+    final time = (frame['timeSeconds'] as num?)?.toDouble();
+    if (time == null || !time.isFinite || time < 0) return const SizedBox.shrink();
+    final frameValue = frame['value'];
+    const curves = ['linear', 'bezier', 'hold'];
+    final rawCurve = frame['interpolation']?.toString().toLowerCase();
+    final selectedCurve = curves.contains(rawCurve) ? rawCurve! : 'linear';
+    Widget editor = Expanded(
+      child: Text(frameValue?.toString() ?? 'Unsupported value',
+        maxLines: 1, overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 9, color: Color(0xFF9DABC3))),
+    );
+    if (frameValue is num || frameValue is String ||
+        (frameValue is Map && frameValue['kind'] == 'mogrtText')) {
+      final initial = frameValue is Map
+          ? frameValue['text']?.toString() ?? ''
+          : frameValue?.toString() ?? '';
+      editor = Expanded(child: SizedBox(height: 32, child: TextFormField(
+        key: ValueKey<String>(effect.id + parameterMatchName + time.toString()),
+        initialValue: initial,
+        keyboardType: frameValue is num
+            ? const TextInputType.numberWithOptions(decimal: true, signed: true)
+            : TextInputType.text,
+        decoration: const InputDecoration(isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4)),
+        onFieldSubmitted: (raw) {
+          Object? next = raw;
+          if (frameValue is num) {
+            final parsed = double.tryParse(raw);
+            if (parsed == null || !parsed.isFinite) return;
+            next = parsed;
+          } else if (frameValue is Map) {
+            next = {...Map<String, Object?>.from(frameValue), 'text': raw};
+          }
+          _controller.setNativeEffectParameterKeyframe(
+            effect.id, parameterMatchName, time, next, parameterPath: parameterPath,
+          );
+        },
+      )));
     }
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label + ': ' + (value?.toString() ?? 'Unsupported parameter type'),
-              style: const TextStyle(fontSize: 9, color: Color(0xFF9DABC3))),
-          if (keyframeNote != null) keyframeNote,
-        ],
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(children: [
+        SizedBox(width: 48, child: Text(time.toStringAsFixed(2) + 's',
+          style: const TextStyle(fontSize: 9, color: Color(0xFF91A6C4)))),
+        editor,
+        const SizedBox(width: 4),
+        SizedBox(width: 84, child: DropdownButtonFormField<String>(
+          initialValue: selectedCurve,
+          isExpanded: true,
+          decoration: const InputDecoration(isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 3, vertical: 2)),
+          items: curves.map((curve) => DropdownMenuItem<String>(
+            value: curve, child: Text(curve.toUpperCase(), style: const TextStyle(fontSize: 8)),
+          )).toList(),
+          onChanged: (next) {
+            if (next == null) return;
+            _controller.setNativeEffectParameterKeyframe(
+              effect.id, parameterMatchName, time, frameValue,
+              interpolation: next, parameterPath: parameterPath,
+            );
+          },
+        )),
+      ]),
     );
   }
 

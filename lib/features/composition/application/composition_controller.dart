@@ -1035,6 +1035,44 @@ class CompositionController extends ChangeNotifier {
     _replace(target.copyWith(effects: effects, keyframeTracks: tracks));
   }
 
+  Map<String, Object?>? _premiereMappedParameter(
+    String componentMatchName,
+    String parameterName,
+    Object? rawValue,
+  ) {
+    if (rawValue is! num || !rawValue.toDouble().isFinite) return null;
+    final component = componentMatchName.toLowerCase();
+    final parameter = parameterName.toLowerCase();
+    final value = rawValue.toDouble();
+    if ((component.contains('gaussian blur') || component.contains('fast blur')) &&
+        (parameter.contains('blurriness') || parameter.contains('blur amount') ||
+            parameter.contains('radius'))) {
+      return {'effectId': 'gaussian_blur', 'property': 'sigma',
+        'value': value.clamp(0, 30).toDouble()};
+    }
+    if (component.contains('brightness') && component.contains('contrast')) {
+      if (parameter.contains('brightness')) {
+        return {'effectId': 'brightness', 'property': 'value',
+          'value': (value / 100).clamp(-1, 1).toDouble()};
+      }
+      if (parameter.contains('contrast')) {
+        return {'effectId': 'contrast', 'property': 'value',
+          'value': (1 + value / 100).clamp(0, 3).toDouble()};
+      }
+    }
+    if (component.contains('sharpen') &&
+        (parameter.contains('amount') || parameter.contains('sharpness'))) {
+      return {'effectId': 'sharpen', 'property': 'amount',
+        'value': value.clamp(0, 5).toDouble()};
+    }
+    if ((component.contains('hue/saturation') || component.contains('hue saturation')) &&
+        (parameter.contains('master saturation') || parameter.contains('saturation'))) {
+      return {'effectId': 'saturation', 'property': 'value',
+        'value': (1 + value / 100).clamp(0, 3).toDouble()};
+    }
+    return null;
+  }
+
   void setNativeEffectParameter(
     String effectInstanceId,
     String parameterMatchName,
@@ -1043,11 +1081,13 @@ class CompositionController extends ChangeNotifier {
   }) {
     final layer = selectedLayer;
     if (layer == null || layer.locked) return;
+    Map<String, Object?>? mappedValue;
     final effects = layer.effects.map((effect) {
       if (effect.id != effectInstanceId) return effect;
       final descriptor = <String, Object?>{...effect.nativeDescriptor};
       final rawParameters = descriptor['parameters'];
       if (rawParameters is! List) return effect;
+      final componentMatchName = descriptor['matchName']?.toString() ?? '';
       final parameters = rawParameters.map((raw) {
         if (raw is! Map) return raw;
         final item = Map<String, Object?>.from(raw);
@@ -1061,13 +1101,141 @@ class CompositionController extends ChangeNotifier {
                 List.generate(itemPath.length,
                     (index) => itemPath[index] == parameterPath[index])
                     .every((same) => same));
-        if (pathMatches && matchName == parameterMatchName) item['value'] = value;
+        if (pathMatches && matchName == parameterMatchName) {
+          item['value'] = value;
+          mappedValue = _premiereMappedParameter(
+            componentMatchName,
+            (item['displayName'] ?? item['name'] ?? '').toString(),
+            value,
+          );
+        }
         return item;
       }).toList();
       descriptor['parameters'] = parameters;
       return effect.copyWith(nativeDescriptor: descriptor);
     }).toList();
-    _replace(layer.copyWith(effects: effects));
+    final mapped = mappedValue;
+    if (mapped != null) {
+      final nextEffects = effects.map((effect) {
+        if (effect.effectId != mapped['effectId']) return effect;
+        final values = <String, double>{...effect.parameters};
+        values[mapped['property']!.toString()] = (mapped['value'] as num).toDouble();
+        return effect.copyWith(parameters: values);
+      }).toList();
+      _replace(layer.copyWith(effects: nextEffects));
+    } else {
+      _replace(layer.copyWith(effects: effects));
+    }
+  }
+
+  void setNativeEffectParameterKeyframe(
+    String effectInstanceId,
+    String parameterMatchName,
+    double timeSeconds,
+    Object? value, {
+    String? interpolation,
+    List<String>? parameterPath,
+  }) {
+    final layer = selectedLayer;
+    if (layer == null || layer.locked || !timeSeconds.isFinite || timeSeconds < 0) return;
+    Map<String, Object?>? mappedValue;
+    final effects = layer.effects.map((effect) {
+      if (effect.id != effectInstanceId) return effect;
+      final descriptor = <String, Object?>{...effect.nativeDescriptor};
+      final rawParameters = descriptor['parameters'];
+      if (rawParameters is! List) return effect;
+      final componentMatchName = descriptor['matchName']?.toString() ?? '';
+      final parameters = rawParameters.map((raw) {
+        if (raw is! Map) return raw;
+        final item = Map<String, Object?>.from(raw);
+        final matchName = item['matchName']?.toString() ?? '';
+        final rawPath = item['path'];
+        final itemPath = rawPath is List
+            ? rawPath.map((part) => part.toString()).toList()
+            : const <String>[];
+        final pathMatches = parameterPath == null ||
+            (itemPath.length == parameterPath.length &&
+                List.generate(itemPath.length,
+                    (index) => itemPath[index] == parameterPath[index])
+                    .every((same) => same));
+        if (!pathMatches || matchName != parameterMatchName) return item;
+        final rawFrames = item['keyframes'];
+        final frames = rawFrames is List
+            ? rawFrames.whereType<Map>().map((frame) =>
+                Map<String, Object?>.from(frame)).toList()
+            : <Map<String, Object?>>[];
+        final existingIndex = frames.indexWhere((frame) {
+          final rawTime = frame['timeSeconds'];
+          return rawTime is num &&
+              (rawTime.toDouble() - timeSeconds).abs() < 0.000001;
+        });
+        final frame = existingIndex >= 0
+            ? frames[existingIndex]
+            : <String, Object?>{'timeSeconds': timeSeconds};
+        frame['value'] = value;
+        if (interpolation != null) {
+          frame['interpolation'] = interpolation;
+          frame.remove('interpolationMode');
+        }
+        if (existingIndex < 0) {
+          frames.add(frame);
+        } else {
+          frames[existingIndex] = frame;
+        }
+        frames.sort((left, right) =>
+            ((left['timeSeconds'] as num?)?.toDouble() ?? 0)
+                .compareTo((right['timeSeconds'] as num?)?.toDouble() ?? 0));
+        item['keyframes'] = frames;
+        item['keyframesSupported'] = true;
+        item['isTimeVarying'] = true;
+        mappedValue = _premiereMappedParameter(
+          componentMatchName,
+          (item['displayName'] ?? item['name'] ?? '').toString(),
+          value,
+        );
+        return item;
+      }).toList();
+      descriptor['parameters'] = parameters;
+      return effect.copyWith(nativeDescriptor: descriptor);
+    }).toList();
+
+    final mapped = mappedValue;
+    if (mapped != null) {
+      final targetTimeMs = (timeSeconds * 1000).round();
+      final targetProperty = mapped['property']!.toString();
+      final targetId = mapped['effectId']!.toString();
+      final curve = switch ((interpolation ?? 'linear').toLowerCase()) {
+        'hold' => Interpolation.hold,
+        'bezier' || 'cubicbezier' => Interpolation.cubicBezier,
+        _ => Interpolation.linear,
+      };
+      final nextEffects = effects.map((effect) {
+        if (effect.effectId != targetId) return effect;
+        final trackIndex = effect.keyframeTracks.indexWhere(
+          (track) => track.property == targetProperty,
+        );
+        final currentTrack = trackIndex < 0
+            ? KeyframeTrack(property: targetProperty)
+            : effect.keyframeTracks[trackIndex];
+        final updatedTrack = currentTrack.upsert(ScalarKeyframe(
+          timeMs: targetTimeMs,
+          value: (mapped['value'] as num).toDouble(),
+          interpolation: curve,
+        ));
+        final tracks = [...effect.keyframeTracks];
+        if (trackIndex < 0) {
+          tracks.add(updatedTrack);
+        } else {
+          tracks[trackIndex] = updatedTrack;
+        }
+        final parameters = <String, double>{...effect.parameters};
+        parameters[targetProperty] = (mapped['value'] as num).toDouble();
+        return effect.copyWith(parameters: parameters, keyframeTracks: tracks);
+      }).toList();
+      _replace(layer.copyWith(effects: nextEffects));
+    } else {
+      _replace(layer.copyWith(effects: effects));
+    }
   }
 
   void addKeyframe(String property, {double? value}) {

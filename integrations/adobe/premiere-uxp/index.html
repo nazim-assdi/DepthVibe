@@ -44,8 +44,8 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#10151f;padding:9px;b
 <button id="refreshMotionBroAssets" class="secondary" disabled>Refresh imported .MOGRT assets</button>
 <input id="motionBroMogrtSearch" placeholder="Search pack, category or template">
 <div id="motionBroMogrtList" class="effect-list"><small>Import an .MBR pack in DepthVibe, then refresh.</small></div>
-<small>MOGRT templates are inserted at the active playhead on the last existing video/audio tracks.
-Video effects use VideoFilterFactory; audio effects use AudioFilterFactory. Static parameter values are applied through Premiere transactions. Animated host parameters remain captured in DepthVibe metadata where the host API exposes them.</small>
+<small>MOGRT templates are inserted at the active playhead. Premiere's exposed AE.ADBE Capsule controls are captured, including typed Source Text, editable font/style fields and supported keyframes. Use the Compositor Effects panel to edit values, then synchronize them back to the same captured clip.
+Video/audio effect parameters use their captured component schema and match-name/index/display-name identity. Supported ComponentParam keyframes are written through Premiere transactions with interpolation where available; unavailable controls are reported as skipped.</small>
 <small>Capture sends metadata only; source media and plug-in binaries are not copied.</small>
 <label for="document">DepthVibe composition JSON</label>
 <textarea id="document" rows="7" placeholder="Paste a DepthVibe composition document JSON to send it back to the app."></textarea>

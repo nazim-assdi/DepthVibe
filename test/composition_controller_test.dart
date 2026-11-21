@@ -128,6 +128,69 @@ void main() {
     expect((parameters[1] as Map)['value'], 25.0);
   });
 
+  test('edits a captured native-effect keyframe without losing interpolation metadata', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(
+            id: 'target',
+            name: 'Target',
+            kind: LayerKind.video,
+            effects: [
+              EffectInstance(
+                id: 'native-1',
+                effectId: 'native_effect',
+                name: 'Premiere Gaussian Blur',
+                nativeDescriptor: {
+                  'hostApp': 'premierepro',
+                  'matchName': 'PR.ADBE Gaussian Blur',
+                  'parameters': [
+                    {
+                      'index': 0,
+                      'matchName': '0',
+                      'name': 'Blurriness',
+                      'displayName': 'Blurriness',
+                      'path': ['PR.ADBE Gaussian Blur', '0'],
+                      'keyframes': [
+                        {'timeSeconds': 0.5, 'value': 2.0, 'interpolation': 'linear'},
+                      ],
+                    },
+                  ],
+                },
+              ),
+              EffectInstance(
+                id: 'mapped-blur',
+                effectId: 'gaussian_blur',
+                name: 'Gaussian Blur',
+                parameters: const {'sigma': 2.0},
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'target',
+      ),
+    );
+    controller.setNativeEffectParameterKeyframe(
+      'native-1',
+      '0',
+      0.5,
+      8.0,
+      interpolation: 'bezier',
+      parameterPath: const ['PR.ADBE Gaussian Blur', '0'],
+    );
+    final parameter = (controller.selectedLayer!.effects.single
+        .nativeDescriptor['parameters'] as List).single as Map;
+    final keyframe = (parameter['keyframes'] as List).single as Map;
+    expect(keyframe['value'], 8.0);
+    expect(keyframe['interpolation'], 'bezier');
+    expect(parameter['keyframesSupported'], true);
+    final mappedBlur = controller.selectedLayer!.effects
+        .singleWhere((effect) => effect.id == 'mapped-blur');
+    expect(mappedBlur.parameters['sigma'], 8.0);
+    expect(mappedBlur.keyframeTracks.single.property, 'sigma');
+    expect(mappedBlur.keyframeTracks.single.keyframes.single.value, 8.0);
+  });
+
   test('applies motion presets as editable keyframe tracks', () {
     final controller = CompositionController(
       document: const CompositionDocument(

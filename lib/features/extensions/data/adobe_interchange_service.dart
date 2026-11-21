@@ -313,6 +313,8 @@ class AdobeInterchangeService {
         'category': _s(raw['category']),
         'version': _s(raw['version']),
         'mediaType': _s(raw['mediaType'], 'video'),
+        'isMotionGraphicsTemplate': _b(raw['isMotionGraphicsTemplate']) || match == 'AE.ADBE Capsule',
+        'parameterSchemaVersion': _i(raw['parameterSchemaVersion'], 2),
         'parameters': nativeParameters,
         if (raw['parameterTree'] is List)
           'parameterTree': raw['parameterTree'],
@@ -363,6 +365,13 @@ class AdobeInterchangeService {
         unsupported.add(host+': '+match);
         rawUnsupported.add(raw);
       } else {
+        // One native component may map to multiple DepthVibe renderable effects.
+        // Keep its full native parameter tree on the first effect instance only.
+        if (additions.isNotEmpty) {
+          additions[0] = additions[0].copyWith(
+            nativeDescriptor: nativeDescriptor(),
+          );
+        }
         effects.addAll(additions);
         mapped.add(host+': '+match+' -> '+additions.map((e)=>e.effectId).join(', '));
       }
