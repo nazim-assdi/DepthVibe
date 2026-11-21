@@ -2754,7 +2754,201 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             onApply: () => _openAssetSource(source),
           ),
         const SizedBox(height: 6),
+        _buildCreativeAssetPackBrowser(),
+        const SizedBox(height: 8),
         _buildMotionBroPackBrowser(),
+      ],
+    );
+  }
+
+  Widget _buildInstalledCreativeAssetPackTile(InstalledCreativeAssetPack pack) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 5),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+        childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        title: Text(pack.name,
+          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+        subtitle: Text(
+          '${pack.fileCount} files · ${_formatAssetBytes(pack.expandedBytes)} · ${pack.licenseLabel}',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 8, color: Color(0xFF9EADC4)),
+        ),
+        leading: const Icon(Icons.inventory_2_outlined, color: Color(0xFF83D2B9)),
+        children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _creativePackBusy ? null : () => _uninstallCreativeAssetPack(pack),
+              icon: const Icon(Icons.delete_outline, size: 15),
+              label: const Text('REMOVE LOCAL PACK'),
+            ),
+          ),
+          FutureBuilder<List<CreativeAssetFile>>(
+            future: _creativeAssetPacks.filesForPack(pack.id),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                );
+              }
+              if (snapshot.hasError) {
+                return Text('Could not index this pack: ${snapshot.error}',
+                  style: const TextStyle(fontSize: 9, color: Color(0xFFE5A2A2)));
+              }
+              final allFiles = snapshot.data ?? const <CreativeAssetFile>[];
+              final term = _librarySearch.trim().toLowerCase();
+              final visible = allFiles.where((asset) =>
+                term.isEmpty || asset.relativePath.toLowerCase().contains(term)
+              ).take(120).toList();
+              if (allFiles.isEmpty) {
+                return const Text('No directly importable image, video, audio or LUT files were found.',
+                  style: TextStyle(fontSize: 9, color: Color(0xFF9EADC4)));
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Browse local media · showing ${visible.length} of ${allFiles.length}',
+                    style: const TextStyle(fontSize: 9, color: Color(0xFF9EADC4)),
+                  ),
+                  for (final asset in visible)
+                    ListTile(
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        switch (asset.kind) {
+                          'image' => Icons.image_outlined,
+                          'video' => Icons.movie_outlined,
+                          'audio' => Icons.graphic_eq,
+                          'lut' => Icons.color_lens_outlined,
+                          _ => Icons.insert_drive_file_outlined,
+                        },
+                        size: 17,
+                        color: const Color(0xFFB8C9E6),
+                      ),
+                      title: Text(asset.name,
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 9)),
+                      subtitle: Text(asset.kind.toUpperCase(),
+                        style: const TextStyle(fontSize: 8, color: Color(0xFF9EADC4))),
+                      trailing: IconButton(
+                        tooltip: 'Add ${asset.name} to the project',
+                        icon: const Icon(Icons.add_circle_outline, size: 17),
+                        onPressed: _creativePackBusy
+                            ? null
+                            : () => _addCreativeAssetFile(asset),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCreativeAssetPackBrowser() {
+    final term = _librarySearch.trim().toLowerCase();
+    final visiblePacks = CreativeAssetPackCatalog.all.where((pack) =>
+      term.isEmpty ||
+      (pack.name + ' ' + pack.category + ' ' + pack.description + ' ' + pack.licenseLabel)
+        .toLowerCase().contains(term)
+    ).toList();
+    final missing = CreativeAssetPackCatalog.all
+        .where((pack) => !_creativeAssetPacks.isInstalled(pack.id))
+        .toList();
+    final currentlyInstalling = _creativePackBusy;
+    final sizeLabel = _creativePackTotal > 0
+        ? _formatAssetBytes(_creativePackTotal)
+        : '';
+    final progressValue = _creativePackTotal > 0
+        ? (_creativePackReceived / _creativePackTotal).clamp(0.0, 1.0).toDouble()
+        : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Divider(height: 20),
+        _panelHeader('LOCAL OFFLINE ASSET PACKS', Icons.offline_pin_outlined),
+        const Text(
+          'Download once, extract to DepthVibe storage, then use these files offline. Source archives and their licence notices are retained inside each installed pack.',
+          style: TextStyle(fontSize: 9, color: Color(0xFF9EADC4)),
+        ),
+        const SizedBox(height: 7),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            _assetCountChip(Icons.cloud_download_outlined, '${CreativeAssetPackCatalog.all.length} downloadable packs'),
+            _assetCountChip(Icons.offline_pin_outlined, '${_installedCreativePacks.length} installed'),
+            _assetCountChip(Icons.storage_outlined, '${_formatAssetBytes(_creativeAssetPacks.installedBytes)} local storage'),
+            _assetCountChip(Icons.download_done_outlined, '${_formatAssetBytes(CreativeAssetPackCatalog.totalEstimatedBytes)} total download'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed: currentlyInstalling || missing.isEmpty
+              ? null
+              : _installAllCreativeAssetPacks,
+          icon: const Icon(Icons.download_for_offline_outlined, size: 17),
+          label: Text(missing.isEmpty
+              ? 'ALL DOWNLOADABLE PACKS INSTALLED'
+              : 'INSTALL ALL ${missing.length} PACKS · ${_formatAssetBytes(missing.fold<int>(0, (sum, pack) => sum + pack.estimatedBytes))}'),
+        ),
+        OutlinedButton.icon(
+          onPressed: currentlyInstalling ? null : _importExternalAssetZip,
+          icon: const Icon(Icons.folder_zip_outlined, size: 16),
+          label: const Text('IMPORT ASSET ZIP · ASSET POLISH / OTHER'),
+        ),
+        const Text(
+          'AssetPolish offers a selected-assets ZIP, not one full-library archive. Download a CC0 selection from its original site, then import that ZIP here; the embedded source/licence manifest is required.',
+          style: TextStyle(fontSize: 9, color: Color(0xFFE2C58E)),
+        ),
+        if (currentlyInstalling) ...[
+          const SizedBox(height: 8),
+          LinearProgressIndicator(value: progressValue),
+          const SizedBox(height: 4),
+          Text(
+            'Downloading ${_creativeAssetPacks.activePackId ?? 'asset pack'} · '
+            '${_formatAssetBytes(_creativePackReceived)}'
+            '${sizeLabel.isEmpty ? '' : ' / $sizeLabel'}',
+            style: const TextStyle(fontSize: 9, color: Color(0xFFB9C8DE)),
+          ),
+        ],
+        const Divider(height: 18),
+        _panelHeader('INSTALLED PACKS', Icons.inventory_2_outlined),
+        if (_installedCreativePacks.isEmpty)
+          const Text(
+            'No external media packs installed yet. Install a pack or import a licensed ZIP; downloaded files will be retained locally for offline editing.',
+            style: TextStyle(fontSize: 9, color: Color(0xFF9EADC4)),
+          ),
+        for (final pack in _installedCreativePacks)
+          _buildInstalledCreativeAssetPackTile(pack),
+        const Divider(height: 16),
+        _panelHeader('DOWNLOADABLE UPSTREAM PACKS', Icons.cloud_download_outlined),
+        for (final pack in visiblePacks)
+          _buildAssetLibraryTile(
+            title: pack.name,
+            category: pack.category,
+            description: pack.description,
+            countLabel: pack.sizeLabel + ' · ' + pack.licenseLabel,
+            icon: Icons.archive_outlined,
+            colors: const [Color(0xFF315D78), Color(0xFF1F3048)],
+            actionLabel: _creativeAssetPacks.isInstalled(pack.id)
+                ? 'INSTALLED'
+                : 'INSTALL',
+            onApply: currentlyInstalling || _creativeAssetPacks.isInstalled(pack.id)
+                ? null
+                : () => _installCreativeAssetPack(pack),
+          ),
+        if (visiblePacks.isEmpty)
+          const Text('No downloadable asset packs match this search.',
+            style: TextStyle(fontSize: 9, color: Color(0xFF9EADC4))),
       ],
     );
   }
