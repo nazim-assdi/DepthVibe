@@ -46,6 +46,7 @@ import 'text_layer_content_editor.dart';
 import 'color_wheel_control.dart';
 import 'color_curve_editor.dart';
 import 'color_scopes_view.dart';
+import 'transition_preview_tile.dart';
 
 class CompositionWorkspace extends StatefulWidget {
   const CompositionWorkspace({super.key});
@@ -183,6 +184,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   double _renderProgress = 0;
   String _panel = 'Layers';
   String _effectCategory = 'All';
+  String _effectSearch = '';
+  String _transitionCategory = 'All';
+  String _transitionSearch = '';
   String? _notice;
   final CompositionProjectService _projectService = const CompositionProjectService();
   final CompositionRecoveryService _recoveryService = const CompositionRecoveryService();
@@ -2785,9 +2789,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
   Widget _buildEffectsPanel(CompositionLayer layer) {
-    final filtered = EffectCatalog.allEffects
-        .where((effect) => _effectCategory == 'All' || effect.category == _effectCategory)
-        .toList();
+    final filtered = EffectCatalog.allEffects.where((effect) {
+      final categoryMatches = _effectCategory == 'All' || effect.category == _effectCategory;
+      final query = _effectSearch.trim().toLowerCase();
+      final searchMatches = query.isEmpty ||
+          (effect.name + ' ' + effect.category + ' ' + effect.description)
+              .toLowerCase().contains(query);
+      return categoryMatches && searchMatches;
+    }).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -2848,6 +2857,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ),
           ),
         ),
+        TextField(
+          onChanged: (value) => setState(() => _effectSearch = value),
+          decoration: const InputDecoration(
+            isDense: true,
+            prefixIcon: Icon(Icons.search, size: 17),
+            hintText: 'Search native effects…',
+          ),
+        ),
+        const SizedBox(height: 6),
         DropdownButtonFormField<String>(
           initialValue: _effectCategory,
           items: ['All', ...EffectCatalog.categories]
@@ -3920,6 +3938,105 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+
+  Widget _buildTransitionBrowser() {
+    String categoryFor(TransitionKind kind) {
+      final id = kind.name.toLowerCase();
+      if (id.contains('fade') || id == 'dissolve') return 'Fade';
+      if (id.contains('wipe') || id.contains('diag')) return 'Wipe';
+      if (id.contains('slide') || id.contains('cover') ||
+          id.contains('reveal') || id.contains('wind') ||
+          id.contains('slice') || id.contains('squeeze')) {
+        return 'Move';
+      }
+      if (id.contains('circle') || id.contains('rect') ||
+          id.contains('open') || id.contains('close')) {
+        return 'Shape';
+      }
+      return 'Stylize';
+    }
+
+    final query = _transitionSearch.trim().toLowerCase();
+    final visible = TransitionCatalog.all.where((kind) {
+      final name = TransitionCatalog.displayName(kind);
+      final matchesCategory = _transitionCategory == 'All' ||
+          categoryFor(kind) == _transitionCategory;
+      final matchesSearch = query.isEmpty ||
+          (name + ' ' + kind.name + ' ' +
+              TransitionCatalog.xfadeName(kind)).toLowerCase().contains(query);
+      return matchesCategory && matchesSearch;
+    }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          onChanged: (value) => setState(() => _transitionSearch = value),
+          decoration: const InputDecoration(
+            isDense: true,
+            prefixIcon: Icon(Icons.search, size: 17),
+            hintText: 'Search 60+ transitions…',
+          ),
+        ),
+        const SizedBox(height: 7),
+        Wrap(
+          spacing: 5,
+          runSpacing: 4,
+          children: [
+            for (final category in const [
+              'All', 'Fade', 'Wipe', 'Move', 'Shape', 'Stylize',
+            ])
+              ChoiceChip(
+                label: Text(category, style: const TextStyle(fontSize: 9)),
+                selected: _transitionCategory == category,
+                visualDensity: VisualDensity.compact,
+                onSelected: (_) => setState(
+                  () => _transitionCategory = category,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'LIVE TRANSITION PREVIEWS · ' + visible.length.toString(),
+                style: const TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.65,
+                  color: Color(0xFF9EACC3),
+                ),
+              ),
+            ),
+            const Text(
+              'Hover a card to animate',
+              style: TextStyle(fontSize: 8, color: Color(0xFF8294AE)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        if (visible.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'No transitions match this search.',
+              style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
+            ),
+          ),
+        for (final kind in visible)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: TransitionPreviewTile(
+              kind: kind,
+              onApply: () => _controller.addTransition(kind),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildTransitionsPanel(CompositionLayer layer) {
     const validator = TransitionFrameValidator();
     final document = _controller.document;
@@ -3937,6 +4054,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _panelHeader('CLIP TRANSITIONS', Icons.auto_awesome_motion),
+        _buildTransitionBrowser(),
+        const Divider(height: 18),
         PopupMenuButton<TransitionKind>(
           tooltip: 'Add transition to adjacent clip',
           onSelected: _controller.addTransition,
