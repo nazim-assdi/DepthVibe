@@ -178,7 +178,8 @@ void main() {
       interpolation: 'bezier',
       parameterPath: const ['PR.ADBE Gaussian Blur', '0'],
     );
-    final parameter = (controller.selectedLayer!.effects.single
+    final parameter = (controller.selectedLayer!.effects
+        .singleWhere((effect) => effect.id == 'native-1')
         .nativeDescriptor['parameters'] as List).single as Map;
     final keyframe = (parameter['keyframes'] as List).single as Map;
     expect(keyframe['value'], 8.0);

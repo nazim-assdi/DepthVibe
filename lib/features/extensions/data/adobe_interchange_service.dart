@@ -180,7 +180,11 @@ class AdobeInterchangeService {
       final startTime=_d(raw['startTimeSeconds'],inPoint),outPoint=_d(raw['outPointSeconds'],inPoint+1);
       final duration=((outPoint-inPoint).abs()<0.0001?1:((outPoint-inPoint)*1000).round()).clamp(1,86400000).toInt();
       final source=_map(raw['source']),path=_path(raw['sourcePath']??source['path']);
-      final mappedResult=_mapEffects(_maps(raw['effects']),host:'aftereffects',layerIndex:index);
+      final mappedResult=_mapEffects(
+        _maps(raw['effects']),
+        host: _s(snap['hostApp'], 'aftereffects'),
+        layerIndex: index,
+      );
       mapped.addAll(mappedResult.mapped);unsupported.addAll(mappedResult.unsupported);
       final parent=_s(raw['parentLayerId']);if(parent.isNotEmpty)parents.add((id:id,parent:parent));
       final text=_s(raw['textContent']);
@@ -366,7 +370,6 @@ class AdobeInterchangeService {
         // that its renderer remains the original Adobe host/plugin.
         effects.addAll(additions);
         unsupported.add(host + ': ' + match + ' (native host effect)');
-        mapped.add(host + ': ' + match + ' -> native parameter descriptor');
       } else if(additions.any((e)=>EffectCatalog.findBuiltin(e.effectId)==null)) {
         unsupported.add(host+': '+match);
         rawUnsupported.add(raw);
@@ -480,7 +483,11 @@ class AdobeInterchangeService {
       final file=path==null
           ? '<file id="file-'+index.toString()+'"><name>'+esc(name)+'</name><offline>true</offline></file>'
           : '<file id="file-'+index.toString()+'"><name>'+esc(name)+'</name><pathurl>'+
-              esc(path.startsWith('file://')?path:Uri.file(path).toString())+
+              esc(path.startsWith('file://')
+                  ? path
+                  : RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path)
+                      ? Uri.file(path, windows: true).toString()
+                      : Uri.file(path).toString())+
               '</pathurl></file>';
       return '<clipitem id="clip-'+index.toString()+'"><name>'+esc(layer.name)+'</name>'+
           rate+'<start>'+st.toString()+'</start><end>'+en.toString()+'</end><in>'+

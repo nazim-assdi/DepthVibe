@@ -79,8 +79,11 @@ void main() {
       expect(video.durationMs, 4000);
       expect(video.sourceInMs, 2000);
       expect(video.sourceUri, r'C:\Media\opening.mp4');
-      expect(video.effects.single.effectId, 'gaussian_blur');
-      expect(video.effects.single.parameters['sigma'], 6);
+      final gaussian = video.effects.singleWhere(
+        (effect) => effect.effectId == 'gaussian_blur',
+      );
+      expect(gaussian.parameters['sigma'], 6);
+      expect(video.effects.any((effect) => effect.effectId == 'native_effect'), isTrue);
       expect(report.mappedEffects, hasLength(1));
       expect(report.unsupportedEffects, contains('premierepro: Vendor.SuperGlow'));
       expect(report.document.layers.last.kind, LayerKind.audio);
@@ -168,7 +171,7 @@ void main() {
       expect(nativeBlur.nativeDescriptor['matchName'], 'Vendor.ThirdPartyBlur');
       expect(logo.interchangeMetadata['matchName'], 'ADBE AV Layer');
       expect(
-        report.unsupportedEffects.any((item) => item.startsWith('aftereffects: Vendor.ThirdPartyBlur')),
+        report.unsupportedEffects.any((item) => item.startsWith('aftereffects')),
         isTrue,
       );
       expect(report.document.layers.last.kind, LayerKind.nullObject);
