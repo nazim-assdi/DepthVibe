@@ -506,6 +506,195 @@ class MotionPresetCatalog {
         ]),
       ],
     ),
+    MotionPresetDefinition(
+      id: 'cinematic_push_in', name: 'Cinematic Push In', category: 'Cinematic',
+      description: 'A restrained camera push with a soft settle.',
+      durationMs: 1100,
+      tracks: [
+        MotionPresetTrack('scale.x', [MotionPresetFrame(0, 0.92, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(0.78, 1.035, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('scale.y', [MotionPresetFrame(0, 0.92, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(0.78, 1.035, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'cinematic_pull_out', name: 'Cinematic Pull Out', category: 'Cinematic',
+      description: 'Ease away from the subject with a subtle opacity finish.',
+      durationMs: 1050,
+      tracks: [
+        MotionPresetTrack('scale.x', [MotionPresetFrame(0, 1.12, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('scale.y', [MotionPresetFrame(0, 1.12, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'spin_pop_in', name: 'Spin Pop In', category: 'Entrance',
+      description: 'Rotate and scale into place with a clean landing.',
+      durationMs: 850,
+      tracks: [
+        MotionPresetTrack('rotation.z', [MotionPresetFrame(0, -150, mode: MotionPresetValueMode.offset), MotionPresetFrame(0.78, 7, mode: MotionPresetValueMode.offset), MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset)]),
+        MotionPresetTrack('scale.x', [MotionPresetFrame(0, 0.35, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(0.72, 1.08, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('scale.y', [MotionPresetFrame(0, 0.35, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(0.72, 1.08, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('opacity', [MotionPresetFrame(0, 0), MotionPresetFrame(0.24, 100)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'spin_reveal', name: 'Spin Reveal', category: 'Entrance',
+      description: 'A fast half-turn that resolves into the final angle.',
+      durationMs: 760,
+      tracks: [
+        MotionPresetTrack('rotation.z', [MotionPresetFrame(0, 180, mode: MotionPresetValueMode.offset), MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset)]),
+        MotionPresetTrack('opacity', [MotionPresetFrame(0, 0), MotionPresetFrame(0.35, 100)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'headline_drop', name: 'Headline Drop', category: 'Typography',
+      description: 'Drop a title from above with a controlled overshoot.',
+      durationMs: 820,
+      tracks: [
+        MotionPresetTrack('position.y', [MotionPresetFrame(0, -0.34, mode: MotionPresetValueMode.compositionHeightOffset), MotionPresetFrame(0.72, 0.035, mode: MotionPresetValueMode.compositionHeightOffset), MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset)]),
+        MotionPresetTrack('opacity', [MotionPresetFrame(0, 0), MotionPresetFrame(0.22, 100)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'lower_third_rise', name: 'Lower Third Rise', category: 'Typography',
+      description: 'A clean broadcast lower-third entrance from below.',
+      durationMs: 720,
+      tracks: [
+        MotionPresetTrack('position.y', [MotionPresetFrame(0, 0.12, mode: MotionPresetValueMode.compositionHeightOffset), MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset)]),
+        MotionPresetTrack('position.x', [MotionPresetFrame(0, -0.025, mode: MotionPresetValueMode.compositionWidthOffset), MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset)]),
+        MotionPresetTrack('opacity', [MotionPresetFrame(0, 0), MotionPresetFrame(1, 100)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'lower_third_exit', name: 'Lower Third Exit', category: 'Exit',
+      description: 'Slide a broadcast caption away while fading.',
+      durationMs: 560,
+      tracks: [
+        MotionPresetTrack('position.x', [MotionPresetFrame(0, 0, mode: MotionPresetValueMode.offset), MotionPresetFrame(1, -0.11, mode: MotionPresetValueMode.compositionWidthOffset)]),
+        MotionPresetTrack('opacity', [MotionPresetFrame(0, 100), MotionPresetFrame(1, 0)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'spring_left_in', name: 'Spring from Left', category: 'Entrance',
+      description: 'Spring in from the left edge and settle naturally.',
+      durationMs: 900,
+      tracks: [
+        MotionPresetTrack('position.x', [MotionPresetFrame(0, -1, mode: MotionPresetValueMode.compositionWidthOffset), MotionPresetFrame(0.7, 0.06, mode: MotionPresetValueMode.compositionWidthOffset), MotionPresetFrame(0.86, -0.025, mode: MotionPresetValueMode.compositionWidthOffset), MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'spring_right_in', name: 'Spring from Right', category: 'Entrance',
+      description: 'Spring in from the right edge and settle naturally.',
+      durationMs: 900,
+      tracks: [
+        MotionPresetTrack('position.x', [MotionPresetFrame(0, 1, mode: MotionPresetValueMode.compositionWidthOffset), MotionPresetFrame(0.7, -0.06, mode: MotionPresetValueMode.compositionWidthOffset), MotionPresetFrame(0.86, 0.025, mode: MotionPresetValueMode.compositionWidthOffset), MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'elastic_up', name: 'Elastic Rise', category: 'Entrance',
+      description: 'Rise vertically with a soft elastic landing.',
+      durationMs: 880,
+      tracks: [
+        MotionPresetTrack('position.y', [MotionPresetFrame(0, 0.42, mode: MotionPresetValueMode.compositionHeightOffset), MotionPresetFrame(0.7, -0.045, mode: MotionPresetValueMode.compositionHeightOffset), MotionPresetFrame(0.88, 0.018, mode: MotionPresetValueMode.compositionHeightOffset), MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset)]),
+        MotionPresetTrack('opacity', [MotionPresetFrame(0, 0), MotionPresetFrame(0.25, 100)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'elastic_down', name: 'Elastic Drop', category: 'Entrance',
+      description: 'Drop vertically with a soft elastic landing.',
+      durationMs: 880,
+      tracks: [
+        MotionPresetTrack('position.y', [MotionPresetFrame(0, -0.42, mode: MotionPresetValueMode.compositionHeightOffset), MotionPresetFrame(0.7, 0.045, mode: MotionPresetValueMode.compositionHeightOffset), MotionPresetFrame(0.88, -0.018, mode: MotionPresetValueMode.compositionHeightOffset), MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset)]),
+        MotionPresetTrack('opacity', [MotionPresetFrame(0, 0), MotionPresetFrame(0.25, 100)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'squash_stomp', name: 'Squash Stomp', category: 'Attention',
+      description: 'Compress on impact, stretch upward, then return to normal.',
+      durationMs: 720,
+      tracks: [
+        MotionPresetTrack('scale.x', [MotionPresetFrame(0, 1, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(0.25, 1.2, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(0.52, 0.94, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(0.76, 1.035, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('scale.y', [MotionPresetFrame(0, 1, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(0.25, 0.78, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(0.52, 1.08, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(0.76, 0.98, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'pulse_soft', name: 'Soft Pulse', category: 'Attention',
+      description: 'A subtle breathing pulse for selected titles or objects.',
+      durationMs: 1200,
+      interpolation: Interpolation.easeInOut,
+      tracks: [
+        MotionPresetTrack('scale.x', [MotionPresetFrame(0, 1, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(0.5, 1.045, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('scale.y', [MotionPresetFrame(0, 1, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(0.5, 1.045, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'pendulum_swing', name: 'Pendulum Swing', category: 'Attention',
+      description: 'A weighted side-to-side swing with a controlled stop.',
+      durationMs: 1200,
+      interpolation: Interpolation.easeInOut,
+      tracks: [
+        MotionPresetTrack('rotation.z', [MotionPresetFrame(0, -26, mode: MotionPresetValueMode.offset), MotionPresetFrame(0.32, 19, mode: MotionPresetValueMode.offset), MotionPresetFrame(0.62, -11, mode: MotionPresetValueMode.offset), MotionPresetFrame(0.82, 5, mode: MotionPresetValueMode.offset), MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'hover_drift', name: 'Hover Drift', category: 'Attention',
+      description: 'Float gently upward and return without changing scale.',
+      durationMs: 1500,
+      interpolation: Interpolation.easeInOut,
+      tracks: [
+        MotionPresetTrack('position.y', [MotionPresetFrame(0, 0, mode: MotionPresetValueMode.offset), MotionPresetFrame(0.5, -0.045, mode: MotionPresetValueMode.compositionHeightOffset), MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'slide_zoom_left', name: 'Slide + Zoom Left', category: 'Entrance',
+      description: 'Combine lateral movement and a gentle camera zoom.',
+      durationMs: 900,
+      tracks: [
+        MotionPresetTrack('position.x', [MotionPresetFrame(0, 0.22, mode: MotionPresetValueMode.compositionWidthOffset), MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset)]),
+        MotionPresetTrack('scale.x', [MotionPresetFrame(0, 0.86, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('scale.y', [MotionPresetFrame(0, 0.86, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('opacity', [MotionPresetFrame(0, 0), MotionPresetFrame(1, 100)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'slide_zoom_right', name: 'Slide + Zoom Right', category: 'Entrance',
+      description: 'Combine opposite lateral movement and a gentle camera zoom.',
+      durationMs: 900,
+      tracks: [
+        MotionPresetTrack('position.x', [MotionPresetFrame(0, -0.22, mode: MotionPresetValueMode.compositionWidthOffset), MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset)]),
+        MotionPresetTrack('scale.x', [MotionPresetFrame(0, 0.86, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('scale.y', [MotionPresetFrame(0, 0.86, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('opacity', [MotionPresetFrame(0, 0), MotionPresetFrame(1, 100)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'rotate_out', name: 'Rotate Away', category: 'Exit',
+      description: 'Rotate out of frame while fading to zero opacity.',
+      durationMs: 620,
+      tracks: [
+        MotionPresetTrack('rotation.z', [MotionPresetFrame(0, 0, mode: MotionPresetValueMode.offset), MotionPresetFrame(1, 32, mode: MotionPresetValueMode.offset)]),
+        MotionPresetTrack('scale.x', [MotionPresetFrame(0, 1, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 0.82, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('scale.y', [MotionPresetFrame(0, 1, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 0.82, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('opacity', [MotionPresetFrame(0, 100), MotionPresetFrame(1, 0)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'shrink_out', name: 'Shrink Out', category: 'Exit',
+      description: 'Contract smoothly toward the anchor point and fade away.',
+      durationMs: 560,
+      tracks: [
+        MotionPresetTrack('scale.x', [MotionPresetFrame(0, 1, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 0.2, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('scale.y', [MotionPresetFrame(0, 1, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 0.2, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('opacity', [MotionPresetFrame(0, 100), MotionPresetFrame(1, 0)]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'snap_zoom', name: 'Snap Zoom', category: 'Attention',
+      description: 'Quick push-in with a sharp overshoot and a tight settle.',
+      durationMs: 520,
+      tracks: [
+        MotionPresetTrack('scale.x', [MotionPresetFrame(0, 0.82, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(0.58, 1.14, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+        MotionPresetTrack('scale.y', [MotionPresetFrame(0, 0.82, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(0.58, 1.14, mode: MotionPresetValueMode.multiplier), MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier)]),
+      ],
+    ),
   ];
 
   static MotionPresetDefinition? find(String id) {
