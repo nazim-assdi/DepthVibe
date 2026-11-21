@@ -2295,7 +2295,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         title: Text('Remove ' + pack.name + '?'),
         content: Text('This removes ' + pack.fileCount.toString() +
             ' local files (' + _formatAssetBytes(pack.expandedBytes) +
-            ') from DepthVibe storage.'),
+            ') from DepthVibe storage. Any project using these files will need the media to be relinked if the pack is removed.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
