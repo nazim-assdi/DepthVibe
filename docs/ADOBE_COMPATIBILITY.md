@@ -138,3 +138,8 @@ This is native-host execution, not a claim that proprietary Adobe plug-ins can r
 The Compositor can import user-supplied legacy `.MBR` packages. The importer reads root `pack.info` metadata (including inline comments used in Motion Bro examples), category/subcategory folders, optional `(Assets)` files and `(Preview)` folders. It keeps original preset/media files, identifies `.FFX` and `.MOGRT` separately, and matches same-basename previews even when their extension differs from the preset.
 
 The After Effects UXP panel can apply imported `.FFX` files to selected layers; the Premiere UXP panel can insert imported `.MOGRT` files at the active sequence playhead. The imported library is not a license activator: current Motion Bro packs that require a license key still require their original valid license and supported Motion Bro workflow. DepthVibe does not unlock, decrypt, remove activation checks or alter licensed pack contents. The importer does not execute `.JSX` or `.JSXBIN` code.
+
+
+### Native AE effect keyframe fidelity
+
+When the After Effects UXP host reports keyframe metadata for a native effect parameter, the Sync action now attempts to restore incoming/outgoing HOLD / LINEAR / BEZIER interpolation, temporal ease speed/influence, temporal/spatial auto-Bezier and continuity, spatial in/out tangents and roving flags. Each optional host operation is feature-detected; unsupported property types or host API methods are reported/skipped and are not claimed as losslessly mapped.

@@ -300,6 +300,83 @@ function nativePropertyForDescriptor(group, descriptor) {
   return current;
 }
 
+function nativeKeyframeInterpolation(mode) {
+  const types = afterEffects.KeyframeInterpolationType || {};
+  const name = String(mode || "linear").toLowerCase();
+  if (name === "hold") return types.HOLD;
+  if (name === "bezier" || name === "cubicbezier" || name === "easein" ||
+      name === "easeout" || name === "easeinout") return types.BEZIER;
+  return types.LINEAR;
+}
+
+function nativeKeyframeEase(items) {
+  if (!Array.isArray(items) || !items.length || typeof KeyframeEase !== "function") return null;
+  const result = [];
+  for (let index = 0; index < items.length; index += 1) {
+    const speed = Number(items[index] && items[index].speed);
+    const influence = Number(items[index] && items[index].influence);
+    if (!Number.isFinite(speed) || !Number.isFinite(influence)) return null;
+    result.push(new KeyframeEase(speed, Math.max(0.1, Math.min(100, influence))));
+  }
+  return result;
+}
+
+function applyNativeKeyframeMetadata(property, hostKeyIndex, key, dimensions) {
+  if (!property || !key || hostKeyIndex < 1) return;
+  const inMode = nativeKeyframeInterpolation(key.inInterpolation || key.interpolation);
+  const outMode = nativeKeyframeInterpolation(key.outInterpolation || key.interpolation);
+  try {
+    if (inMode !== undefined && outMode !== undefined &&
+        typeof property.setInterpolationTypeAtKey === "function") {
+      property.setInterpolationTypeAtKey(hostKeyIndex, inMode, outMode);
+    }
+  } catch (_) {}
+  try {
+    const incoming = nativeKeyframeEase(key.inTemporalEase);
+    const outgoing = nativeKeyframeEase(key.outTemporalEase);
+    if (incoming && outgoing && typeof property.setTemporalEaseAtKey === "function") {
+      property.setTemporalEaseAtKey(hostKeyIndex, incoming, outgoing);
+    }
+  } catch (_) {}
+  try {
+    if (typeof key.temporalAutoBezier === "boolean" &&
+        typeof property.setTemporalAutoBezierAtKey === "function") {
+      property.setTemporalAutoBezierAtKey(hostKeyIndex, key.temporalAutoBezier);
+    }
+  } catch (_) {}
+  try {
+    if (typeof key.temporalContinuous === "boolean" &&
+        typeof property.setTemporalContinuousAtKey === "function") {
+      property.setTemporalContinuousAtKey(hostKeyIndex, key.temporalContinuous);
+    }
+  } catch (_) {}
+  try {
+    if (typeof key.spatialAutoBezier === "boolean" &&
+        typeof property.setSpatialAutoBezierAtKey === "function") {
+      property.setSpatialAutoBezierAtKey(hostKeyIndex, key.spatialAutoBezier);
+    }
+  } catch (_) {}
+  try {
+    if (typeof key.spatialContinuous === "boolean" &&
+        typeof property.setSpatialContinuousAtKey === "function") {
+      property.setSpatialContinuousAtKey(hostKeyIndex, key.spatialContinuous);
+    }
+  } catch (_) {}
+  try {
+    const incoming = key.inSpatialTangent, outgoing = key.outSpatialTangent;
+    if (dimensions > 1 && Array.isArray(incoming) && Array.isArray(outgoing) &&
+        incoming.length === dimensions && outgoing.length === dimensions &&
+        typeof property.setSpatialTangentsAtKey === "function") {
+      property.setSpatialTangentsAtKey(hostKeyIndex, incoming, outgoing);
+    }
+  } catch (_) {}
+  try {
+    if (typeof key.roving === "boolean" && typeof property.setRovingAtKey === "function") {
+      property.setRovingAtKey(hostKeyIndex, key.roving);
+    }
+  } catch (_) {}
+}
+
 function applyNativeParameters(group, parameters, warnings, stats) {
   if (!group || !Array.isArray(parameters)) return;
   for (let index = 0; index < parameters.length; index += 1) {
@@ -327,6 +404,13 @@ function applyNativeParameters(group, parameters, warnings, stats) {
             value.every((part) => typeof part === "number" && Number.isFinite(part));
           if (!Number.isFinite(time) || (!scalar && !vector)) continue;
           property.setValueAtTime(time, value);
+          const hostKeyIndex = property.nearestKeyIndex(time);
+          applyNativeKeyframeMetadata(
+            property,
+            hostKeyIndex,
+            key,
+            Array.isArray(value) ? value.length : 1
+          );
           if (stats) stats.keyframes += 1;
         }
         continue;

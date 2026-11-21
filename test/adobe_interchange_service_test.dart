@@ -262,6 +262,10 @@ void main() {
       expect(script, contains('effectProperty(group,item)'));
       expect(script, contains('nativeDescriptor.parameters'));
       expect(script, contains('setValueAtTime'));
+      expect(script, contains('setInterpolationTypeAtKey'));
+      expect(script, contains('setTemporalEaseAtKey'));
+      expect(script, contains('setSpatialTangentsAtKey'));
+      expect(script, contains('setRovingAtKey'));
     });
 
     test('imports Premiere video and audio plugins with media-specific native descriptors', () {
