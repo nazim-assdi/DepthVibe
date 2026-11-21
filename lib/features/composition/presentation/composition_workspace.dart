@@ -1889,7 +1889,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             _assetCountChip(Icons.auto_awesome, '${EffectPresetCatalog.all.length} effect looks'),
             _assetCountChip(Icons.animation, '${MotionPresetCatalog.all.length} motion presets'),
             _assetCountChip(Icons.swap_horiz, '${TransitionPresetCatalog.all.length} transition recipes'),
-            _assetCountChip(Icons.layers, '${EffectCatalog.allEffects.length} native effects'),
+            _assetCountChip(Icons.layers, '${EffectCatalog.all.length} native effects'),
           ],
         ),
         const SizedBox(height: 8),
