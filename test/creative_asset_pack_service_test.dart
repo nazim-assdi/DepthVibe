@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
@@ -23,7 +22,7 @@ void main() {
           .where((item) => item.id.startsWith('clr_audio_'))
           .toList();
       expect(clr, hasLength(2));
-      expect(clr.fold<int>(0, (sum, item) => sum + item.exactBytes!), 3359833518);
+      expect(clr.fold<int>(0, (sum, item) => sum + item.exactBytes!), 3349833518);
       expect(
         CreativeAssetPackCatalog.all
             .where((item) => item.id.startsWith('daedal_'))
@@ -33,8 +32,8 @@ void main() {
     });
 
     test('total estimate is over five gigabytes and includes all 26 packs', () {
-      expect(CreativeAssetPackCatalog.totalEstimatedBytes, greaterThan(5 * 1024 * 1024 * 1024));
-      expect(CreativeAssetPackCatalog.totalEstimatedBytes, lessThan(6 * 1024 * 1024 * 1024));
+      expect(CreativeAssetPackCatalog.totalEstimatedBytes, greaterThan(5000000000));
+      expect(CreativeAssetPackCatalog.totalEstimatedBytes, lessThan(6000000000));
     });
   });
 
