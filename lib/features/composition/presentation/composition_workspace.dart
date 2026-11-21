@@ -1904,18 +1904,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         if (_libraryFilter == 'All' || _libraryFilter == 'Effects') ...[
           _panelHeader('PRO LOOKS & EFFECT STACKS', Icons.color_lens_outlined),
           for (final preset in effectPresets)
-            _buildAssetLibraryTile(
-              title: preset.name,
-              category: preset.category,
-              description: preset.description,
-              countLabel: '${preset.steps.length} effects',
-              icon: Icons.auto_awesome,
-              colors: const [Color(0xFF5B70B8), Color(0xFF242F54)],
-              actionLabel: 'APPLY',
+            EffectPreviewTile(
+              effect: EffectCatalog.find(preset.steps.first.effectId)!,
+              titleOverride: preset.name,
+              subtitleOverride: '${preset.category} · ${preset.steps.length}-effect stack preview',
               onApply: canApplyToLayer ? () {
                 _controller.applyEffectPreset(preset.id);
                 setState(() => _notice = 'Applied ${preset.name} effect stack.');
-              } : null,
+              } : () {},
             ),
           if (effectPresets.isEmpty)
             const Text('No effect looks match this search.', style: TextStyle(fontSize: 10)),
@@ -1944,15 +1940,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           const Divider(height: 20),
           _panelHeader('TRANSITION RECIPES', Icons.swap_horiz),
           for (final preset in transitionPresets)
-            _buildAssetLibraryTile(
-              title: preset.name,
-              category: preset.category,
-              description: preset.description,
-              countLabel: '${preset.durationMs} ms',
-              icon: Icons.compare_arrows,
-              colors: const [Color(0xFF9673C6), Color(0xFF463260)],
-              actionLabel: 'ADD',
-              onApply: canApplyTransition ? () => _applyTransitionPreset(preset) : null,
+            TransitionPreviewTile(
+              kind: preset.kind,
+              titleOverride: preset.name,
+              subtitleOverride: '${preset.category} · ${preset.durationMs} ms',
+              onApply: canApplyTransition ? () => _applyTransitionPreset(preset) : () {},
             ),
           if (!canApplyTransition)
             const Text('Add or enable two video/image clips to use transition recipes.', style: TextStyle(fontSize: 9, color: Color(0xFFE2C58E))),
