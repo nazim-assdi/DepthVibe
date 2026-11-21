@@ -89,3 +89,9 @@ This is a functional first NLE/compositor render path, not yet a complete After 
 - Use bounded frame/texture caches and release native/GPU resources.
 - Detect platform capabilities before enabling AR/3D controls.
 - Profile large projects, multitrack audio and full FFmpeg bundle size on target hardware.
+
+## Downloadable offline asset packs
+
+The Compositor's CreativeAssetPackService downloads selected open-licensed upstream ZIP packs to application-support storage; the payload is not embedded in the APK or desktop installer. Its catalog currently has 24 DAEDAL CC0 packs plus two CLR audio volumes (about 5.21 GB of archive data). The installer streams HTTPS downloads, verifies declared sizes where known, decodes ZIP CRCs, rejects path traversal, duplicate paths, symlinks/hardlinks and oversize entries, requires a licence file, extracts into a staging directory and atomically installs metadata and media. Installed packs are indexed for image, SVG, video/GIF, audio and LUT assets, which can be added to the active composition as editable media layers or LUT effects. Individual packs can be removed without uninstalling the app. AssetPolish's full 3,869-vector catalog is not represented by a single bulk archive; selected-assets ZIPs can be imported, retaining their source/licence notice.
+
+CRC verification detects archive corruption; it is not a cryptographic publisher signature. These open media packs are separate from the signed .dvext extension marketplace. The 5.21 GB total is the download archive estimate before extraction, and the app installer size is not increased by that amount.
