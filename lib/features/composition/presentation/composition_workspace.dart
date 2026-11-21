@@ -1911,7 +1911,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               onApply: canApplyToLayer ? () {
                 _controller.applyEffectPreset(preset.id);
                 setState(() => _notice = 'Applied ${preset.name} effect stack.');
-              } : () {},
+              } : null,
             ),
           if (effectPresets.isEmpty)
             const Text('No effect looks match this search.', style: TextStyle(fontSize: 10)),
@@ -1944,7 +1944,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               kind: preset.kind,
               titleOverride: preset.name,
               subtitleOverride: '${preset.category} · ${preset.durationMs} ms',
-              onApply: canApplyTransition ? () => _applyTransitionPreset(preset) : () {},
+              onApply: canApplyTransition ? () => _applyTransitionPreset(preset) : null,
             ),
           if (!canApplyTransition)
             const Text('Add or enable two video/image clips to use transition recipes.', style: TextStyle(fontSize: 9, color: Color(0xFFE2C58E))),
