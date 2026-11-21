@@ -13,10 +13,14 @@ class TransitionPreviewTile extends StatefulWidget {
     super.key,
     required this.kind,
     required this.onApply,
+    this.titleOverride,
+    this.subtitleOverride,
   });
 
   final TransitionKind kind;
   final VoidCallback onApply;
+  final String? titleOverride;
+  final String? subtitleOverride;
 
   @override
   State<TransitionPreviewTile> createState() => _TransitionPreviewTileState();
@@ -106,7 +110,7 @@ class _TransitionPreviewTileState extends State<TransitionPreviewTile>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      title,
+                      widget.titleOverride ?? title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -117,7 +121,7 @@ class _TransitionPreviewTileState extends State<TransitionPreviewTile>
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      'FFmpeg · $nativeName',
+                      widget.subtitleOverride ?? ('FFmpeg · ' + nativeName),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -142,7 +146,7 @@ class _TransitionPreviewTileState extends State<TransitionPreviewTile>
               ),
               IconButton(
                 visualDensity: VisualDensity.compact,
-                tooltip: 'Apply $title',
+                tooltip: 'Apply ' + (widget.titleOverride ?? title),
                 onPressed: widget.onApply,
                 icon: const Icon(
                   Icons.add_circle_outline,
