@@ -5,7 +5,7 @@ import unittest
 
 from platform_branding import (
     disable_linux_impeller,
-    disable_windows_impeller,
+    configure_windows_gpu_path,
     replace_linux_window_title,
     replace_windows_window_title,
 )
@@ -48,27 +48,34 @@ class PlatformBrandingTests(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertEqual(updated, source)
 
-    def test_windows_impeller_falls_back_to_skia(self) -> None:
+    def test_windows_uses_impeller_and_prefers_integrated_gpu(self) -> None:
         source = (
             '#include <flutter/dart_project.h>\n'
             'flutter::DartProject project(L"data");\n'
             'FlutterWindow window(project);'
         )
-        updated, count = disable_windows_impeller(source)
+        updated, count = configure_windows_gpu_path(source)
         self.assertEqual(count, 1)
         self.assertIn(
-            'project.set_impeller_switch(flutter::ImpellerSwitch::Disabled);',
+            'project.set_impeller_switch(flutter::ImpellerSwitch::Enabled);',
+            updated,
+        )
+        self.assertIn(
+            'project.set_gpu_preference(flutter::GpuPreference::LowPowerPreference);',
             updated,
         )
 
-    def test_windows_impeller_setting_is_idempotent(self) -> None:
+    def test_windows_renderer_configuration_is_idempotent(self) -> None:
         source = (
             'flutter::DartProject project(L"data");\n'
-            'project.set_impeller_switch(flutter::ImpellerSwitch::Disabled);'
+            'project.set_impeller_switch(flutter::ImpellerSwitch::Disabled);\n'
+            'project.set_gpu_preference(flutter::GpuPreference::HighPerformancePreference);'
         )
-        updated, count = disable_windows_impeller(source)
-        self.assertEqual(count, 0)
-        self.assertEqual(updated, source)
+        first, first_count = configure_windows_gpu_path(source)
+        second, second_count = configure_windows_gpu_path(first)
+        self.assertEqual(first_count, 1)
+        self.assertEqual(second_count, 0)
+        self.assertEqual(second, first)
 
     def test_linux_impeller_falls_back_to_skia(self) -> None:
         source = (
