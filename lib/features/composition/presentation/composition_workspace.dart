@@ -23,6 +23,8 @@ import '../../fonts/presentation/font_picker_dialog.dart';
 import '../data/effect_catalog.dart';
 import '../data/audio_preset_catalog.dart';
 import '../data/color_preset_catalog.dart';
+import '../data/creative_asset_pack_catalog.dart';
+import '../data/creative_asset_pack_service.dart';
 import '../data/effect_preset_catalog.dart';
 import '../../extensions/data/extension_manager_service.dart';
 import '../../extensions/data/adobe_bridge_service.dart';
@@ -78,6 +80,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   final Map<String, Future<img.Image?>> _scopeImageJobs = {};
   final Map<String, Future<ObjMesh>> _meshJobs = {};
   String _curveChannel = 'master';
+  final CreativeAssetPackService _creativeAssetPacks =
+      CreativeAssetPackService.instance;
+  List<InstalledCreativeAssetPack> _installedCreativePacks = [];
+  bool _creativePackBusy = false;
+  String? _creativePackSearch;
+  int _creativePackReceived = 0;
+  int _creativePackTotal = 0;
   final MotionBroPackService _motionBroService = MotionBroPackService.instance;
   List<MotionBroPresetPack> _motionBroPacks = [];
   bool _motionBroBusy = false;
@@ -236,6 +245,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     ExtensionManagerService.instance.addListener(_onExtensionsChanged);
     _motionBroService.addListener(_onMotionBroPacksChanged);
     unawaited(_loadMotionBroPacks());
+    _creativeAssetPacks.addListener(_onCreativeAssetPacksChanged);
+    unawaited(_loadCreativeAssetPacks());
     AdobeBridgeService.instance.attachController(_controller);
     _recoveryTimer = Timer.periodic(
       const Duration(seconds: 30),
@@ -252,6 +263,28 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   void _onMotionBroPacksChanged() {
     if (mounted) setState(() => _motionBroPacks = _motionBroService.packs);
+  }
+
+  void _onCreativeAssetPacksChanged() {
+    if (!mounted) return;
+    setState(() {
+      _installedCreativePacks = _creativeAssetPacks.installed;
+      _creativePackReceived = _creativeAssetPacks.receivedBytes;
+      _creativePackTotal = _creativeAssetPacks.totalBytes;
+    });
+  }
+
+  Future<void> _loadCreativeAssetPacks() async {
+    try {
+      await _creativeAssetPacks.initialize();
+      if (mounted) {
+        setState(() => _installedCreativePacks = _creativeAssetPacks.installed);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _notice = 'Offline asset library could not be opened: $error');
+      }
+    }
   }
 
   Future<void> _loadMotionBroPacks() async {
@@ -1066,6 +1099,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _controller.removeListener(_onCompositionChanged);
     ExtensionManagerService.instance.removeListener(_onExtensionsChanged);
     _motionBroService.removeListener(_onMotionBroPacksChanged);
+    _creativeAssetPacks.removeListener(_onCreativeAssetPacksChanged);
     AdobeBridgeService.instance.detachController(_controller);
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_autosaveIfNeeded());
