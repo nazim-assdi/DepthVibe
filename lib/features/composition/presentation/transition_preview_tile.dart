@@ -206,16 +206,16 @@ class _TransitionSamplePainter extends CustomPainter {
   }
 
   Path _revealPath(Size size, double p) {
-    final path = Path();
     final w = size.width;
     final h = size.height;
-    final full = Rect.fromLTWH(0, 0, w, h);
     final name = kind.name.toLowerCase();
+
+    Path rectangle(Rect rect) => Path()..addRect(rect);
 
     if (name.contains('circle')) {
       final closing = name.contains('close');
       final radius = math.sqrt(w * w + h * h) * (closing ? 1 - p : p);
-      return path
+      return Path()
         ..addOval(Rect.fromCircle(
           center: Offset(w / 2, h / 2),
           radius: radius,
@@ -224,77 +224,59 @@ class _TransitionSamplePainter extends CustomPainter {
 
     if (name.contains('rectangle') || name.contains('rectcrop')) {
       final inset = (1 - p) * math.min(w, h) * 0.5;
-      return path.addRect(Rect.fromLTRB(inset, inset, w - inset, h - inset))
-          ? path
-          : path;
+      return rectangle(Rect.fromLTRB(inset, inset, w - inset, h - inset));
     }
 
     if (name.contains('verticalopen') || name.contains('vertopen')) {
       final width = w * p;
-      return path.addRect(Rect.fromLTRB(
-        (w - width) / 2,
-        0,
-        (w + width) / 2,
-        h,
+      return rectangle(Rect.fromLTRB(
+        (w - width) / 2, 0, (w + width) / 2, h,
       ));
     }
     if (name.contains('verticalclose') || name.contains('vertclose')) {
       final width = w * (1 - p);
-      return path.addRect(Rect.fromLTRB(
-        (w - width) / 2,
-        0,
-        (w + width) / 2,
-        h,
+      return rectangle(Rect.fromLTRB(
+        (w - width) / 2, 0, (w + width) / 2, h,
       ));
     }
     if (name.contains('horizontalopen') || name.contains('horzopen')) {
       final height = h * p;
-      return path.addRect(Rect.fromLTRB(
-        0,
-        (h - height) / 2,
-        w,
-        (h + height) / 2,
+      return rectangle(Rect.fromLTRB(
+        0, (h - height) / 2, w, (h + height) / 2,
       ));
     }
     if (name.contains('horizontalclose') || name.contains('horzclose')) {
       final height = h * (1 - p);
-      return path.addRect(Rect.fromLTRB(
-        0,
-        (h - height) / 2,
-        w,
-        (h + height) / 2,
+      return rectangle(Rect.fromLTRB(
+        0, (h - height) / 2, w, (h + height) / 2,
       ));
     }
 
     if (name.contains('wipe') || name.contains('slide') ||
         name.contains('cover') || name.contains('reveal')) {
       if (name.contains('right')) {
-        return path.addRect(Rect.fromLTRB(w * (1 - p), 0, w, h))
-            ? path
-            : path;
+        return rectangle(Rect.fromLTRB(w * (1 - p), 0, w, h));
       }
       if (name.contains('up')) {
-        return path.addRect(Rect.fromLTRB(0, 0, w, h * p))
-            ? path
-            : path;
+        return rectangle(Rect.fromLTRB(0, 0, w, h * p));
       }
       if (name.contains('down')) {
-        return path.addRect(Rect.fromLTRB(0, h * (1 - p), w, h))
-            ? path
-            : path;
+        return rectangle(Rect.fromLTRB(0, h * (1 - p), w, h));
       }
-      return path.addRect(Rect.fromLTRB(0, 0, w * p, h)) ? path : path;
+      return rectangle(Rect.fromLTRB(0, 0, w * p, h));
     }
 
     if (name.contains('diagonal') || name.contains('diag')) {
       final cornerTop = name.contains('top');
       final cornerLeft = name.contains('left');
-      final tip = Offset(cornerLeft ? w * p : w * (1 - p),
-          cornerTop ? h * p : h * (1 - p));
+      final tip = Offset(
+        cornerLeft ? w * p : w * (1 - p),
+        cornerTop ? h * p : h * (1 - p),
+      );
       final corner = Offset(cornerLeft ? 0 : w, cornerTop ? 0 : h);
       final adjacentA = Offset(cornerLeft ? w : 0, cornerTop ? 0 : h);
       final adjacentB = Offset(cornerLeft ? 0 : w, cornerTop ? h : 0);
-      return path
+      return Path()
         ..moveTo(corner.dx, corner.dy)
         ..lineTo(adjacentA.dx, adjacentA.dy)
         ..lineTo(tip.dx, tip.dy)
@@ -303,21 +285,20 @@ class _TransitionSamplePainter extends CustomPainter {
     }
 
     if (name.contains('fade') || name == 'dissolve' || name == 'luma') {
-      return path.addRect(full) ? path : path;
+      return rectangle(Offset.zero & size);
     }
 
     if (name.contains('smooth') || name.contains('blur') ||
         name.contains('distance') || name.contains('radial')) {
       final radius = math.sqrt(w * w + h * h) * p;
-      return path.addOval(Rect.fromCircle(
-        center: Offset(w / 2, h / 2),
-        radius: radius,
-      ));
+      return Path()
+        ..addOval(Rect.fromCircle(
+          center: Offset(w / 2, h / 2),
+          radius: radius,
+        ));
     }
 
-    // A soft diagonal reveal is used for transition families without a
-    // dedicated thumbnail mask. The final FFmpeg transition remains native.
-    return path
+    return Path()
       ..moveTo(0, 0)
       ..lineTo(w * p, 0)
       ..lineTo(w, h * p)
