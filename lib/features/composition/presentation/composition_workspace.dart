@@ -1767,7 +1767,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       durationMs: preset.durationMs,
     );
     if (mounted) {
-      setState(() => _notice = 'Applied \${preset.name} transition.');
+      setState(() => _notice = 'Applied ${preset.name} transition.');
     }
   }
 
@@ -1828,7 +1828,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         return;
       }
       _controller.addEffect(effectId);
-      if (mounted) setState(() => _notice = 'Applied \${asset.name} overlay effect.');
+      if (mounted) setState(() => _notice = 'Applied ${asset.name} overlay effect.');
       return;
     }
     _createLibraryTextLayer(
@@ -1867,7 +1867,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       return;
     }
     _controller.setAudioSettings(preset.applyTo(layer.audioSettings));
-    if (mounted) setState(() => _notice = 'Applied \${preset.name} audio settings.');
+    if (mounted) setState(() => _notice = 'Applied ${preset.name} audio settings.');
   }
 
   void _applyColorPreset(ColorPresetDefinition preset, CompositionLayer? layer) {
@@ -1887,7 +1887,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ),
       ),
     );
-    if (mounted) setState(() => _notice = 'Applied \${preset.name} color grade.');
+    if (mounted) setState(() => _notice = 'Applied ${preset.name} color grade.');
   }
 
   Future<void> _importLibraryOverlayImage() async {
@@ -2067,7 +2067,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ),
             ),
             IconButton(
-              tooltip: 'Add \${asset.name} sticker',
+              tooltip: 'Add ${asset.name} sticker',
               onPressed: onApply,
               icon: const Icon(Icons.add_circle_outline, color: Color(0xFFBBAEFF)),
             ),
@@ -2191,13 +2191,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           spacing: 6,
           runSpacing: 6,
           children: [
-            _assetCountChip(Icons.layers_outlined, '\${OverlayStickerCatalog.all.length} overlay/sticker assets'),
-            _assetCountChip(Icons.animation, '\${MotionPresetCatalog.all.length} motion recipes'),
-            _assetCountChip(Icons.graphic_eq, '\${AudioPresetCatalog.all.length} audio presets'),
-            _assetCountChip(Icons.title, '\${TitlePresetCatalog.all.length} title styles'),
-            _assetCountChip(Icons.color_lens_outlined, '\${ColorPresetCatalog.all.length + EffectPresetCatalog.all.length} color looks'),
-            _assetCountChip(Icons.auto_awesome, '\${EffectCatalog.all.length} native effects'),
-            _assetCountChip(Icons.swap_horiz, '\${TransitionPresetCatalog.all.length} transition recipes'),
+            _assetCountChip(Icons.layers_outlined, '${OverlayStickerCatalog.all.length} overlay/sticker assets'),
+            _assetCountChip(Icons.animation, '${MotionPresetCatalog.all.length} motion recipes'),
+            _assetCountChip(Icons.graphic_eq, '${AudioPresetCatalog.all.length} audio presets'),
+            _assetCountChip(Icons.title, '${TitlePresetCatalog.all.length} title styles'),
+            _assetCountChip(Icons.color_lens_outlined, '${ColorPresetCatalog.all.length + EffectPresetCatalog.all.length} color looks'),
+            _assetCountChip(Icons.auto_awesome, '${EffectCatalog.all.length} native effects'),
+            _assetCountChip(Icons.swap_horiz, '${TransitionPresetCatalog.all.length} transition recipes'),
           ],
         ),
         const SizedBox(height: 8),
@@ -2215,7 +2215,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             EffectPreviewTile(
               effect: EffectCatalog.find(asset.effectId!)!,
               titleOverride: asset.name,
-              subtitleOverride: '\${asset.category} · native overlay effect',
+              subtitleOverride: '${asset.category} · native overlay effect',
               onApply: isVisualTarget ? () => _applyOverlaySticker(asset, layer) : null,
             ),
           for (final asset in overlays.where((item) => !item.isEffectOverlay))
@@ -2245,13 +2245,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               title: preset.name,
               category: preset.category,
               description: preset.description,
-              countLabel: '\${preset.tracks.length} tracks · \${preset.durationMs} ms',
+              countLabel: '${preset.tracks.length} tracks · ${preset.durationMs} ms',
               icon: Icons.motion_photos_on_outlined,
               colors: const [Color(0xFF3C927E), Color(0xFF174C57)],
               actionLabel: 'APPLY',
               onApply: canApplyLayer ? () {
                 _controller.applyMotionPreset(preset.id);
-                setState(() => _notice = 'Applied \${preset.name} keyframe animation.');
+                setState(() => _notice = 'Applied ${preset.name} keyframe animation.');
               } : null,
             ),
           if (motion.isEmpty)
@@ -2316,10 +2316,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             EffectPreviewTile(
               effect: EffectCatalog.find(preset.steps.first.effectId)!,
               titleOverride: preset.name,
-              subtitleOverride: '\${preset.category} · \${preset.steps.length}-effect stack',
+              subtitleOverride: '${preset.category} · ${preset.steps.length}-effect stack',
               onApply: canApplyLayer ? () {
                 _controller.applyEffectPreset(preset.id);
-                setState(() => _notice = 'Applied \${preset.name} effect stack.');
+                setState(() => _notice = 'Applied ${preset.name} effect stack.');
               } : null,
             ),
           if (looks.isEmpty)
@@ -2333,7 +2333,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               effect: effect,
               onApply: isVisualTarget ? () {
                 _controller.addEffect(effect.id);
-                setState(() => _notice = 'Added \${effect.name} effect.');
+                setState(() => _notice = 'Added ${effect.name} effect.');
               } : null,
             ),
           if (!isVisualTarget)
@@ -2348,7 +2348,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             TransitionPreviewTile(
               kind: preset.kind,
               titleOverride: preset.name,
-              subtitleOverride: '\${preset.category} · \${preset.durationMs} ms',
+              subtitleOverride: '${preset.category} · ${preset.durationMs} ms',
               onApply: canApplyTransition ? () => _applyTransitionPreset(preset) : null,
             ),
           if (!canApplyTransition)
