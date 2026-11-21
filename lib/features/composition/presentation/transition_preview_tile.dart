@@ -18,7 +18,7 @@ class TransitionPreviewTile extends StatefulWidget {
   });
 
   final TransitionKind kind;
-  final VoidCallback onApply;
+  final VoidCallback? onApply;
   final String? titleOverride;
   final String? subtitleOverride;
 
