@@ -13,10 +13,14 @@ class EffectPreviewTile extends StatefulWidget {
     super.key,
     required this.effect,
     required this.onApply,
+    this.titleOverride,
+    this.subtitleOverride,
   });
 
   final EffectDefinition effect;
   final VoidCallback onApply;
+  final String? titleOverride;
+  final String? subtitleOverride;
 
   @override
   State<EffectPreviewTile> createState() => _EffectPreviewTileState();
@@ -99,7 +103,7 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      effect.name,
+                      widget.titleOverride ?? effect.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -110,7 +114,7 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      effect.category + ' · ' + effect.ffmpegFilter,
+                      widget.subtitleOverride ?? (effect.category + ' · ' + effect.ffmpegFilter),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -135,7 +139,7 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
               ),
               IconButton(
                 visualDensity: VisualDensity.compact,
-                tooltip: 'Add ' + effect.name,
+                tooltip: 'Add ' + (widget.titleOverride ?? effect.name),
                 onPressed: widget.onApply,
                 icon: const Icon(
                   Icons.add_circle_outline,
