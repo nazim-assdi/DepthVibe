@@ -6,6 +6,32 @@ import 'package:path_provider/path_provider.dart';
 
 enum DepthVibeAppearance { dark, light, eyeComfort }
 
+enum DepthVibePerformanceMode {
+  compatibility(320, 0.55),
+  balanced(480, 0.75),
+  quality(640, 1.0);
+
+  const DepthVibePerformanceMode(
+    this.maximumPreviewDimension,
+    this.gpuRenderScale,
+  );
+
+  final int maximumPreviewDimension;
+  final double gpuRenderScale;
+
+  String get title => switch (this) {
+        compatibility => 'Compatibility',
+        balanced => 'Balanced',
+        quality => 'Quality',
+      };
+
+  String get description => switch (this) {
+        compatibility => '320 px 3D preview · lowest preview pixel load',
+        balanced => '480 px 3D preview · recommended for most PCs',
+        quality => '640 px 3D preview · sharper detail, higher GPU load',
+      };
+}
+
 class DepthVibePalette extends ThemeExtension<DepthVibePalette> {
   const DepthVibePalette({
     required this.appBackground,
@@ -76,10 +102,12 @@ class DepthVibeSettingsService extends ChangeNotifier {
   static final DepthVibeSettingsService instance = DepthVibeSettingsService._();
 
   DepthVibeAppearance _appearance = DepthVibeAppearance.dark;
+  DepthVibePerformanceMode _performanceMode = DepthVibePerformanceMode.balanced;
   Directory? _settingsDirectory;
   bool _initialized = false;
 
   DepthVibeAppearance get appearance => _appearance;
+  DepthVibePerformanceMode get performanceMode => _performanceMode;
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -101,6 +129,11 @@ class DepthVibeSettingsService extends ChangeNotifier {
             (item) => item.name == value,
             orElse: () => DepthVibeAppearance.dark,
           );
+          final performanceValue = decoded['performanceMode'];
+          _performanceMode = DepthVibePerformanceMode.values.firstWhere(
+            (item) => item.name == performanceValue,
+            orElse: () => DepthVibePerformanceMode.balanced,
+          );
         }
       } catch (_) {
         _appearance = DepthVibeAppearance.dark;
@@ -116,6 +149,13 @@ class DepthVibeSettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setPerformanceMode(DepthVibePerformanceMode value) async {
+    if (_performanceMode == value) return;
+    _performanceMode = value;
+    await _save();
+    notifyListeners();
+  }
+
   Future<void> _save() async {
     final directory = _settingsDirectory;
     if (directory == null) return;
@@ -125,8 +165,9 @@ class DepthVibeSettingsService extends ChangeNotifier {
     final temporary = File(file.path + '.tmp');
     await temporary.writeAsString(
       const JsonEncoder.withIndent('  ').convert({
-        'schemaVersion': 1,
+        'schemaVersion': 2,
         'appearance': _appearance.name,
+        'performanceMode': _performanceMode.name,
       }),
       flush: true,
     );
