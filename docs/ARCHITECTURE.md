@@ -41,6 +41,14 @@ The transition browser has a Flutter CustomPainter A/B preview tile. Mouse hover
 
 The unified Asset Library combines 39 original EffectPresetDefinition looks, 54 MotionPresetDefinition keyframe recipes, the 38 transition recipes and the 68 native effect registry entries. CompositionController.applyEffectPreset resolves every step against EffectCatalog, starts from registered defaults, validates parameter IDs and clamps values to the native parameter ranges before adding independent EffectInstance entries. Motion recipes are ordinary editable layer keyframes. The Library UI also links to the signed extension Marketplace, .dvmpreset transfer and locally imported Motion Bro packs; third-party paid pack files are not bundled or unlocked.
 
+## Creative asset library
+
+The Composition workspace's Library panel combines the native effect registry, 39 original multi-effect recipes, 54 motion keyframe recipes, 38 curated transition recipes, 72 overlay/sticker assets, 41 audio track presets, 39 title/lower-third styles and 48 primary color grades. The six user-facing categories are Overlays & Stickers, Motion, Audio Presets, Titles & Lower Thirds, Color Presets, and Video Effects & Filters; Transitions remain separately searchable.
+
+Effect looks resolve each step through EffectCatalog, validate parameter names against registered schemas and clamp values before adding normal EffectInstance models. Motion recipes create normal KeyframeTrack values. Titles and text stickers create editable LayerKind.text layers, then apply a native motion recipe. Raster overlays and audio can be imported as regular image/audio layers. Color presets reuse ColorGradePreset and the existing color-grade compiler. Audio presets are intentionally limited to the project model's track gain, 3-band EQ, pan and fade values; advanced audio DSP such as reverb and de-essing remains unimplemented.
+
+OpenAssetSourceCatalog links to public CC0/Creative Commons collections with per-source licence labels. It does not bundle those remote files: users open the original source and import media/LUTs into the project, retaining applicable credits. The signed .dvext publisher marketplace remains a separate verified package channel.
+
 ## Audio graph
 
 Video files are inspected with FFprobe for an audio stream. Explicit Audio layers and embedded video audio are fed into a multi-input audio graph. Each track supports gain in dB, pan, fade-in/out, mute, timeline placement and optional Trigger/Background ducking roles. The background track is attenuated by FFmpeg sidechaincompress when the trigger stream is active. A final limiter is applied to mixed multi-track output.
