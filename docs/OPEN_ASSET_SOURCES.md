@@ -1,6 +1,6 @@
 # Open Asset Sources
 
-External collections below are optional acquisition sources. They are not copied into the DepthVibe repository by this document. Import only the specific asset whose current item-level license permits the intended use, and keep its attribution/license metadata with the project.
+External collections below are optional acquisition sources. DepthVibe's offline pack manager now provides 24 downloadable DAEDAL CC0 packs and two complete CLR audio-library volumes (about 5.21 GB before extraction). The user can install them into DepthVibe's local app storage for offline use; they are not embedded in the APK/installer. AssetPolish has no whole-library ZIP, so download a selected-assets ZIP from its site and import it into DepthVibe, preserving the included source/licence notice. Import only items whose current licence permits the intended use.
 
 ## Overlays, textures and stickers
 
@@ -26,11 +26,11 @@ External collections below are optional acquisition sources. They are not copied
 
 ## Import workflow in DepthVibe
 
-1. Download the selected asset from its original source and keep its license/attribution file.
-2. Use **IMPORT IMAGE / SVG** for still images and SVG files (SVG imports are rasterized to PNG, so embedded SVG animation is not kept), **IMPORT VIDEO / GIF OVERLAY** for animated/video clips, **IMPORT AUDIO FILE** for sound/music, and **IMPORT 3D .CUBE LUT** for color transforms.
+1. For DAEDAL or CLR content, use the Library's LOCAL OFFLINE ASSET PACKS installer. For AssetPolish and other individual sources, download the selected asset/ZIP from its original source and keep its licence/attribution file.
+2. Use the installed-pack browser to Add media directly to the project, or use **IMPORT IMAGE / SVG** for still images and SVG files (SVG imports are rasterized to PNG, so embedded SVG animation is not kept), **IMPORT VIDEO / GIF OVERLAY** for animated/video clips, **IMPORT AUDIO FILE** for sound/music, and **IMPORT 3D .CUBE LUT** for color transforms.
 3. For `.dvmpreset` and native extension packs, use their dedicated import/marketplace flows.
 4. Use project Save/Export to package media for transfer; independently imported files remain subject to their original license terms.
 
 ## Licensing and safety boundary
 
-Free download does not automatically mean open license. This directory intentionally separates CC0, public domain, CC BY, CC BY-SA and item-specific licenses. DepthVibe does not bypass paid access, remove DRM, unlock commercial presets, or redistribute proprietary plugin binaries. Before a future one-click downloader is enabled, it must verify the file hash, source, license metadata and any required attribution.
+Free download does not automatically mean open license. This directory intentionally separates CC0, public domain, CC BY, CC BY-SA and item-specific licenses. DepthVibe does not bypass paid access, remove DRM, unlock commercial presets, or redistribute proprietary plugin binaries. The downloader uses HTTPS and ZIP CRC validation, rejects unsafe archive entries, and requires a bundled licence file. CRC is corruption detection, not a cryptographic publisher signature; source trust and item-level attribution remain part of the import process.
