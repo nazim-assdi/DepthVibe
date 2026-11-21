@@ -247,6 +247,31 @@ class FfmpegFilterCompiler {
 
   String? _compileEffect(String id, Map<String, double> p) {
     String number(double value) => value.toStringAsFixed(3);
+    if (id == 'wave_distortion') {
+      final amount = number(p['amount'] ?? 8);
+      final wavelength = number(p['wavelength'] ?? 72);
+      final speed = number(p['speed'] ?? 1);
+      final dx = '(sin(Y/max(1,$wavelength)+T*$speed)*$amount)';
+      return 'format=rgba,geq='
+          "r='r(X+$dx,Y)':g='g(X+$dx,Y)':"
+          "b='b(X+$dx,Y)':a='alpha(X,Y)'";
+    }
+    if (id == 'heat_haze') {
+      final amount = number(p['amount'] ?? 5);
+      final scale = number(p['scale'] ?? 90);
+      final speed = number(p['speed'] ?? 1.4);
+      final dx = '(sin(Y/max(1,$scale)+T*$speed)*$amount)';
+      final dy = '(cos(X/max(1,$scale)+T*$speed*0.73)*$amount*0.35)';
+      return 'format=rgba,geq='
+          "r='r(X+$dx,Y+$dy)':g='g(X+$dx,Y+$dy)':"
+          "b='b(X+$dx,Y+$dy)':a='alpha(X,Y)'";
+    }
+    if (id == 'film_gate_weave') {
+      final amplitude = number(p['amplitude'] ?? 0.45);
+      final speed = number(p['speed'] ?? 2);
+      return "rotate=angle='sin(t*$speed)*$amplitude*PI/180':"
+          'ow=iw:oh=ih:c=black';
+    }
     return switch (id) {
       'brightness' => 'eq=brightness=${number(p['value'] ?? 0)}',
       'contrast' => 'eq=contrast=${number(p['value'] ?? 1)}',
@@ -303,6 +328,32 @@ class FfmpegFilterCompiler {
       'noise_reduction' => 'hqdn3d=' + number(p['luma'] ?? 1.5) +
           ':' + number(p['chroma'] ?? 2) + ':' + number(p['temporal'] ?? 3) +
           ':' + number((p['temporal'] ?? 3) * 0.5),
+      'vibrance' => 'vibrance=intensity=\${number(p['intensity'] ?? 0.5)}',
+      'color_contrast' => 'colorcontrast=rc=\${number(p['red'] ?? 0)}:gm=\${number(p['green'] ?? 0)}:by=\${number(p['blue'] ?? 0)}',
+      'auto_white_balance' => 'grayworld',
+      'rgb_channel_mixer' => 'colorchannelmixer='
+          'rr=\${number(p['rr'] ?? 1)}:rg=\${number(p['rg'] ?? 0)}:rb=\${number(p['rb'] ?? 0)}:'
+          'gr=\${number(p['gr'] ?? 0)}:gg=\${number(p['gg'] ?? 1)}:gb=\${number(p['gb'] ?? 0)}:'
+          'br=\${number(p['br'] ?? 0)}:bg=\${number(p['bg'] ?? 0)}:bb=\${number(p['bb'] ?? 1)}',
+      'adaptive_sharpen' => 'cas=strength=\${number(p['strength'] ?? 0.5)}',
+      'median_denoise' => 'median=radius=\${(p['radius'] ?? 2).round()}:planes=7',
+      'temporal_denoise' => 'tmedian=radius=\${(p['radius'] ?? 3).round()}:planes=7',
+      'nlmeans_denoise' => 'nlmeans=s=\${number(p['strength'] ?? 1.2)}:p=7:r=15',
+      'frame_blend' => 'tblend=all_mode=average',
+      'camera_flash' => 'eq=brightness=\${number(p['brightness'] ?? 0.35)}',
+      'letterbox' => 'drawbox=x=0:y=0:w=iw:h=ih*\${number(p['ratio'] ?? 0.1)}:color=black@1:t=fill,'
+          'drawbox=x=0:y=ih-ih*\${number(p['ratio'] ?? 0.1)}:w=iw:h=ih*\${number(p['ratio'] ?? 0.1)}:color=black@1:t=fill',
+      'frame_border' => 'drawbox=x=0:y=0:w=iw:h=ih:color=white@\${number(p['opacity'] ?? 0.8)}:t=\${(p['thickness'] ?? 6).round()}',
+      'old_film' => 'noise=alls=\${number(p['grain'] ?? 22)}:allf=t+u,'
+          'vignette=angle=\${number(p['vignette'] ?? 0.7)},'
+          'colorbalance=rs=\${number(p['warmth'] ?? 0.35)}:gs=\${number((p['warmth'] ?? 0.35) * 0.18)}:bs=-\${number((p['warmth'] ?? 0.35) * 0.35)}',
+      'analog_glitch' => 'chromashift=cbh=\${number(p['shift'] ?? 5)}:crh=-\${number(p['shift'] ?? 5)},'
+          'noise=alls=\${number(p['noise'] ?? 24)}:allf=t,fps=fps=\${number(p['fps'] ?? 18)}',
+      'bleach_bypass' => 'hue=s=\${number(p['saturation'] ?? 0.45)},eq=contrast=\${number(p['contrast'] ?? 1.35)}',
+      'sepia' => 'colorchannelmixer=rr=0.393:rg=0.769:rb=0.189:'
+          'gr=0.349:gg=0.686:gb=0.168:br=0.272:bg=0.534:bb=0.131',
+      'edge_glow' => 'edgedetect=mode=colormix,gblur=sigma=\${number(p['radius'] ?? 8)},'
+          'eq=brightness=\${number(p['brightness'] ?? 0.4)}',
       _ => null,
     };
   }
