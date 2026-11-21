@@ -37,6 +37,8 @@ Status describes working source paths, not release-ready feature parity. A model
 - [ ] Shape/text rasterization and Photoshop adjustment layer rendering.
 - [ ] Bezier mask curve editor, animated masks, tracking masks and rotoscoping.
 - [ ] Render queue, proxy media, cache manager, waveform cache and deterministic realtime preview.
+- [x] Active composition export cancellation, staged progress and incomplete-output cleanup; persistent multi-job scheduling, durable logs and retry remain open.
+- [x] Low-spec live 3D preview presets for Compatibility, Balanced and Quality; final render quality is not reduced by the preview setting.
 
 ## Stage 3 — Colour and VFX
 - [x] Basic exposure/contrast/saturation/blur/sharpen/keying effect mappings.
