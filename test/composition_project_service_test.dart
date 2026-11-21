@@ -177,7 +177,8 @@ void main() {
 
     final archive = ZipDecoder().decodeBytes(await archiveFile.readAsBytes());
     final notices = archive.files
-        .where((entry) => entry.name.startsWith('assets/_licenses/'))
+        .where((entry) =>
+            entry.isFile && entry.name.startsWith('assets/_licenses/'))
         .toList();
     expect(notices, hasLength(1));
     expect(

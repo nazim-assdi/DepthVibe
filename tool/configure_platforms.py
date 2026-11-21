@@ -74,6 +74,19 @@ def add_android_gallery_permission(path: Path) -> None:
         })
     tree.write(path, encoding="utf-8", xml_declaration=True)
 
+def set_android_display_name(path: Path) -> None:
+    if not path.exists():
+        return
+    android_ns = "http://schemas.android.com/apk/res/android"
+    ET.register_namespace("android", android_ns)
+    tree = ET.parse(path)
+    root = tree.getroot()
+    application = root.find("application")
+    if application is not None:
+        application.set(f"{{{android_ns}}}label", "DepthVibe")
+        tree.write(path, encoding="utf-8", xml_declaration=True)
+
+
 def replace_deployment_target(path: Path, platform: str, version: str) -> None:
     if not path.exists():
         return
@@ -170,13 +183,18 @@ add_camera_compile_dependency(ROOT / "android/build.gradle.kts")
 add_camera_compile_dependency(ROOT / "android/build.gradle")
 replace_min_sdk(ROOT / "android/app/build.gradle")
 add_android_gallery_permission(ROOT / "android/app/src/main/AndroidManifest.xml")
+set_android_display_name(ROOT / "android/app/src/main/AndroidManifest.xml")
 update_plist(ROOT / "ios/Runner/Info.plist", {
+    "CFBundleDisplayName": "DepthVibe",
+    "CFBundleName": "DepthVibe",
     "NSCameraUsageDescription": "DepthVibe uses your camera to record video for editing.",
     "NSMicrophoneUsageDescription": "DepthVibe uses your microphone to record audio with video.",
     "NSPhotoLibraryUsageDescription": "DepthVibe needs access to import videos from your library.",
     "NSPhotoLibraryAddUsageDescription": "DepthVibe saves exported videos to your Photos library.",
 })
 update_plist(ROOT / "macos/Runner/Info.plist", {
+    "CFBundleDisplayName": "DepthVibe",
+    "CFBundleName": "DepthVibe",
     "NSCameraUsageDescription": "DepthVibe uses your camera to record video for editing.",
     "NSMicrophoneUsageDescription": "DepthVibe uses your microphone to record audio with video.",
 })
@@ -228,19 +246,61 @@ def configure_linux_branding() -> None:
     app_source = linux / "runner" / "my_application.cc"
     if app_source.exists():
         text = app_source.read_text(encoding="utf-8")
+        title_pattern = re.compile(
+            r'(gtk_window_set_title\\(window,\\s*")[^"]*("\\s*\\);)'
+        )
+        text, _ = title_pattern.subn(
+            lambda match: match.group(1) + "DepthVibe" + match.group(2),
+            text,
+            count=1,
+        )
         icon_call = 'gtk_window_set_icon_name(window, "depthvibe");'
         if icon_call not in text:
             title_call = re.search(
-                r'(?m)^(?P<indent>\s*)gtk_window_set_title\([^;]*;',
+                r'(?m)^(?P<indent>\\s*)gtk_window_set_title\\([^;]*;',
                 text,
             )
             if title_call is not None:
                 replacement = (
                     title_call.group(0) +
-                    "\n" + title_call.group("indent") + icon_call
+                    "\\n" + title_call.group("indent") + icon_call
                 )
                 text = text[:title_call.start()] + replacement + text[title_call.end():]
-                app_source.write_text(text, encoding="utf-8")
+        app_source.write_text(text, encoding="utf-8")
+
+
+
+def configure_windows_branding() -> None:
+    runner = ROOT / "windows" / "runner"
+    main_cpp = runner / "main.cpp"
+    if main_cpp.exists():
+        text = main_cpp.read_text(encoding="utf-8")
+        pattern = re.compile(r'(window\\.Create\\s*\\(\\s*)L"[^"]*"')
+        updated, count = pattern.subn(
+            lambda match: match.group(1) + 'L"DepthVibe"',
+            text,
+            count=1,
+        )
+        if count:
+            main_cpp.write_text(updated, encoding="utf-8")
+        elif "window.Create" in text and 'L"DepthVibe"' not in text:
+            raise RuntimeError(
+                "Could not set the generated Windows window title in main.cpp."
+            )
+
+    resource = runner / "Runner.rc"
+    if resource.exists():
+        text = resource.read_text(encoding="utf-8")
+        for field in ("FileDescription", "ProductName"):
+            pattern = re.compile(
+                r'(VALUE "' + field + r'",\\s*")[^"]*(")',
+                flags=re.IGNORECASE,
+            )
+            text = pattern.sub(
+                lambda match: match.group(1) + "DepthVibe" + match.group(2),
+                text,
+            )
+        resource.write_text(text, encoding="utf-8")
 
 
 def ensure_windows_icon_resource() -> None:
@@ -258,4 +318,5 @@ def ensure_windows_icon_resource() -> None:
 
 replace_deployment_target(ROOT / "macos/Runner.xcodeproj/project.pbxproj", "macos", "13.0")
 configure_linux_branding()
+configure_windows_branding()
 ensure_windows_icon_resource()

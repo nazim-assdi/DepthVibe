@@ -1,27 +1,192 @@
+import 'dart:async';
+
+import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:media_kit/media_kit.dart';
 
 import '../features/editor/presentation/editor_screen.dart';
+import '../features/extensions/data/adobe_bridge_service.dart';
+import '../features/extensions/data/extension_manager_service.dart';
+import '../features/extensions/data/extension_marketplace_service.dart';
 import '../features/fonts/data/font_manager_service.dart';
+import 'depthvibe_brand_mark.dart';
 import 'depthvibe_settings.dart';
 
-class DepthVibeApp extends StatelessWidget {
+class DepthVibeApp extends StatefulWidget {
   const DepthVibeApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([
-        FontManagerService.instance,
-        DepthVibeSettingsService.instance,
-      ]),
-      builder: (context, _) => _buildApplication(),
+  State<DepthVibeApp> createState() => _DepthVibeAppState();
+}
+
+class _DepthVibeAppState extends State<DepthVibeApp> {
+  bool _initializing = false;
+  bool _ready = false;
+  String _startupStage = 'Preparing your creative workspace…';
+  String? _startupError;
+  List<String> _startupWarnings = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_initializeServices());
+  }
+
+  Future<void> _initializeServices() async {
+    if (_initializing || _ready) return;
+    setState(() {
+      _initializing = true;
+      _startupError = null;
+      _startupStage = 'Starting native media engine…';
+      _startupWarnings = const [];
+    });
+
+    try {
+      MediaKit.ensureInitialized();
+      if (mounted) {
+        setState(() => _startupStage = 'Preparing video and rendering engine…');
+      }
+      await FFmpegKitExtended.initialize();
+    } catch (error, stackTrace) {
+      debugPrint('DepthVibe core startup failed: $error\n$stackTrace');
+      if (!mounted) return;
+      setState(() {
+        _initializing = false;
+        _startupError = error.toString();
+        _startupStage = 'The required media engine could not be started.';
+      });
+      return;
+    }
+
+    final warnings = <String>[];
+    Future<void> optionalStep(
+      String label,
+      Future<void> Function() initialize,
+    ) async {
+      if (mounted) {
+        setState(() => _startupStage = 'Loading $label…');
+      }
+      try {
+        await initialize();
+      } catch (error, stackTrace) {
+        warnings.add(label);
+        debugPrint('DepthVibe optional startup service "$label" failed: $error\n$stackTrace');
+      }
+    }
+
+    await optionalStep('font manager', FontManagerService.instance.initialize);
+    await optionalStep('appearance settings', DepthVibeSettingsService.instance.initialize);
+    await optionalStep('extension manager', ExtensionManagerService.instance.initialize);
+    await optionalStep('Adobe connection service', AdobeBridgeService.instance.start);
+    await optionalStep(
+      'extension marketplace updates',
+      ExtensionMarketplaceService.instance.startAutoUpdater,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _initializing = false;
+      _ready = true;
+      _startupWarnings = List.unmodifiable(warnings);
+      _startupStage = 'DepthVibe is ready.';
+    });
+    unawaited(_refreshFontsSafely());
+  }
+
+  Future<void> _refreshFontsSafely() async {
+    try {
+      await FontManagerService.instance.refreshAvailableFonts();
+    } catch (error, stackTrace) {
+      debugPrint('DepthVibe font refresh failed: $error\n$stackTrace');
+    }
+  }
+
+  Widget _buildStartupScreen(BuildContext context) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final hasError = _startupError != null;
+    return Scaffold(
+      backgroundColor: palette.appBackground,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const DepthVibeBrandMark(size: 76),
+                const SizedBox(height: 28),
+                Text(
+                  hasError ? 'DEPTHVIBE COULD NOT START' : 'PREPARING YOUR STUDIO',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: palette.primaryText,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _startupStage,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: palette.secondaryText, fontSize: 13),
+                ),
+                const SizedBox(height: 24),
+                if (hasError) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: palette.panel,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: palette.border),
+                    ),
+                    child: SelectableText(
+                      _startupError!,
+                      style: TextStyle(color: palette.primaryText, fontSize: 11),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: _initializing
+                        ? null
+                        : () => unawaited(_initializeServices()),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('RETRY STARTUP'),
+                  ),
+                ] else ...[
+                  SizedBox(
+                    width: 280,
+                    child: LinearProgressIndicator(
+                      minHeight: 4,
+                      borderRadius: BorderRadius.circular(8),
+                      backgroundColor: palette.border,
+                      color: palette.accent,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Initialising local media and studio services',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: palette.secondaryText,
+                      fontSize: 10,
+                      letterSpacing: 0.35,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
   Widget _buildApplication() {
     final settings = DepthVibeSettingsService.instance;
     final fontManager = FontManagerService.instance;
-
     return MaterialApp(
       title: 'DepthVibe',
       debugShowCheckedModeBanner: false,
@@ -31,7 +196,25 @@ class DepthVibeApp extends StatelessWidget {
         fontFamily: fontManager.activeFamily,
         fontFallback: fontManager.fallbackFamilies,
       ),
-      home: const EditorScreen(),
+      home: _ready
+          ? EditorScreen(
+              startupWarning: _startupWarnings.isEmpty
+                  ? null
+                  : 'Some optional services did not start: ' +
+                      _startupWarnings.join(', '),
+            )
+          : Builder(builder: _buildStartupScreen),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        FontManagerService.instance,
+        DepthVibeSettingsService.instance,
+      ]),
+      builder: (context, _) => _buildApplication(),
     );
   }
 }

@@ -20,7 +20,12 @@ import '../data/video_export_service.dart';
 import '../domain/editor_project.dart';
 
 class EditorScreen extends StatefulWidget {
-  const EditorScreen({super.key});
+  const EditorScreen({
+    super.key,
+    this.startupWarning,
+  });
+
+  final String? startupWarning;
 
   @override
   State<EditorScreen> createState() => _EditorScreenState();
@@ -43,6 +48,7 @@ class _EditorScreenState extends State<EditorScreen> {
   @override
   void initState() {
     super.initState();
+    _status = widget.startupWarning;
     _durationSubscription = _player.stream.duration.listen((duration) {
       _editor.setSourceDuration(duration);
     });
