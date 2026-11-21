@@ -250,7 +250,7 @@ def configure_linux_branding() -> None:
             r'(gtk_window_set_title\(window,\s*")[^"]*("\s*\);)'
         )
         text, _ = title_pattern.subn(
-            lambda match: match.group(1) + "DepthVibe" + match.group(2),
+            lambda match: match.group(1) + match.group(2) + "DepthVibe" + match.group(4),
             text,
             count=1,
         )
@@ -275,7 +275,7 @@ def configure_windows_branding() -> None:
     main_cpp = runner / "main.cpp"
     if main_cpp.exists():
         text = main_cpp.read_text(encoding="utf-8")
-        pattern = re.compile(r'(window\.CreateAndShow\s*\(\s*L")[^"]*(")')
+        pattern = re.compile(r'(window\.Create(?:AndShow)?\s*\(\s*)(L?")([^"]*)(")')
         updated, count = pattern.subn(
             lambda match: match.group(1) + "DepthVibe" + match.group(2),
             text,
