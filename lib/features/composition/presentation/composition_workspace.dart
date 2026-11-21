@@ -2110,9 +2110,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     bool matches(Iterable<String> fields) =>
         query.isEmpty || fields.join(' ').toLowerCase().contains(query);
     final canApplyLayer = layer != null && !layer.locked;
-    final isAudioTarget = canApplyLayer &&
+    final isAudioTarget = layer != null && !layer.locked &&
         (layer.kind == LayerKind.audio || layer.kind == LayerKind.video);
-    final isVisualTarget = canApplyLayer &&
+    final isVisualTarget = layer != null && !layer.locked &&
         {LayerKind.video, LayerKind.image, LayerKind.photoshopLayer,
           LayerKind.text, LayerKind.adjustment}.contains(layer.kind);
     final visualCount = _controller.document.layers.where((item) =>
