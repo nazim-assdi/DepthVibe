@@ -2171,7 +2171,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final looks = EffectPresetCatalog.all.where((item) =>
       matches([item.name, item.category, item.description])
     ).toList();
-    final effects = EffectCatalog.all.where((item) =>
+    final effects = EffectCatalog.allEffects.where((item) =>
       matches([item.name, item.category, item.description, item.ffmpegFilter])
     ).toList();
     final transitions = TransitionPresetCatalog.all.where((item) =>
@@ -2228,7 +2228,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             _assetCountChip(Icons.graphic_eq, '${AudioPresetCatalog.all.length} audio presets'),
             _assetCountChip(Icons.title, '${TitlePresetCatalog.all.length} title styles'),
             _assetCountChip(Icons.color_lens_outlined, '${ColorPresetCatalog.all.length + EffectPresetCatalog.all.length} color looks'),
-            _assetCountChip(Icons.auto_awesome, '${EffectCatalog.all.length} native effects'),
+            _assetCountChip(Icons.auto_awesome, '${EffectCatalog.all.length} built-in effects'),
             _assetCountChip(Icons.swap_horiz, '${TransitionPresetCatalog.all.length} transition recipes'),
             _assetCountChip(Icons.library_books_outlined, '399 built-in catalog entries'),
           ],
