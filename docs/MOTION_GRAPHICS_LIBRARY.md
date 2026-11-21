@@ -20,6 +20,8 @@ Applying a preset adds normal DepthVibe keyframe tracks at the current playhead.
 
 The 68-effect built-in library includes the original Color, Blur & Sharpen, Stylize, Compositing, Keying, VFX, Lens, Transform, Tracking, Motion and Noise Reduction groups. New native entries include Vibrance, Color Contrast, Auto White Balance, RGB Channel Mixer, Adaptive Sharpen, Median/Temporal/Non-Local Means Denoise, Frame Blend, Wave Distortion, Heat Haze, Film Gate Weave, Camera Flash, Cinematic Letterbox, Frame Border, 8mm Old Film, Analog Glitch, Bleach Bypass, Sepia Tone and Edge Glow.
 
+The Effect Library uses generated animated thumbnails for the built-in entries. Hover starts the sample and the Add control applies the effect to the selected layer. Thumbnail rendering is a lightweight visual guide, not a frame-accurate preview of source footage or the final FFmpeg pipeline.
+
 Each built-in entry has a typed parameter definition and a native FFmpeg filter mapping. Effects requiring a filter that is absent from the packaged FFmpeg build may still fail at runtime; actual device/build validation remains required.
 
 ## Transition library
