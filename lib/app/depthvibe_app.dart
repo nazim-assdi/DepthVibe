@@ -34,6 +34,13 @@ class _DepthVibeAppState extends State<DepthVibeApp> {
 
   Future<void> _initializeServices() async {
     if (_initializing || _ready) return;
+
+    // Let Flutter submit the first startup frame before loading native media
+    // libraries. This keeps slow/legacy Windows media initialisation from
+    // making a newly-created window appear as an empty grey surface.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || _initializing || _ready) return;
+
     setState(() {
       _initializing = true;
       _startupError = null;
