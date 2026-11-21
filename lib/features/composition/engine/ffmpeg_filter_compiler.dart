@@ -230,7 +230,9 @@ class FfmpegFilterCompiler {
           "a='alpha(X,Y)'";
     }
 
-    const supported = {'brightness', 'contrast', 'saturation', 'gamma'};
+    const supported = {
+      'brightness', 'contrast', 'saturation', 'gamma', 'camera_flash',
+    };
     if (!supported.contains(id)) return null;
     final parameter = definition.parameters.first;
     final tracks = effect.keyframeTracks.where(
@@ -241,7 +243,11 @@ class FfmpegFilterCompiler {
       tracks.first,
       fallback: effect.parameters[parameter.id] ?? parameter.defaultValue,
     );
-    final option = id == 'saturation' ? 'saturation' : id;
+    final option = switch (id) {
+      'camera_flash' => 'brightness',
+      'saturation' => 'saturation',
+      _ => id,
+    };
     return "eq=" + option + "='" + expression + "':eval=frame";
   }
 
