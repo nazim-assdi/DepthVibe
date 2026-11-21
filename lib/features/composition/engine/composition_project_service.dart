@@ -12,10 +12,16 @@ class CompositionProjectExportResult {
     required this.file,
     required this.embeddedAssetCount,
     required this.missingAssetPaths,
+    this.embeddedLicenseFileCount = 0,
+    this.assetCreditCount = 0,
+    this.missingLicensePacks = const <String>[],
   });
   final File file;
   final int embeddedAssetCount;
   final List<String> missingAssetPaths;
+  final int embeddedLicenseFileCount;
+  final int assetCreditCount;
+  final List<String> missingLicensePacks;
 }
 
 class CompositionProjectImportResult {
@@ -23,10 +29,26 @@ class CompositionProjectImportResult {
     required this.document,
     required this.projectDirectory,
     required this.extractedAssetCount,
+    this.assetCredits = const <Map<String, Object?>>[],
+    this.licenseFileCount = 0,
   });
   final CompositionDocument document;
   final Directory projectDirectory;
   final int extractedAssetCount;
+  final List<Map<String, Object?>> assetCredits;
+  final int licenseFileCount;
+}
+
+class _ProjectAssetPackContext {
+  const _ProjectAssetPackContext({
+    required this.root,
+    required this.files,
+    required this.metadata,
+  });
+
+  final Directory root;
+  final Directory files;
+  final Map<String, Object?> metadata;
 }
 
 /// Portable .dvproj ZIP package. Media is streamed as ZIP entries rather than
@@ -65,9 +87,113 @@ class CompositionProjectService {
     final missing = <String>[];
     final embeddedByPath = <String, String>{};
     final canonicalPaths = <String, String>{};
+    final assetCredits = <String, Map<String, Object?>>{};
+    final copiedLicenseBySource = <String, String>{};
+    final missingLicensePacks = <String>{};
     var assetIndex = 0;
+    var licenseIndex = 0;
+    var totalLicenseBytes = 0;
     try {
       await Directory(_join(staging.path, 'assets')).create(recursive: true);
+
+      Future<void> includePackCredit(File source, String assetEntry) async {
+        final context = await _findAssetPackContext(source);
+        if (context == null) return;
+        final metadata = context.metadata;
+        final rawId = metadata['id'] is String ? metadata['id'] as String : '';
+        final rawName = metadata['name'] is String ? metadata['name'] as String : '';
+        final packId = _safeName(rawId.isEmpty ? rawName : rawId);
+        final packName = rawName.isEmpty ? packId : rawName;
+        final sourceUrl = metadata['sourceUrl'] is String
+            ? metadata['sourceUrl'] as String
+            : '';
+        final licenseLabel = metadata['licenseLabel'] is String
+            ? metadata['licenseLabel'] as String
+            : 'Unspecified';
+
+        final record = assetCredits.putIfAbsent(packId, () => <String, Object?>{
+          'packId': packId,
+          'name': packName,
+          'sourceUrl': sourceUrl,
+          'licenseLabel': licenseLabel,
+          'assetEntries': <String>[],
+          'licenseFiles': <String>[],
+        });
+        final assetEntries = record['assetEntries'] as List<String>;
+        if (!assetEntries.contains(assetEntry)) assetEntries.add(assetEntry);
+
+        final notices = <File>[];
+        await for (final entity in context.files.list(
+          recursive: true,
+          followLinks: false,
+        )) {
+          if (entity is! File) continue;
+          final basename = entity.uri.pathSegments.isEmpty
+              ? ''
+              : entity.uri.pathSegments.last.toLowerCase();
+          final isNotice = basename == 'license' ||
+              basename.startsWith('license.') ||
+              basename == 'licence' ||
+              basename.startsWith('licence.') ||
+              basename.startsWith('licenses') ||
+              basename.startsWith('licences') ||
+              basename == 'copying' ||
+              basename.startsWith('copying.') ||
+              basename == 'notice' ||
+              basename.startsWith('notice.') ||
+              basename == 'credits' ||
+              basename.startsWith('credits.');
+          if (!isNotice) continue;
+          final stat = await entity.stat();
+          if (stat.type != FileSystemEntityType.file) continue;
+          if (stat.size > 8 * 1024 * 1024) {
+            throw FormatException(
+              'Licence notice is larger than 8 MiB: ' + entity.path,
+            );
+          }
+          notices.add(entity);
+          if (notices.length > 64) {
+            throw const FormatException(
+              'An asset pack contains too many separate licence notices.',
+            );
+          }
+        }
+        if (notices.isEmpty) {
+          missingLicensePacks.add(packName);
+          return;
+        }
+
+        final licenseEntries = record['licenseFiles'] as List<String>;
+        for (final notice in notices) {
+          final canonicalNotice = await notice.resolveSymbolicLinks();
+          var destinationEntry = copiedLicenseBySource[canonicalNotice];
+          if (destinationEntry == null) {
+            final length = await notice.length();
+            totalLicenseBytes += length;
+            if (totalLicenseBytes > 64 * 1024 * 1024) {
+              throw const FormatException(
+                'The project licence notices exceed the 64 MiB safety limit.',
+              );
+            }
+            final safeBasename = _safeName(
+              notice.uri.pathSegments.isEmpty
+                  ? 'LICENSE.txt'
+                  : notice.uri.pathSegments.last,
+            );
+            destinationEntry = 'assets/_licenses/' + packId + '_' +
+                licenseIndex.toString().padLeft(3, '0') + '_' +
+                safeBasename;
+            licenseIndex++;
+            final destination = File(_join(staging.path, destinationEntry));
+            await destination.parent.create(recursive: true);
+            await notice.copy(destination.path);
+            copiedLicenseBySource[canonicalNotice] = destinationEntry;
+          }
+          if (!licenseEntries.contains(destinationEntry)) {
+            licenseEntries.add(destinationEntry);
+          }
+        }
+      }
 
       Future<String?> embed(String? uri) async {
         if (uri == null || uri.isEmpty) return uri;
@@ -90,6 +216,7 @@ class CompositionProjectService {
         final duplicate = canonicalPaths[canonical];
         if (duplicate != null) {
           embeddedByPath[uri] = duplicate;
+          await includePackCredit(source, duplicate);
           return duplicate;
         }
 
@@ -102,6 +229,7 @@ class CompositionProjectService {
         await source.copy(destination.path);
         embeddedByPath[uri] = relative;
         canonicalPaths[canonical] = relative;
+        await includePackCredit(source, relative);
         return relative;
       }
 
@@ -126,6 +254,8 @@ class CompositionProjectService {
         ),
         'embeddedAssetCount': canonicalPaths.length,
         'missingAssetCount': missing.length,
+        'assetCredits': assetCredits.values.toList(),
+        'licenseFileCount': copiedLicenseBySource.length,
       };
       await File(_join(staging.path, projectFileName)).writeAsString(
         const JsonEncoder.withIndent('  ').convert(manifest),
@@ -184,6 +314,9 @@ class CompositionProjectService {
         file: outputFile,
         embeddedAssetCount: canonicalPaths.length,
         missingAssetPaths: List.unmodifiable(missing),
+        embeddedLicenseFileCount: copiedLicenseBySource.length,
+        assetCreditCount: assetCredits.length,
+        missingLicensePacks: List.unmodifiable(missingLicensePacks),
       );
     } finally {
       if (await staging.exists()) await staging.delete(recursive: true);
@@ -341,6 +474,10 @@ class CompositionProjectService {
         }
       }
 
+      final assetCreditRecords = _decodeAssetCredits(
+        manifest['assetCredits'],
+        staging,
+      );
       final rawDocument = _map(manifest['document'], 'document');
       final projectName = _safeName(
         rawDocument['name'] is String
@@ -377,7 +514,14 @@ class CompositionProjectService {
       return CompositionProjectImportResult(
         document: document,
         projectDirectory: finalDirectory,
-        extractedAssetCount: assetEntries.length,
+        extractedAssetCount: assetEntries
+            .where((entry) => !_isProjectLicenseEntry(entry.name))
+            .length,
+        assetCredits: List.unmodifiable(assetCreditRecords),
+        licenseFileCount: assetCreditRecords
+            .expand((record) => record['licenseFiles'] as List<String>)
+            .toSet()
+            .length,
       );
     } finally {
       input?.closeSync();
@@ -386,6 +530,127 @@ class CompositionProjectService {
       }
     }
   }
+
+  Future<_ProjectAssetPackContext?> _findAssetPackContext(
+    File source,
+  ) async {
+    final canonicalSource = await source.resolveSymbolicLinks();
+    var current = source.parent;
+    for (var depth = 0; depth < 12; depth++) {
+      final metadataFile = File(_join(current.path, 'pack.json'));
+      if (await metadataFile.exists()) {
+        try {
+          final decoded = jsonDecode(await metadataFile.readAsString());
+          final metadata = _map(decoded, 'asset pack metadata');
+          final files = Directory(_join(current.path, 'files'));
+          if (await files.exists()) {
+            final canonicalFiles = await files.resolveSymbolicLinks();
+            if (_isInside(canonicalFiles, canonicalSource)) {
+              return _ProjectAssetPackContext(
+                root: current,
+                files: files,
+                metadata: metadata,
+              );
+            }
+          }
+        } catch (_) {
+          // A malformed pack metadata file is not treated as trusted provenance.
+        }
+      }
+      final parent = current.parent;
+      if (parent.path == current.path) break;
+      current = parent;
+    }
+    return null;
+  }
+
+  List<Map<String, Object?>> _decodeAssetCredits(
+    Object? raw,
+    Directory staging,
+  ) {
+    if (raw == null) return const <Map<String, Object?>>[];
+    if (raw is! List || raw.length > 1000) {
+      throw const FormatException('The project asset-credit list is invalid.');
+    }
+    final result = <Map<String, Object?>>[];
+    final seen = <String>{};
+    for (final item in raw) {
+      final record = _map(item, 'asset credit');
+      final packId = record['packId'];
+      final name = record['name'];
+      final sourceUrl = record['sourceUrl'];
+      final licenseLabel = record['licenseLabel'];
+      if (packId is! String || packId.isEmpty || packId.length > 100 ||
+          name is! String || name.isEmpty || name.length > 256 ||
+          sourceUrl is! String || sourceUrl.length > 2048 ||
+          licenseLabel is! String || licenseLabel.isEmpty ||
+          licenseLabel.length > 256 || !seen.add(packId)) {
+        throw const FormatException('A project asset-credit record is invalid.');
+      }
+      final assetEntries = _validatedCreditPaths(
+        record['assetEntries'],
+        staging,
+        requiredPrefix: 'assets/',
+        disallowPrefix: 'assets/_licenses/',
+        maxCount: 10000,
+      );
+      final licenseFiles = _validatedCreditPaths(
+        record['licenseFiles'],
+        staging,
+        requiredPrefix: 'assets/_licenses/',
+        maxCount: 256,
+      );
+      if (assetEntries.isEmpty) {
+        throw const FormatException('An asset-credit record has no linked media.'); 
+      }
+      result.add(<String, Object?>{
+        'packId': packId,
+        'name': name,
+        'sourceUrl': sourceUrl,
+        'licenseLabel': licenseLabel,
+        'assetEntries': assetEntries,
+        'licenseFiles': licenseFiles,
+      });
+    }
+    return result;
+  }
+
+  List<String> _validatedCreditPaths(
+    Object? raw,
+    Directory staging, {
+    required String requiredPrefix,
+    String? disallowPrefix,
+    required int maxCount,
+  }) {
+    if (raw is! List || raw.length > maxCount) {
+      throw const FormatException('The project asset-credit paths are invalid.');
+    }
+    final paths = <String>[];
+    final seen = <String>{};
+    for (final value in raw) {
+      if (value is! String || !value.startsWith(requiredPrefix) ||
+          (disallowPrefix != null && value.startsWith(disallowPrefix)) ||
+          value.length > 512 || !seen.add(value)) {
+        throw const FormatException('A project asset-credit path is unsafe.');
+      }
+      final relative = value.substring('assets/'.length);
+      final segments = relative.split('/');
+      if (segments.any((part) =>
+          part.isEmpty || part == '.' || part == '..' ||
+          part.contains(String.fromCharCode(92)))) {
+        throw const FormatException('A project asset-credit path is unsafe.');
+      }
+      final extracted = File(_join(staging.path, value));
+      if (!_isInside(staging.path, extracted.path) || !extracted.existsSync()) {
+        throw FormatException('A referenced project asset-credit file is missing: ' + value);
+      }
+      paths.add(value);
+    }
+    return paths;
+  }
+
+  static bool _isProjectLicenseEntry(String name) =>
+      name.startsWith('assets/_licenses/');
 
   static String _validateArchiveEntry(ArchiveFile entry) {
     var name = entry.name.replaceAll(String.fromCharCode(92), '/');
