@@ -25,6 +25,41 @@ import 'software_3d_png_encoder.dart';
 
 typedef CompositionExportProgress = void Function(double value);
 
+/// Signals that a local composition render should stop.
+class CompositionExportCancelled implements Exception {
+  const CompositionExportCancelled();
+
+  @override
+  String toString() => 'Composition render cancelled.';
+}
+
+/// Cooperative cancellation shared by frame preparation and FFmpeg sessions.
+class CompositionExportCancellation {
+  bool _cancelled = false;
+  void Function()? _cancelHandler;
+
+  bool get isCancelled => _cancelled;
+
+  void cancel() {
+    if (_cancelled) return;
+    _cancelled = true;
+    _cancelHandler?.call();
+  }
+
+  void attachCancelHandler(void Function() handler) {
+    _cancelHandler = handler;
+    if (_cancelled) handler();
+  }
+
+  void clearCancelHandler() {
+    _cancelHandler = null;
+  }
+
+  void throwIfCancelled() {
+    if (_cancelled) throw const CompositionExportCancelled();
+  }
+}
+
 class CompositionExportResult {
   const CompositionExportResult({
     required this.file,
@@ -63,7 +98,9 @@ class CompositionExportService {
   Future<CompositionExportResult> export(
     CompositionDocument document, {
     CompositionExportProgress? onProgress,
+    CompositionExportCancellation? cancellation,
   }) async {
+    cancellation?.throwIfCancelled();
     if (document.width <= 0 || document.height <= 0 ||
         document.durationMs <= 0 || document.frameRate <= 0) {
       throw StateError('Composition size, frame rate and duration must be valid.');
@@ -92,6 +129,7 @@ class CompositionExportService {
     final skipped = <String>[];
 
     for (final layer in enabled) {
+      cancellation?.throwIfCancelled();
       if (layer.kind == LayerKind.text) {
         visualLayers.add(layer);
       } else if (visualKinds.contains(layer.kind)) {
@@ -157,12 +195,16 @@ class CompositionExportService {
         visualLayers.where((layer) => layer.kind == LayerKind.threeDModel).toList(),
         meshTempDirectory,
         onProgress: onProgress,
+        cancellation: cancellation,
       );
+      cancellation?.throwIfCancelled();
       final textImagePaths = await _prepareTextLayerImages(
         document,
         visualLayers.where((layer) => layer.kind == LayerKind.text).toList(),
         textTempDirectory,
+        cancellation: cancellation,
       );
+      cancellation?.throwIfCancelled();
       final command = await _buildCommand(
         document,
         visualLayers,
@@ -175,12 +217,16 @@ class CompositionExportService {
       final start = FFmpegKit.executeAsync(
         command,
         onStatistics: (statistics) {
-          onProgress?.call(
-            (statistics.time / document.durationMs).clamp(0, 0.99).toDouble(),
-          );
+          final encodeProgress =
+              (statistics.time / document.durationMs).clamp(0, 0.99).toDouble();
+          onProgress?.call(0.2 + encodeProgress * 0.8);
         },
         onComplete: (session) {
-          if (ReturnCode.isSuccess(session.getReturnCode())) {
+          if (cancellation?.isCancelled ?? false) {
+            if (!completion.isCompleted) {
+              completion.completeError(const CompositionExportCancelled());
+            }
+          } else if (ReturnCode.isSuccess(session.getReturnCode())) {
             if (!completion.isCompleted) completion.complete();
           } else if (!completion.isCompleted) {
             completion.completeError(
@@ -190,12 +236,17 @@ class CompositionExportService {
         },
       );
       unawaited(start.then<void>(
-        (_) {},
+        (session) {
+          cancellation?.attachCancelHandler(() {
+            session.cancel();
+          });
+        },
         onError: (Object error, StackTrace stackTrace) {
           if (!completion.isCompleted) completion.completeError(error, stackTrace);
         },
       ));
       await completion.future.timeout(const Duration(hours: 3));
+      cancellation?.throwIfCancelled();
       if (!await output.exists() || await output.length() == 0) {
         throw StateError('FFmpeg completed without producing an output file.');
       }
@@ -220,6 +271,8 @@ class CompositionExportService {
         await textTempDirectory.delete(recursive: true);
       }
       rethrow;
+    } finally {
+      cancellation?.clearCancelHandler();
     }
   }
 
@@ -228,6 +281,7 @@ class CompositionExportService {
     List<CompositionLayer> meshLayers,
     Directory tempDirectory, {
     CompositionExportProgress? onProgress,
+    CompositionExportCancellation? cancellation,
   }) async {
     if (meshLayers.isEmpty) return const {};
     await tempDirectory.create(recursive: true);
@@ -240,12 +294,14 @@ class CompositionExportService {
     const encoder = Software3dPngEncoder();
 
     for (var layerIndex = 0; layerIndex < meshLayers.length; layerIndex++) {
+      cancellation?.throwIfCancelled();
       final layer = meshLayers[layerIndex];
       final sourcePath = layer.sourceUri;
       if (sourcePath == null || sourcePath.isEmpty) {
         throw StateError('3D mesh layer \${layer.name} has no local mesh source.');
       }
       final mesh = await const SceneMeshLoader().load(sourcePath);
+      cancellation?.throwIfCancelled();
       final frameDirectory = Directory(
         tempDirectory.path + Platform.pathSeparator + layer.id,
       );
@@ -256,6 +312,7 @@ class CompositionExportService {
       ).toInt();
       final frameRate = document.frameRate;
       for (var frameIndex = 0; frameIndex < frameCount; frameIndex++) {
+        cancellation?.throwIfCancelled();
         final localTimeMs = (frameIndex * 1000 / frameRate).round();
         final compositionTimeMs = layer.startMs + localTimeMs;
         final fileName = 'frame_' + frameIndex.toString().padLeft(6, '0') + '.png';
@@ -368,18 +425,28 @@ class CompositionExportService {
           ' -frames:v ' + frameCount.toString() +
           ' -an -c:v qtrle -pix_fmt argb -t ' + duration +
           ' -r ' + frameRate.toString() + ' ' + _quote(videoPath);
-      await _executeFfmpeg(command);
+      cancellation?.throwIfCancelled();
+      await _executeFfmpeg(command, cancellation: cancellation);
+      cancellation?.throwIfCancelled();
       result[layer.id] = videoPath;
     }
     return Map.unmodifiable(result);
   }
 
-  Future<void> _executeFfmpeg(String command) async {
+  Future<void> _executeFfmpeg(
+    String command, {
+    CompositionExportCancellation? cancellation,
+  }) async {
+    cancellation?.throwIfCancelled();
     final completion = Completer<void>();
     final start = FFmpegKit.executeAsync(
       command,
       onComplete: (session) {
-        if (ReturnCode.isSuccess(session.getReturnCode())) {
+        if (cancellation?.isCancelled ?? false) {
+          if (!completion.isCompleted) {
+            completion.completeError(const CompositionExportCancelled());
+          }
+        } else if (ReturnCode.isSuccess(session.getReturnCode())) {
           if (!completion.isCompleted) completion.complete();
         } else if (!completion.isCompleted) {
           completion.completeError(
@@ -389,26 +456,37 @@ class CompositionExportService {
       },
     );
     unawaited(start.then<void>(
-      (_) {},
+      (session) {
+        cancellation?.attachCancelHandler(() {
+          session.cancel();
+        });
+      },
       onError: (Object error, StackTrace stackTrace) {
         if (!completion.isCompleted) completion.completeError(error, stackTrace);
       },
     ));
-    await completion.future.timeout(const Duration(hours: 3));
+    try {
+      await completion.future.timeout(const Duration(hours: 3));
+      cancellation?.throwIfCancelled();
+    } finally {
+      cancellation?.clearCancelHandler();
+    }
   }
 
 
   Future<Map<String, String>> _prepareTextLayerImages(
     CompositionDocument document,
     List<CompositionLayer> textLayers,
-    Directory directory,
-  ) async {
+    Directory directory, {
+    CompositionExportCancellation? cancellation,
+  }) async {
     if (textLayers.isEmpty) return const <String, String>{};
     await directory.create(recursive: true);
     final result = <String, String>{};
     final fontManager = FontManagerService.instance;
 
     for (var index = 0; index < textLayers.length; index++) {
+      cancellation?.throwIfCancelled();
       final layer = textLayers[index];
       final family = layer.textFontFamily ?? fontManager.activeFamily;
       final fontPath = layer.textFontAssetUri ??
