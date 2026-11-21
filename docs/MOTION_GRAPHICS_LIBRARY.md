@@ -1,6 +1,6 @@
 # Motion Graphics Library
 
-DepthVibe provides 34 original, editable motion-design recipes and 68 built-in native video effects. It does not bundle Motion Bro packs or redistribute commercial source files. It does not bundle Motion Bro packs or redistribute commercial source files.
+DepthVibe provides 54 original, editable motion-design recipes, 68 built-in native video effects, 39 original multi-effect looks and 38 curated transition recipes. It does not redistribute commercial Motion Bro packs, third-party plug-in binaries or proprietary preset source files.
 
 ## Motion presets
 
@@ -11,14 +11,15 @@ DepthVibe provides 34 original, editable motion-design recipes and 68 built-in n
 | Scale | Pop Bounce, Elastic Pop |
 | Attention | Shake, Pulse, Swing |
 | Typography | Text Rise |
-| Composite entrance/exit | Fade + Slide Up/Down, Drop In, Tilt In/Out, Vertical Flip In, Overshoot Slide Left/Right |
+| Composite entrance/exit | Fade + Slide, Drop In, Tilt In/Out, Vertical Flip, Spring/Elastic entrances, Spin Pop, Headline Drop, Lower Third, Slide + Zoom |
+| Cinematic/attention | Cinematic Push/Pull, Squash Stomp, Soft Pulse, Pendulum Swing, Hover Drift, Snap Zoom, Rotate Away |
 | Attention/character | Wobble, Heartbeat, Float, Jelly |
 
 Applying a preset adds normal DepthVibe keyframe tracks at the current playhead. The tracks remain editable in the timeline and graph editor.
 
 ## Native effect library
 
-The 68-effect built-in library includes the original Color, Blur & Sharpen, Stylize, Compositing, Keying, VFX, Lens, Transform, Tracking, Motion and Noise Reduction groups. New native entries include Vibrance, Color Contrast, Auto White Balance, RGB Channel Mixer, Adaptive Sharpen, Median/Temporal/Non-Local Means Denoise, Frame Blend, Wave Distortion, Heat Haze, Film Gate Weave, Camera Flash, Cinematic Letterbox, Frame Border, 8mm Old Film, Analog Glitch, Bleach Bypass, Sepia Tone and Edge Glow.
+The 68-effect built-in library includes the original Color, Blur & Sharpen, Stylize, Compositing, Keying, VFX, Lens, Transform, Tracking, Motion and Noise Reduction groups. The unified Asset Library also ships 39 multi-effect looks: New native entries include Vibrance, Color Contrast, Auto White Balance, RGB Channel Mixer, Adaptive Sharpen, Median/Temporal/Non-Local Means Denoise, Frame Blend, Wave Distortion, Heat Haze, Film Gate Weave, Camera Flash, Cinematic Letterbox, Frame Border, 8mm Old Film, Analog Glitch, Bleach Bypass, Sepia Tone and Edge Glow.
 
 The Effect Library uses generated animated thumbnails for the built-in entries. Hover starts the sample and the Add control applies the effect to the selected layer. Thumbnail rendering is a lightweight visual guide, not a frame-accurate preview of source footage or the final FFmpeg pipeline.
 
@@ -28,7 +29,13 @@ Each built-in entry has a typed parameter definition and a native FFmpeg filter 
 
 The transition picker exposes the full built-in xfade identifier family: fades/dissolves, directional wipes/slides, circle and rectangle crops, distance/radial, smooth, open/close, pixelize, diagonal wipes, slices, blur, squeeze, wind, cover and reveal transitions.
 
-The searchable preview browser groups transitions into Fade, Wipe, Move, Shape and Stylize. Hovering a card runs a generated A/B motion sample and its Apply control inserts that transition for the selected clip. These thumbnails are illustrative previews, not a pixel-identical render of every native xfade implementation; final composition output uses FFmpeg's xfade filter.
+The searchable preview browser groups transitions into Fade, Wipe, Move, Shape and Stylize, and the unified Asset Library provides 38 named recipes with preset timing values. Hovering a card runs a generated A/B motion sample and its Apply control inserts that transition for the selected clip. These thumbnails are illustrative previews, not a pixel-identical render of every native xfade implementation; final composition output uses FFmpeg's xfade filter.
+
+## Unified Asset Library
+
+The Library tab combines effect looks, editable motion recipes and transition recipes with one search field and type filters. Effect looks apply a set of registered native effects with validated parameter defaults; each effect remains independently editable and can be animated through its existing parameter controls. Motion recipes add ordinary, editable transform/opacity keyframes at the current playhead. Transition recipes add a native transition between two enabled visual clips and set its intended duration.
+
+The same panel links to .dvmpreset import/export, the signed publisher marketplace and the user-supplied Motion Bro pack browser. The online marketplace requires a publisher HTTPS catalog and an explicitly trusted signing key; it is not a free-for-all scraper of paid proprietary assets.
 
 ## Adobe host interoperability
 
