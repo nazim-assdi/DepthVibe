@@ -3,6 +3,7 @@ import 'package:depthvibe/features/composition/data/color_preset_catalog.dart';
 import 'package:depthvibe/features/composition/data/effect_catalog.dart';
 import 'package:depthvibe/features/composition/data/motion_preset_catalog.dart';
 import 'package:depthvibe/features/composition/data/overlay_sticker_catalog.dart';
+import 'package:depthvibe/features/composition/data/open_asset_source_catalog.dart';
 import 'package:depthvibe/features/composition/data/title_preset_catalog.dart';
 import 'package:depthvibe/features/composition/domain/composition_models.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,6 +60,17 @@ void main() {
           reason: preset.id);
       expect(MotionPresetCatalog.find(preset.motionPresetId), isNotNull,
           reason: preset.id);
+    }
+  });
+
+  test('online asset directory only exposes HTTPS sources with licence labels', () {
+    expect(OpenAssetSourceCatalog.all.length, 9);
+    final ids = OpenAssetSourceCatalog.all.map((item) => item.id).toSet();
+    expect(ids.length, OpenAssetSourceCatalog.all.length);
+    for (final source in OpenAssetSourceCatalog.all) {
+      expect(Uri.parse(source.url).scheme, 'https', reason: source.id);
+      expect(source.licenseLabel.trim(), isNotEmpty, reason: source.id);
+      expect(source.category.trim(), isNotEmpty, reason: source.id);
     }
   });
 
