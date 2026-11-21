@@ -43,7 +43,6 @@ class CreativeAssetPackCatalog {
 
   static const String _daedalRelease =
       'https://github.com/luciansofronie/daedal-downloads/releases/download/packs-v1/';
-  static const String _daedalSource = 'https://daedal.art/film-assets/';
   static const String _clrRelease =
       'https://github.com/dlaneycreative-design/clr-downloads/releases/download/music-library-v1/';
 

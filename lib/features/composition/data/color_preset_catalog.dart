@@ -1,5 +1,3 @@
-import '../domain/composition_models.dart';
-
 /// Original color-grading recipes expressed as validated native primary
 /// correction values. No third-party LUT files are bundled in this catalog.
 class ColorPresetDefinition {

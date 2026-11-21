@@ -344,7 +344,7 @@ class _EffectSamplePainter extends CustomPainter {
       Paint()
         ..color = id == 'edge_detect'
             ? Colors.white
-            : const Color(0xFF243B59),
+            : const Color(0xFF243B59)
         ..style = id == 'edge_detect' ? PaintingStyle.stroke : PaintingStyle.fill
         ..strokeWidth = 1.2,
     );

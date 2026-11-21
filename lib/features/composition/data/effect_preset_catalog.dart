@@ -1,5 +1,3 @@
-import 'effect_catalog.dart';
-
 /// Original multi-effect looks inspired by common professional grading and
 /// motion-graphics workflows. Every step uses a native, reviewed DepthVibe
 /// effect definition; no third-party preset code or assets are bundled.
