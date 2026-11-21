@@ -1944,7 +1944,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         if (svgSource.length > 12 * 1024 * 1024) {
           throw const FormatException('The SVG file exceeds the 12 MiB import limit.');
         }
-        final pictureInfo = await vg.vg.loadPicture(
+        final pictureInfo = await vg.loadPicture(
           vg.SvgStringLoader(svgSource),
           null,
         );
