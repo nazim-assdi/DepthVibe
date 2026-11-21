@@ -69,7 +69,7 @@ class TitlePresetCatalog {
     // TYPE TREATMENTS
     TitlePresetDefinition(id:'type_outline',name:'Outline Style',category:'Typography',description:'Wide tracking and crisp title layout.',sampleText:'OUTLINE',fontSize:108,fontWeight:900,letterSpacing:8,motionPresetId:'fade_in'),
     TitlePresetDefinition(id:'type_serif',name:'Elegant Editorial',category:'Typography',description:'Lightweight high-end editorial title.',sampleText:'The Collection',fontSize:94,fontWeight:400,letterSpacing:1,motionPresetId:'fade_slide_up'),
-    TitlePresetDefinition(id:'type_mono',name:'Mono Label',category:'Typography',description:'Compact technical monospace-style label.',sampleText:'[ SYSTEM READY ]',fontSize:42,fontWeight:700,textColor:'#FF93F0D2',letterSpacing:4,motionPresetId:'type_in'),
+    TitlePresetDefinition(id:'type_mono',name:'Mono Label',category:'Typography',description:'Compact technical monospace-style label.',sampleText:'[ SYSTEM READY ]',fontSize:42,fontWeight:700,textColor:'#FF93F0D2',letterSpacing:4,motionPresetId:'fade_in'),
     TitlePresetDefinition(id:'type_vertical',name:'Vertical Caption',category:'Typography',description:'Narrow title stack suitable for side labels.',sampleText:'CREATIVE\nSTUDIO',fontSize:64,fontWeight:800,letterSpacing:5,motionPresetId:'tilt_in'),
     TitlePresetDefinition(id:'type_kicker',name:'Small Kicker',category:'Typography',description:'Small section label above a headline.',sampleText:'INTRODUCING',fontSize:32,fontWeight:700,letterSpacing:8,motionPresetId:'fade_in'),
     TitlePresetDefinition(id:'type_big_number',name:'Big Number',category:'Typography',description:'Large numeric hero title.',sampleText:'2026',fontSize:180,fontWeight:900,letterSpacing:-4,motionPresetId:'zoom_bounce'),
