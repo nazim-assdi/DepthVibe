@@ -2503,6 +2503,28 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ],
       );
     }
+    final options = parameter['options'];
+    if (options is List &&
+        options.isNotEmpty &&
+        options.every((item) => item is String || item is num || item is bool) &&
+        options.contains(value)) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: DropdownButtonFormField<Object?>(
+          initialValue: value,
+          isExpanded: true,
+          decoration: InputDecoration(labelText: label, isDense: true),
+          items: options.map((option) => DropdownMenuItem<Object?>(
+            value: option,
+            child: Text(option.toString(), overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10)),
+          )).toList(),
+          onChanged: (next) {
+            if (next != null) update(next);
+          },
+        ),
+      );
+    }
     if (value is num) {
       final min = (parameter['minValue'] as num?)?.toDouble();
       final max = (parameter['maxValue'] as num?)?.toDouble();
