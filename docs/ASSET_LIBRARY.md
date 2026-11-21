@@ -24,7 +24,7 @@ The first eight collections total 399 built-in catalogue entries. This is an ent
 
 ### Overlays & Stickers
 
-Native film, texture, lens and graphic overlays apply existing DepthVibe effect IDs to the selected visual layer. Typographic stickers create regular text layers and may add motion keyframes. Import PNG/JPG/WebP to add a raster overlay as an image layer. The editor does not claim these 42 symbol/word stickers are a complete raster artwork collection; their visual output depends on installed font glyph coverage.
+Native film, texture, lens and graphic overlays apply existing DepthVibe effect IDs to the selected visual layer. Typographic stickers create regular text layers and may add motion keyframes. Import PNG/JPG/WebP to add a raster overlay as an image layer. SVG files are rendered to a bounded 4096-pixel PNG and imported as raster image layers; their embedded CSS/SMIL animation is not retained, but the resulting image layer can receive DepthVibe motion keyframes. MP4/MOV/M4V/WebM/MKV/GIF clips can be imported as video overlay layers. The editor does not claim the built-in 42 symbol/word stickers are a complete vector-art collection; their visual output depends on installed font glyph coverage.
 
 ### Motion
 
