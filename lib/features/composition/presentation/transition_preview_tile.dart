@@ -175,7 +175,17 @@ class _TransitionSamplePainter extends CustomPainter {
     _paintScene(canvas, size, second: false);
     final reveal = _revealPath(size, p);
 
-    canvas.save();
+    final isFade = kind == TransitionKind.dissolve ||
+        kind == TransitionKind.fadeThroughColor ||
+        kind == TransitionKind.fadeBlack ||
+        kind == TransitionKind.fadeWhite ||
+        kind == TransitionKind.fadeGrays ||
+        kind == TransitionKind.fadeFast ||
+        kind == TransitionKind.fadeSlow;
+    canvas.saveLayer(
+      bounds,
+      Paint()..color = Colors.white.withOpacity(isFade ? p : 1),
+    );
     canvas.clipPath(reveal);
     _paintScene(canvas, size, second: true);
     canvas.restore();
