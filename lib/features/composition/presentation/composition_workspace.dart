@@ -2010,7 +2010,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       );
       if (mounted) {
         setState(() => _notice = name.toLowerCase().endsWith('.svg')
-            ? 'Imported $name as a rasterized SVG image layer.'
+            ? 'Imported $name as PNG. Embedded SVG animation is not retained.'
             : 'Imported $name as an editable overlay/image layer.');
       }
     } catch (error) {
