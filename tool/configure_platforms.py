@@ -2,6 +2,8 @@ from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
 
+from platform_branding import replace_linux_window_title, replace_windows_window_title
+
 ROOT = Path(__file__).resolve().parents[1]
 
 def update_plist(path: Path, values: dict[str, str]) -> None:
@@ -246,14 +248,7 @@ def configure_linux_branding() -> None:
     app_source = linux / "runner" / "my_application.cc"
     if app_source.exists():
         text = app_source.read_text(encoding="utf-8")
-        title_pattern = re.compile(
-            r'(gtk_window_set_title\(window,\s*")[^"]*("\s*\);)'
-        )
-        text, _ = title_pattern.subn(
-            lambda match: match.group(1) + match.group(2) + "DepthVibe" + match.group(4),
-            text,
-            count=1,
-        )
+        text, _ = replace_linux_window_title(text)
         icon_call = 'gtk_window_set_icon_name(window, "depthvibe");'
         if icon_call not in text:
             title_call = re.search(
@@ -275,15 +270,10 @@ def configure_windows_branding() -> None:
     main_cpp = runner / "main.cpp"
     if main_cpp.exists():
         text = main_cpp.read_text(encoding="utf-8")
-        pattern = re.compile(r'(window\.Create(?:AndShow)?\s*\(\s*)(L?")([^"]*)(")')
-        updated, count = pattern.subn(
-            lambda match: match.group(1) + "DepthVibe" + match.group(2),
-            text,
-            count=1,
-        )
+        updated, count = replace_windows_window_title(text)
         if count:
             main_cpp.write_text(updated, encoding="utf-8")
-        elif "window.Create" in text and 'L"DepthVibe"' not in text:
+        elif "window.Create" in text and '"DepthVibe"' not in text:
             raise RuntimeError(
                 "Could not set the generated Windows window title in main.cpp."
             )

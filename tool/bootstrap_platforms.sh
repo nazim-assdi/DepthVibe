@@ -21,6 +21,7 @@ flutter create \
   --platforms=android,ios,windows,linux,macos \
   .
 
+"$PYTHON_BIN" tool/test_platform_branding.py
 "$PYTHON_BIN" tool/configure_platforms.py
 "$PYTHON_BIN" tool/generate_brand_icons.py
 flutter pub get
