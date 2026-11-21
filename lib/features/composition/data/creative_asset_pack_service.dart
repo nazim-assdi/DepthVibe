@@ -229,6 +229,10 @@ class CreativeAssetPackService extends ChangeNotifier {
     if (!await archiveFile.exists()) {
       throw StateError('The selected ZIP file does not exist.');
     }
+    final archiveLength = await archiveFile.length();
+    if (archiveLength <= 0 || archiveLength > maxArchiveBytes) {
+      throw const FormatException('The selected ZIP exceeds the 8 GiB archive safety limit.');
+    }
     final safeName = _safeId(name);
     final id = 'imported_' + safeName + '_' +
         DateTime.now().millisecondsSinceEpoch.toString();
