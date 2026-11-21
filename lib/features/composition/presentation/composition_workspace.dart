@@ -30,6 +30,7 @@ import '../domain/composition_models.dart';
 import '../data/motion_preset_catalog.dart';
 import '../data/title_preset_catalog.dart';
 import '../data/overlay_sticker_catalog.dart';
+import '../data/open_asset_source_catalog.dart';
 import '../data/motion_preset_package.dart';
 import '../data/motion_bro_pack_service.dart';
 import '../data/transition_catalog.dart';
@@ -1890,6 +1891,35 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     if (mounted) setState(() => _notice = 'Applied ${preset.name} color grade.');
   }
 
+  Future<void> _openAssetSource(OpenAssetSourceDefinition source) async {
+    try {
+      if (Platform.isWindows) {
+        await Process.start(
+          'explorer.exe',
+          [source.url],
+          mode: ProcessStartMode.detached,
+        );
+      } else if (Platform.isMacOS) {
+        await Process.start(
+          'open',
+          [source.url],
+          mode: ProcessStartMode.detached,
+        );
+      } else if (Platform.isLinux) {
+        await Process.start(
+          'xdg-open',
+          [source.url],
+          mode: ProcessStartMode.detached,
+        );
+      } else {
+        await Share.share(source.url, subject: source.name);
+      }
+      if (mounted) setState(() => _notice = 'Opened ${source.name}. Check its item-level licence before import.');
+    } catch (error) {
+      if (mounted) setState(() => _notice = 'Could not open ${source.name}: $error');
+    }
+  }
+
   Future<void> _importLibraryOverlayImage() async {
     try {
       final picked = await FilePicker.pickFile(
@@ -2382,6 +2412,23 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ),
           ],
         ),
+        const Divider(height: 16),
+        _panelHeader('OPEN-LICENCE ONLINE SOURCES', Icons.public),
+        const Text(
+          'Browse large external collections. Downloads remain on their original sites; check the licence for each chosen file before using or redistributing it.',
+          style: TextStyle(fontSize: 9, color: Color(0xFF9EADC4)),
+        ),
+        for (final source in OpenAssetSourceCatalog.all)
+          _buildAssetLibraryTile(
+            title: source.name,
+            category: source.category,
+            description: source.description,
+            countLabel: source.licenseLabel + ' · ' + source.countLabel,
+            icon: Icons.open_in_new,
+            colors: const [Color(0xFF2F6377), Color(0xFF202F49)],
+            actionLabel: 'OPEN',
+            onApply: () => _openAssetSource(source),
+          ),
         const SizedBox(height: 6),
         _buildMotionBroPackBrowser(),
       ],
