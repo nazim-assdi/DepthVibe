@@ -1,6 +1,6 @@
 # Motion Graphics Library
 
-DepthVibe provides 21 original, editable motion-design recipes and native video effects. It does not bundle Motion Bro packs or redistribute commercial source files.
+DepthVibe provides 34 original, editable motion-design recipes and 68 built-in native video effects. It does not bundle Motion Bro packs or redistribute commercial source files. It does not bundle Motion Bro packs or redistribute commercial source files.
 
 ## Motion presets
 
@@ -11,18 +11,22 @@ DepthVibe provides 21 original, editable motion-design recipes and native video 
 | Scale | Pop Bounce, Elastic Pop |
 | Attention | Shake, Pulse, Swing |
 | Typography | Text Rise |
+| Composite entrance/exit | Fade + Slide Up/Down, Drop In, Tilt In/Out, Vertical Flip In, Overshoot Slide Left/Right |
+| Attention/character | Wobble, Heartbeat, Float, Jelly |
 
 Applying a preset adds normal DepthVibe keyframe tracks at the current playhead. The tracks remain editable in the timeline and graph editor.
 
 ## Native effect library
 
-The effect library includes Exposure, Hue Rotate, Colorize, Directional Blur, Average Blur, Chroma Denoise, Deband, Deflicker, Scanlines, RGB Split, Posterize Time, Echo Trails, VHS Warp, Fisheye, Radial Blur and Spatial Noise Reduction, in addition to the existing Color, Blur, Stylize, Keying, VFX, Lens, Transform and Tracking effects.
+The 68-effect built-in library includes the original Color, Blur & Sharpen, Stylize, Compositing, Keying, VFX, Lens, Transform, Tracking, Motion and Noise Reduction groups. New native entries include Vibrance, Color Contrast, Auto White Balance, RGB Channel Mixer, Adaptive Sharpen, Median/Temporal/Non-Local Means Denoise, Frame Blend, Wave Distortion, Heat Haze, Film Gate Weave, Camera Flash, Cinematic Letterbox, Frame Border, 8mm Old Film, Analog Glitch, Bleach Bypass, Sepia Tone and Edge Glow.
 
-These effects compile to FFmpeg video filters. Availability depends on the FFmpeg build packaged with the application.
+Each built-in entry has a typed parameter definition and a native FFmpeg filter mapping. Effects requiring a filter that is absent from the packaged FFmpeg build may still fail at runtime; actual device/build validation remains required.
 
 ## Transition library
 
 The transition picker exposes the full built-in xfade identifier family: fades/dissolves, directional wipes/slides, circle and rectangle crops, distance/radial, smooth, open/close, pixelize, diagonal wipes, slices, blur, squeeze, wind, cover and reveal transitions.
+
+The searchable preview browser groups transitions into Fade, Wipe, Move, Shape and Stylize. Hovering a card runs a generated A/B motion sample and its Apply control inserts that transition for the selected clip. These thumbnails are illustrative previews, not a pixel-identical render of every native xfade implementation; final composition output uses FFmpeg's xfade filter.
 
 ## Adobe host interoperability
 
