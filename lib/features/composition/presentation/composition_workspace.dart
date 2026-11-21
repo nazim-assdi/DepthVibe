@@ -2322,6 +2322,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             _assetCountChip(Icons.auto_awesome, '${EffectCatalog.all.length} built-in effects'),
             _assetCountChip(Icons.swap_horiz, '${TransitionPresetCatalog.all.length} transition recipes'),
             _assetCountChip(Icons.library_books_outlined, '399 built-in catalog entries'),
+            _assetCountChip(Icons.public, '${OpenAssetSourceCatalog.all.length} open asset sources'),
           ],
         ),
         const SizedBox(height: 8),
@@ -2450,7 +2451,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             EffectPreviewTile(
               effect: EffectCatalog.find(preset.steps.first.effectId)!,
               titleOverride: preset.name,
-              subtitleOverride: '${preset.category} · ${preset.steps.length}-effect stack',
+              subtitleOverride: '${preset.category} · ${preset.steps.length} effects · first-effect preview',
               onApply: canApplyLayer ? () {
                 _controller.applyEffectPreset(preset.id);
                 setState(() => _notice = 'Applied ${preset.name} effect stack.');
