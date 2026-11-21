@@ -27,7 +27,7 @@ External collections below are optional acquisition sources. They are not copied
 ## Import workflow in DepthVibe
 
 1. Download the selected asset from its original source and keep its license/attribution file.
-2. Use **IMPORT PNG/JPG OVERLAY** for still overlay images, **IMPORT AUDIO FILE** for sound/music, and **IMPORT 3D .CUBE LUT** for color transforms.
+2. Use **IMPORT IMAGE / SVG** for still images and SVG files (SVG imports are rasterized to PNG, so embedded SVG animation is not kept), **IMPORT VIDEO / GIF OVERLAY** for animated/video clips, **IMPORT AUDIO FILE** for sound/music, and **IMPORT 3D .CUBE LUT** for color transforms.
 3. For `.dvmpreset` and native extension packs, use their dedicated import/marketplace flows.
 4. Use project Save/Export to package media for transfer; independently imported files remain subject to their original license terms.
 
