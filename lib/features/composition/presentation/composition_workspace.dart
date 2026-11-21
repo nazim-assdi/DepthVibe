@@ -19,14 +19,17 @@ import '../../fonts/data/font_manager_service.dart';
 import '../../fonts/presentation/font_manager_dialog.dart';
 import '../../fonts/presentation/font_picker_dialog.dart';
 import '../data/effect_catalog.dart';
+import '../data/effect_preset_catalog.dart';
 import '../../extensions/data/extension_manager_service.dart';
 import '../../extensions/data/adobe_bridge_service.dart';
+import '../../extensions/presentation/extension_marketplace_screen.dart';
 import '../data/photoshop_import_service.dart';
 import '../domain/composition_models.dart';
 import '../data/motion_preset_catalog.dart';
 import '../data/motion_preset_package.dart';
 import '../data/motion_bro_pack_service.dart';
 import '../data/transition_catalog.dart';
+import '../data/transition_preset_catalog.dart';
 import '../domain/color_grade_preset.dart';
 import '../engine/parent_transform_resolver.dart';
 import '../engine/camera_projection_resolver.dart';
@@ -188,6 +191,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   String _effectSearch = '';
   String _transitionCategory = 'All';
   String _transitionSearch = '';
+  String _libraryFilter = 'All';
+  String _librarySearch = '';
   String? _notice;
   final CompositionProjectService _projectService = const CompositionProjectService();
   final CompositionRecoveryService _recoveryService = const CompositionRecoveryService();
@@ -1742,6 +1747,274 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+
+  void _applyTransitionPreset(TransitionPresetDefinition preset) {
+    final before = _controller.document.transitions.length;
+    _controller.addTransition(preset.kind);
+    final transitions = _controller.document.transitions;
+    if (transitions.length <= before) {
+      setState(() {
+        _notice = 'Add at least two enabled video/image clips before applying a transition.';
+      });
+      return;
+    }
+    _controller.updateTransition(
+      transitions.last.id,
+      durationMs: preset.durationMs,
+    );
+    if (mounted) {
+      setState(() => _notice = 'Applied ${preset.name} transition.');
+    }
+  }
+
+  Widget _buildAssetLibraryTile({
+    required String title,
+    required String category,
+    required String description,
+    required String countLabel,
+    required IconData icon,
+    required List<Color> colors,
+    required String actionLabel,
+    required VoidCallback? onApply,
+  }) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(9),
+        child: Row(
+          children: [
+            Container(
+              width: 72,
+              height: 62,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: colors,
+                ),
+              ),
+              child: Icon(icon, size: 28, color: Colors.white),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 2),
+                  Text(category.toUpperCase() + ' · ' + countLabel,
+                    style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: Color(0xFF9FAFC9))),
+                  const SizedBox(height: 4),
+                  Text(description, maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 9, color: Color(0xFFB5C1D4))),
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            FilledButton.tonalIcon(
+              onPressed: onApply,
+              icon: const Icon(Icons.add, size: 14),
+              label: Text(actionLabel, style: const TextStyle(fontSize: 9)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAssetLibraryPanel(CompositionLayer? layer) {
+    const filters = ['All', 'Effects', 'Motion', 'Transitions'];
+    final query = _librarySearch.trim().toLowerCase();
+    final canApplyToLayer = layer != null && !layer.locked;
+    final visualCount = _controller.document.layers
+        .where((item) =>
+            item.enabled &&
+            (item.kind == LayerKind.video ||
+                item.kind == LayerKind.image ||
+                item.kind == LayerKind.photoshopLayer))
+        .length;
+    final canApplyTransition = visualCount >= 2;
+
+    final effectPresets = EffectPresetCatalog.all.where((preset) =>
+      query.isEmpty ||
+      (preset.name + ' ' + preset.category + ' ' + preset.description)
+          .toLowerCase().contains(query)).toList();
+    final motionPresets = MotionPresetCatalog.all.where((preset) =>
+      query.isEmpty ||
+      (preset.name + ' ' + preset.category + ' ' + preset.description)
+          .toLowerCase().contains(query)).toList();
+    final transitionPresets = TransitionPresetCatalog.all.where((preset) =>
+      query.isEmpty ||
+      (preset.name + ' ' + preset.category + ' ' + preset.description)
+          .toLowerCase().contains(query)).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _panelHeader('DEPTHVIBE ASSET LIBRARY', Icons.video_library_outlined),
+        const Text(
+          'Original professional-style collections, already built into DepthVibe. No separate effect plug-in is needed for these assets.',
+          style: TextStyle(fontSize: 10, color: Color(0xFF9EADC4)),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            for (final filter in filters)
+              ChoiceChip(
+                label: Text(filter, style: const TextStyle(fontSize: 10)),
+                selected: _libraryFilter == filter,
+                onSelected: (_) => setState(() => _libraryFilter = filter),
+                visualDensity: VisualDensity.compact,
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          onChanged: (value) => setState(() => _librarySearch = value),
+          decoration: const InputDecoration(
+            isDense: true,
+            prefixIcon: Icon(Icons.search, size: 17),
+            hintText: 'Search looks, animation recipes and transitions…',
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            _assetCountChip(Icons.auto_awesome, '${EffectPresetCatalog.all.length} effect looks'),
+            _assetCountChip(Icons.animation, '${MotionPresetCatalog.all.length} motion presets'),
+            _assetCountChip(Icons.swap_horiz, '${TransitionPresetCatalog.all.length} transition recipes'),
+            _assetCountChip(Icons.layers, '${EffectCatalog.allEffects.length} native effects'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (layer == null)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Select a layer to apply effect looks or motion presets. Transition recipes can be applied when the composition has at least two enabled visual clips.',
+              style: TextStyle(fontSize: 9, color: Color(0xFFE2C58E)),
+            ),
+          ),
+        if (_libraryFilter == 'All' || _libraryFilter == 'Effects') ...[
+          _panelHeader('PRO LOOKS & EFFECT STACKS', Icons.color_lens_outlined),
+          for (final preset in effectPresets)
+            _buildAssetLibraryTile(
+              title: preset.name,
+              category: preset.category,
+              description: preset.description,
+              countLabel: '${preset.steps.length} effects',
+              icon: Icons.auto_awesome,
+              colors: const [Color(0xFF5B70B8), Color(0xFF242F54)],
+              actionLabel: 'APPLY',
+              onApply: canApplyToLayer ? () {
+                _controller.applyEffectPreset(preset.id);
+                setState(() => _notice = 'Applied ${preset.name} effect stack.');
+              } : null,
+            ),
+          if (effectPresets.isEmpty)
+            const Text('No effect looks match this search.', style: TextStyle(fontSize: 10)),
+        ],
+        if (_libraryFilter == 'All' || _libraryFilter == 'Motion') ...[
+          const Divider(height: 20),
+          _panelHeader('MOTION & TYPOGRAPHY PRESETS', Icons.animation),
+          for (final preset in motionPresets)
+            _buildAssetLibraryTile(
+              title: preset.name,
+              category: preset.category,
+              description: preset.description,
+              countLabel: '${preset.tracks.length} animated tracks',
+              icon: Icons.motion_photos_on_outlined,
+              colors: const [Color(0xFF3C927E), Color(0xFF174C57)],
+              actionLabel: 'APPLY',
+              onApply: canApplyToLayer ? () {
+                _controller.applyMotionPreset(preset.id);
+                setState(() => _notice = 'Applied ${preset.name} keyframe animation.');
+              } : null,
+            ),
+          if (motionPresets.isEmpty)
+            const Text('No motion presets match this search.', style: TextStyle(fontSize: 10)),
+        ],
+        if (_libraryFilter == 'All' || _libraryFilter == 'Transitions') ...[
+          const Divider(height: 20),
+          _panelHeader('TRANSITION RECIPES', Icons.swap_horiz),
+          for (final preset in transitionPresets)
+            _buildAssetLibraryTile(
+              title: preset.name,
+              category: preset.category,
+              description: preset.description,
+              countLabel: '${preset.durationMs} ms',
+              icon: Icons.compare_arrows,
+              colors: const [Color(0xFF9673C6), Color(0xFF463260)],
+              actionLabel: 'ADD',
+              onApply: canApplyTransition ? () => _applyTransitionPreset(preset) : null,
+            ),
+          if (!canApplyTransition)
+            const Text('Add or enable two video/image clips to use transition recipes.', style: TextStyle(fontSize: 9, color: Color(0xFFE2C58E))),
+          if (transitionPresets.isEmpty)
+            const Text('No transition recipes match this search.', style: TextStyle(fontSize: 10)),
+        ],
+        const Divider(height: 20),
+        _panelHeader('PORTABLE PRESETS & ONLINE PACKS', Icons.cloud_download_outlined),
+        if (layer != null)
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => _exportMotionPreset(layer),
+                icon: const Icon(Icons.file_download_outlined, size: 15),
+                label: const Text('EXPORT LAYER PRESET'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _importMotionPreset,
+                icon: const Icon(Icons.file_upload_outlined, size: 15),
+                label: const Text('IMPORT .DVMPRESET'),
+              ),
+            ],
+          )
+        else
+          const Text('Select a layer to import or export a portable .dvmpreset.', style: TextStyle(fontSize: 9, color: Color(0xFF9EADC4))),
+        const SizedBox(height: 6),
+        OutlinedButton.icon(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ExtensionMarketplaceScreen()),
+          ),
+          icon: const Icon(Icons.storefront_outlined, size: 16),
+          label: const Text('OPEN SIGNED ONLINE MARKETPLACE'),
+        ),
+        const SizedBox(height: 6),
+        _buildMotionBroPackBrowser(),
+      ],
+    );
+  }
+
+  Widget _assetCountChip(IconData icon, String label) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF202B3C),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF35445C)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: const Color(0xFFB8C9E6)),
+            const SizedBox(width: 4),
+            Text(label, style: const TextStyle(fontSize: 8, color: Color(0xFFCFD9E8))),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildActivePanel(CompositionLayer? layer) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
@@ -1756,7 +2029,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                for (final panel in const ['Layers', 'Typography', 'Timing', 'Transform', 'Color', 'Animation', 'Shape', 'Effects', 'Masks', 'Audio', 'Bus Mixer', 'Tracking', 'Transitions', 'Parent', '3D'])
+                for (final panel in const ['Layers', 'Typography', 'Timing', 'Transform', 'Color', 'Animation', 'Shape', 'Effects', 'Library', 'Masks', 'Audio', 'Bus Mixer', 'Tracking', 'Transitions', 'Parent', '3D'])
                   TextButton(
                     onPressed: () => setState(() => _panel = panel),
                     child: Text(panel, style: TextStyle(fontSize: 10, fontWeight: _panel == panel ? FontWeight.w900 : FontWeight.normal)),
@@ -1772,7 +2045,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                         padding: const EdgeInsets.all(12),
                         child: _buildAudioBusPanel(null),
                       )
-                    : const Center(child: Text('Select a layer to edit'))
+                     : _panel == 'Library'
+                        ? SingleChildScrollView(
+                            padding: const EdgeInsets.all(12),
+                            child: _buildAssetLibraryPanel(null),
+                          )
+                        : const Center(child: Text('Select a layer to edit'))
                 : SingleChildScrollView(
                     padding: const EdgeInsets.all(12),
                     child: _panelContent(layer),
@@ -1799,6 +2077,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         return _buildShapePanel(layer);
       case 'Effects':
         return _buildEffectsPanel(layer);
+      case 'Library':
+        return _buildAssetLibraryPanel(layer);
       case 'Masks':
         return _buildMasksPanel(layer);
       case 'Audio':
