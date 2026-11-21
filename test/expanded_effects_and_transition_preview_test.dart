@@ -1,4 +1,7 @@
 import 'package:depthvibe/features/composition/data/effect_catalog.dart';
+import 'package:depthvibe/features/composition/data/effect_preset_catalog.dart';
+import 'package:depthvibe/features/composition/data/transition_preset_catalog.dart';
+import 'package:depthvibe/features/composition/application/composition_controller.dart';
 import 'package:depthvibe/features/composition/data/motion_preset_catalog.dart';
 import 'package:depthvibe/features/composition/data/transition_catalog.dart';
 import 'package:depthvibe/features/composition/domain/composition_models.dart';
@@ -52,7 +55,7 @@ void main() {
 
   test('motion preset catalog contains the expanded editable recipes', () {
     final ids = MotionPresetCatalog.all.map((preset) => preset.id).toSet();
-    expect(MotionPresetCatalog.all.length, 34);
+    expect(MotionPresetCatalog.all.length, 54);
     expect(ids.length, MotionPresetCatalog.all.length);
     expect(ids, containsAll([
       'fade_slide_up',
@@ -61,7 +64,65 @@ void main() {
       'overshoot_left',
       'heartbeat',
       'jelly',
+      'cinematic_push_in',
+      'spin_pop_in',
+      'lower_third_rise',
+      'snap_zoom',
     ]));
+  });
+
+
+  test('original effect looks contain only safe registered native effects', () {
+    final ids = EffectPresetCatalog.all.map((preset) => preset.id).toList();
+    expect(ids.length, 39);
+    expect(ids.toSet().length, ids.length);
+
+    for (final preset in EffectPresetCatalog.all) {
+      expect(preset.steps, isNotEmpty, reason: preset.id);
+      for (final step in preset.steps) {
+        final definition = EffectCatalog.findBuiltin(step.effectId);
+        expect(definition, isNotNull, reason: '${preset.id} -> ${step.effectId}');
+        for (final entry in step.parameters.entries) {
+          final matches = definition!.parameters
+              .where((item) => item.id == entry.key)
+              .toList();
+          expect(matches.length, 1, reason: '${preset.id} -> ${entry.key}');
+          final parameter = matches.single;
+          expect(entry.value, inInclusiveRange(parameter.min, parameter.max));
+        }
+      }
+    }
+  });
+
+  test('effect look applies as an editable multi-effect stack', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(id: 'layer-1', name: 'Footage', kind: LayerKind.video),
+        ],
+        selectedLayerId: 'layer-1',
+      ),
+    );
+
+    controller.applyEffectPreset('cinema_teal_amber');
+
+    final effects = controller.selectedLayer!.effects;
+    expect(effects.length, 3);
+    expect(effects.map((effect) => effect.effectId), [
+      'color_grade',
+      'vibrance',
+      'vignette',
+    ]);
+  });
+
+  test('pro transition recipes map to registered transition kinds', () {
+    final ids = TransitionPresetCatalog.all.map((preset) => preset.id).toList();
+    expect(ids.length, 38);
+    expect(ids.toSet().length, ids.length);
+    for (final preset in TransitionPresetCatalog.all) {
+      expect(TransitionCatalog.all, contains(preset.kind));
+      expect(preset.durationMs, inInclusiveRange(150, 2000));
+    }
   });
 
   testWidgets('transition preview tile applies the selected transition', (tester) async {
