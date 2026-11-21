@@ -275,7 +275,7 @@ def configure_windows_branding() -> None:
     main_cpp = runner / "main.cpp"
     if main_cpp.exists():
         text = main_cpp.read_text(encoding="utf-8")
-        pattern = re.compile(r'(window\.Create\s*\(\s*)L"[^"]*"')
+        pattern = re.compile(r'(window\.CreateAndShow\s*\(\s*L")[^"]*(")')
         updated, count = pattern.subn(
             lambda match: match.group(1) + 'L"DepthVibe"',
             text,
