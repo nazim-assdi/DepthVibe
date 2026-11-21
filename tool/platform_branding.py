@@ -37,20 +37,40 @@ def replace_windows_window_title(source: str) -> tuple[str, int]:
     )
 
 
-def disable_windows_impeller(source: str) -> tuple[str, int]:
-    """Use the stable Skia renderer on Windows desktop for older GPU compatibility."""
-    if "set_impeller_switch" in source:
-        return source, 0
-    return _WINDOWS_PROJECT.subn(
+def configure_windows_gpu_path(source: str) -> tuple[str, int]:
+    """Use Flutter's supported Impeller renderer and prefer the integrated GPU.
+
+    The Windows embedder uses ANGLE for its EGL compositor. Forcing Skia alone
+    does not avoid legacy ANGLE/D3D presentation failures, while Impeller is
+    the supported default renderer on current Flutter Windows releases.
+    """
+    original = source
+    # Remove previous renderer preferences so the generated runner has one
+    # unambiguous configuration regardless of its prior bootstrap state.
+    source = re.sub(
+        r'(?m)^\s*project\.set_impeller_switch\([^;]+\);\s*\n?',
+        '',
+        source,
+    )
+    source = re.sub(
+        r'(?m)^\s*project\.set_gpu_preference\([^;]+\);\s*\n?',
+        '',
+        source,
+    )
+    source, count = _WINDOWS_PROJECT.subn(
         lambda match: (
             match.group(0)
             + "\n"
             + match.group("indent")
-            + "project.set_impeller_switch(flutter::ImpellerSwitch::Disabled);"
+            + "project.set_impeller_switch(flutter::ImpellerSwitch::Enabled);"
+            + "\n"
+            + match.group("indent")
+            + "project.set_gpu_preference(flutter::GpuPreference::LowPowerPreference);"
         ),
         source,
         count=1,
     )
+    return source, 1 if source != original and count else 0
 
 
 def disable_linux_impeller(source: str) -> tuple[str, int]:
