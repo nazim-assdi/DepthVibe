@@ -65,6 +65,7 @@ class _DepthVibeSettingsDialogState extends State<DepthVibeSettingsDialog> {
                       const SizedBox(height: 24),
                       _navItem('General', Icons.tune),
                       _navItem('View', Icons.visibility_outlined),
+                      _navItem('Performance', Icons.speed),
                       const Spacer(),
                       Text(
                         'DEPTHVIBE  •  N TECH',
@@ -104,7 +105,9 @@ class _DepthVibeSettingsDialogState extends State<DepthVibeSettingsDialog> {
                               Text(
                                 _section == 'View'
                                     ? 'Personalise the workspace appearance.'
-                                    : 'General application preferences.',
+                                    : _section == 'Performance'
+                                        ? 'Tune preview quality for your computer.'
+                                        : 'General application preferences.',
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: palette.secondaryText,
@@ -227,6 +230,72 @@ class _DepthVibeSettingsDialogState extends State<DepthVibeSettingsDialog> {
                           ),
                         ],
                       ),
+                    ] else if (_section == 'Performance') ...[
+                      const Text(
+                        '3D PREVIEW PERFORMANCE',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 10,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Choose how much detail the live 3D viewport renders. Compatibility is intended for older CPUs and integrated graphics.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: palette.secondaryText,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Expanded(
+                        child: AnimatedBuilder(
+                          animation: _settings,
+                          builder: (context, _) => ListView(
+                            children: [
+                              for (final mode in DepthVibePerformanceMode.values)
+                                Card(
+                                  color: _settings.performanceMode == mode
+                                      ? palette.accentSoft.withValues(alpha: 0.35)
+                                      : palette.panel,
+                                  child: RadioListTile<DepthVibePerformanceMode>(
+                                    value: mode,
+                                    groupValue: _settings.performanceMode,
+                                    selected: _settings.performanceMode == mode,
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        _settings.setPerformanceMode(value);
+                                      }
+                                    },
+                                    title: Text(
+                                      mode.title,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      mode.description,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: palette.secondaryText,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'This changes live 3D preview resolution only. Final exports keep the composition dimensions and quality settings.',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: palette.secondaryText,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                     ] else ...[
                       Expanded(
                         child: Center(
