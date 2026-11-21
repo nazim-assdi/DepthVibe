@@ -102,7 +102,13 @@ class AdobeInterchangeService {
           externalHostApp:'premierepro',externalLayerIndex:trackIndex,
           interchangeMetadata:{'hostApp':'premierepro','trackIndex':trackIndex,'trackName':_s(track['name'],'Track '+trackIndex.toString()),
             'clipIndex':ci,'speed':_d(clip['speed'],1),'sourceName':_s(clip['sourceName'],name),'sourcePath':path,
-            'unsupportedEffects':mappedResult.rawUnsupported},
+            'unsupportedEffects':mappedResult.rawUnsupported,
+            if(clip['mogrtTemplate'] is Map)
+              'mogrtTemplate':_map(clip['mogrtTemplate']),
+            if(_b(clip['mogrtTemplate'] is Map
+              ? _map(clip['mogrtTemplate'])['isEditableTemplate']
+              : false))
+              'isMotionGraphicsTemplate':true},
         ));
         if(start+duration>maxEnd)maxEnd=start+duration;
         if(path==null&&!audio)warnings.add('Missing media: '+name+' (use Relink).');

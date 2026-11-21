@@ -720,6 +720,10 @@ async function captureTrackItems(track, trackType) {
       sourceName: projectItem && projectItem.name ? projectItem.name : null,
       sourcePath: typeof sourcePath === "string" ? sourcePath : null,
       effects: effects,
+      mogrtTemplate: effects.some((effect) =>
+        effect.matchName === "AE.ADBE Capsule" || effect.isMotionGraphicsTemplate === true)
+        ? {isEditableTemplate: true, componentMatchName: "AE.ADBE Capsule"}
+        : null,
       sourceId: projectItem && typeof projectItem.getId === "function"
         ? await optional(() => projectItem.getId())
         : null,

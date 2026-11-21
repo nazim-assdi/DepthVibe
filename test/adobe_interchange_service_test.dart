@@ -291,6 +291,10 @@ void main() {
                   'name': 'Title Template',
                   'startSeconds': 0,
                   'durationSeconds': 5,
+                  'mogrtTemplate': {
+                    'fileName': 'Title_Template.mogrt',
+                    'isEditableTemplate': true,
+                  },
                   'effects': [
                     {
                       'matchName': 'AE.ADBE Capsule',
@@ -359,6 +363,9 @@ void main() {
       });
 
       final layer = report.document.layers.single;
+      expect(layer.interchangeMetadata['isMotionGraphicsTemplate'], true);
+      expect((layer.interchangeMetadata['mogrtTemplate'] as Map)['fileName'],
+          'Title_Template.mogrt');
       final mogrt = layer.effects.firstWhere(
         (effect) => effect.nativeDescriptor['isMotionGraphicsTemplate'] == true,
       );
