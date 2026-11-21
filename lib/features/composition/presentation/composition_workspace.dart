@@ -2028,6 +2028,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 2),
                   Text(category.toUpperCase() + ' · ' + countLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: Color(0xFF9FAFC9))),
                   const SizedBox(height: 4),
                   Text(description, maxLines: 2, overflow: TextOverflow.ellipsis,
