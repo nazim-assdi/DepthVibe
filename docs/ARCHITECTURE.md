@@ -37,7 +37,9 @@ KeyframeTrack samples Hold, Linear, Ease In, Ease Out and Ease In/Out. FfmpegAni
 
 The first resolver is not a complete matrix hierarchy: anchor-space rotations, skew, constraints and full 3D camera projection are not implemented. Bezier mask handles are not yet rasterized as true curves.
 
-The transition browser has a Flutter CustomPainter A/B preview tile. Mouse hover starts and stops the preview animation; its Apply action calls the same CompositionController transition-add operation used by the quick-add picker. The browser exposes the 61 `TransitionKind` values and filters them by group and search query. Its generated scenes demonstrate the direction and mask family; exact filter-specific pixel behaviour is still determined by FFmpeg at render time.
+The transition browser has a Flutter CustomPainter A/B preview tile. Mouse hover starts and stops the preview animation; its Apply action calls the same CompositionController transition-add operation used by the quick-add picker. It exposes all 61 TransitionKind values plus 38 named transition recipes with curated durations. Generated scenes demonstrate the direction and mask family; exact filter-specific pixel behaviour is still determined by FFmpeg at render time.
+
+The unified Asset Library combines 39 original EffectPresetDefinition looks, 54 MotionPresetDefinition keyframe recipes, the 38 transition recipes and the 68 native effect registry entries. CompositionController.applyEffectPreset resolves every step against EffectCatalog, starts from registered defaults, validates parameter IDs and clamps values to the native parameter ranges before adding independent EffectInstance entries. Motion recipes are ordinary editable layer keyframes. The Library UI also links to the signed extension Marketplace, .dvmpreset transfer and locally imported Motion Bro packs; third-party paid pack files are not bundled or unlocked.
 
 ## Audio graph
 
