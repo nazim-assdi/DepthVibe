@@ -335,3 +335,16 @@ The extension manager is a data-only v1, not a general-purpose runtime for arbit
 - Added a Premiere Pro 25.6+ UXP panel, an After Effects CEP legacy panel, an After Effects Beta UXP panel source scaffold, and TypeScript SDK contracts/client.
 
 **Important boundary:** these panels are bridge integrations. They do not yet translate arbitrary Premiere sequences or After Effects compositions/projects. Native Adobe .prm/.aex effects remain Adobe-host binaries requiring separate C++ SDK builds and host-side testing. No production marketplace catalog/server is hosted by this repository.
+
+
+## Implementation Update — 21 November 2026
+
+### Cancellable compositor export and low-spec preview controls
+
+- Added a shared cancellation token across CPU 3D frame generation, intermediate FFmpeg encoding and final composition encoding. Cancellation before an FFmpeg session handle is returned is remembered and applied immediately when the session attaches.
+- Cancelled renders raise a typed cancellation result, remove incomplete output and clean temporary mesh/text render folders. Closing the workspace requests cancellation rather than leaving a render running without its owner.
+- The compositor progress indicator now allocates 0–20% to 3D frame preparation and 20–100% to final encoding, and exposes percentage plus Cancel/Stopping controls.
+- Added persisted Compatibility (320 px / 0.55 scale), Balanced (480 px / 0.75) and Quality (640 px / 1.0) preview modes. CPU fallback resolution and GPU presentation scale read the selected setting. Final composition dimensions are unchanged.
+- Added regression tests for cancellation lifecycle and monotonic preview workload presets.
+
+**Scope boundary:** this is active-render cancellation and progress, not yet a persistent multi-job Render Queue. Job scheduling, durable per-job logs, recovery/resume and retry controls remain open. Low-end CPU/GPU performance still requires physical-device measurement.
