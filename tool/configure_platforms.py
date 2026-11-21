@@ -2,7 +2,12 @@ from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
 
-from platform_branding import replace_linux_window_title, replace_windows_window_title
+from platform_branding import (
+    disable_linux_impeller,
+    disable_windows_impeller,
+    replace_linux_window_title,
+    replace_windows_window_title,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -248,6 +253,7 @@ def configure_linux_branding() -> None:
     app_source = linux / "runner" / "my_application.cc"
     if app_source.exists():
         text = app_source.read_text(encoding="utf-8")
+        text, _ = disable_linux_impeller(text)
         text, _ = replace_linux_window_title(text)
         icon_call = 'gtk_window_set_icon_name(window, "depthvibe");'
         if icon_call not in text:
@@ -271,7 +277,8 @@ def configure_windows_branding() -> None:
     if main_cpp.exists():
         text = main_cpp.read_text(encoding="utf-8")
         updated, count = replace_windows_window_title(text)
-        if count:
+        updated, renderer_count = disable_windows_impeller(updated)
+        if count or renderer_count:
             main_cpp.write_text(updated, encoding="utf-8")
         elif "window.Create" in text and '"DepthVibe"' not in text:
             raise RuntimeError(

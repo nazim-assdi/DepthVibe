@@ -29,3 +29,42 @@ def replace_windows_window_title(source: str) -> tuple[str, int]:
         source,
         count=1,
     )
+
+_WINDOWS_PROJECT = re.compile(
+    r'(?m)^(?P<indent>\\s*)flutter::DartProject\\s+project\\s*\\(\\s*L"data"\\s*\\)\\s*;'
+)
+_LINUX_PROJECT = re.compile(
+    r'(?m)^(?P<indent>\\s*)g_autoptr\\(FlDartProject\\)\\s+project\\s*=\\s*fl_dart_project_new\\(\\)\\s*;'
+)
+
+
+def disable_windows_impeller(source: str) -> tuple[str, int]:
+    """Use the stable Skia renderer on Windows desktop for older GPU compatibility."""
+    if "set_impeller_switch" in source:
+        return source, 0
+    return _WINDOWS_PROJECT.subn(
+        lambda match: (
+            match.group(0)
+            + "\\n"
+            + match.group("indent")
+            + "project.set_impeller_switch(flutter::ImpellerSwitch::Disabled);"
+        ),
+        source,
+        count=1,
+    )
+
+
+def disable_linux_impeller(source: str) -> tuple[str, int]:
+    """Use the stable Skia renderer on Linux desktop for older GPU compatibility."""
+    if "fl_dart_project_set_enable_impeller" in source:
+        return source, 0
+    return _LINUX_PROJECT.subn(
+        lambda match: (
+            match.group(0)
+            + "\\n"
+            + match.group("indent")
+            + "fl_dart_project_set_enable_impeller(project, FALSE);"
+        ),
+        source,
+        count=1,
+    )

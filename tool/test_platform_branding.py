@@ -4,6 +4,8 @@ from __future__ import annotations
 import unittest
 
 from platform_branding import (
+    disable_linux_impeller,
+    disable_windows_impeller,
     replace_linux_window_title,
     replace_windows_window_title,
 )
@@ -45,6 +47,41 @@ class PlatformBrandingTests(unittest.TestCase):
         updated, count = replace_windows_window_title(source)
         self.assertEqual(count, 1)
         self.assertEqual(updated, source)
+
+    def test_windows_impeller_falls_back_to_skia(self) -> None:
+        source = (
+            '#include <flutter/dart_project.h>\\n'
+            'flutter::DartProject project(L"data");\\n'
+            'FlutterWindow window(project);'
+        )
+        updated, count = disable_windows_impeller(source)
+        self.assertEqual(count, 1)
+        self.assertIn(
+            'project.set_impeller_switch(flutter::ImpellerSwitch::Disabled);',
+            updated,
+        )
+
+    def test_windows_impeller_setting_is_idempotent(self) -> None:
+        source = (
+            'flutter::DartProject project(L"data");\\n'
+            'project.set_impeller_switch(flutter::ImpellerSwitch::Disabled);'
+        )
+        updated, count = disable_windows_impeller(source)
+        self.assertEqual(count, 0)
+        self.assertEqual(updated, source)
+
+    def test_linux_impeller_falls_back_to_skia(self) -> None:
+        source = (
+            'g_autoptr(FlDartProject) project = fl_dart_project_new();\\n'
+            'view = fl_view_new(project);'
+        )
+        updated, count = disable_linux_impeller(source)
+        self.assertEqual(count, 1)
+        self.assertIn(
+            'fl_dart_project_set_enable_impeller(project, FALSE);',
+            updated,
+        )
+
 
 
 if __name__ == "__main__":
