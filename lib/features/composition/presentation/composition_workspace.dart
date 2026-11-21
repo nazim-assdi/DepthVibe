@@ -201,6 +201,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   bool _stabilizeTracking = true;
   bool _rendering = false;
   double _renderProgress = 0;
+  CompositionExportCancellation? _renderCancellation;
   String _panel = 'Layers';
   String _effectCategory = 'All';
   String _effectSearch = '';
@@ -972,8 +973,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     });
   }
 
+  void _cancelCompositionRender() {
+    final cancellation = _renderCancellation;
+    if (cancellation == null || cancellation.isCancelled) return;
+    cancellation.cancel();
+    if (mounted) {
+      setState(() => _notice = 'Stopping render and cleaning temporary files…');
+    }
+  }
+
   Future<void> _exportComposition() async {
     if (_rendering) return;
+    final cancellation = CompositionExportCancellation();
+    _renderCancellation = cancellation;
     setState(() {
       _rendering = true;
       _renderProgress = 0;
@@ -982,6 +994,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     try {
       final result = await _exporter.export(
         _controller.document,
+        cancellation: cancellation,
         onProgress: (value) {
           if (mounted) setState(() => _renderProgress = value);
         },
@@ -998,9 +1011,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           text: 'Composition rendered with DepthVibe by N Tech',
         ),
       );
+    } on CompositionExportCancelled {
+      if (mounted) {
+        setState(() => _notice = 'Composition render cancelled. Temporary files cleaned.');
+      }
     } catch (error) {
       if (mounted) setState(() => _notice = 'Composition render failed: $error');
     } finally {
+      _renderCancellation = null;
       if (mounted) setState(() => _rendering = false);
     }
   }
@@ -1095,6 +1113,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   @override
   void dispose() {
     _recoveryTimer?.cancel();
+    _renderCancellation?.cancel();
     _controller.removeListener(_onCompositionChanged);
     ExtensionManagerService.instance.removeListener(_onExtensionsChanged);
     _motionBroService.removeListener(_onMotionBroPacksChanged);
@@ -1208,9 +1227,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 icon: const Icon(Icons.lightbulb_outline),
               ),
               IconButton(
-                tooltip: 'Render composition to MP4',
-                onPressed: _rendering ? null : _exportComposition,
-                icon: const Icon(Icons.ios_share),
+                tooltip: _rendering
+                    ? 'Cancel composition render'
+                    : 'Render composition to MP4',
+                onPressed: _rendering
+                    ? _cancelCompositionRender
+                    : _exportComposition,
+                icon: Icon(
+                  _rendering ? Icons.stop_circle_outlined : Icons.ios_share,
+                ),
               ),
               const SizedBox(width: 6),
             ],
@@ -1242,10 +1267,40 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ),
               _buildTimeline(doc.layers, doc.playheadMs, doc.durationMs),
               if (_rendering || _projectBusy)
-                LinearProgressIndicator(
-                  value: _rendering && _renderProgress != 0
-                      ? _renderProgress
-                      : null,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: LinearProgressIndicator(
+                          value: _rendering && _renderProgress != 0
+                              ? _renderProgress
+                              : null,
+                        ),
+                      ),
+                      if (_rendering) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          '${(_renderProgress * 100).round()}%',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontFeatures: [ui.FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        TextButton(
+                          onPressed: _renderCancellation?.isCancelled == true
+                              ? null
+                              : _cancelCompositionRender,
+                          child: Text(
+                            _renderCancellation?.isCancelled == true
+                                ? 'STOPPING…'
+                                : 'CANCEL',
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               if (_notice != null)
                 Container(
