@@ -196,7 +196,7 @@ function renderHostEffectList(root) {
     container.appendChild(button);
   });
   const count = document.createElement("small");
-  count.textContent = "Showing " + matches.length + " of " + installedVideoEffects.length + " installed video effects";
+  count.textContent = "Showing " + matches.length + " of " + installedEffects.length + " installed effects";
   container.appendChild(count);
 }
 async function publishPremiereSnapshot(snapshot) {

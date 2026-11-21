@@ -2469,16 +2469,38 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ? displayName
         : (parameter['name']?.toString() ?? matchName);
     final value = parameter['value'];
+    final rawPath = parameter['path'];
+    final parameterPath = rawPath is List
+        ? rawPath.map((part) => part.toString()).toList()
+        : null;
+    void update(Object? next) => _controller.setNativeEffectParameter(
+          effect.id, matchName, next, parameterPath: parameterPath,
+        );
     if (matchName.isEmpty) return const SizedBox.shrink();
+    final rawFrames = parameter['keyframes'];
+    final keyframeCount = rawFrames is List ? rawFrames.length : 0;
+    final keyframeNote = keyframeCount == 0
+        ? null
+        : Padding(
+            padding: const EdgeInsets.only(top: 2, bottom: 4),
+            child: Text(
+              'Host animation · ' + keyframeCount.toString() + ' keyframe(s)',
+              style: const TextStyle(fontSize: 9, color: Color(0xFF91A6C4)),
+            ),
+          );
     if (value is bool) {
-      return SwitchListTile(
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        title: Text(label, style: const TextStyle(fontSize: 10)),
-        value: value,
-        onChanged: (next) => _controller.setNativeEffectParameter(
-          effect.id, matchName, next,
-        ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: Text(label, style: const TextStyle(fontSize: 10)),
+            value: value,
+            onChanged: update,
+          ),
+          if (keyframeNote != null) keyframeNote,
+        ],
       );
     }
     if (value is num) {
@@ -2489,30 +2511,89 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              label + '  ' + safeValue.toStringAsFixed(2) +
-                  (parameter['unitsText'] == null
-                      ? ''
-                      : ' ' + parameter['unitsText'].toString()),
-              style: const TextStyle(fontSize: 10),
-            ),
-            Slider(
-              min: min,
-              max: max,
-              value: safeValue,
-              onChanged: (next) => _controller.setNativeEffectParameter(
-                effect.id, matchName, next,
-              ),
-            ),
+            Text(label + '  ' + safeValue.toStringAsFixed(2) +
+                (parameter['unitsText'] == null ? '' : ' ' + parameter['unitsText'].toString()),
+                style: const TextStyle(fontSize: 10)),
+            Slider(min: min, max: max, value: safeValue, onChanged: update),
+            if (keyframeNote != null) keyframeNote,
           ],
         );
       }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 10)),
+          SizedBox(
+            height: 34,
+            child: TextFormField(
+              key: ValueKey<String>(effect.id + matchName + value.toString()),
+              initialValue: value.toString(),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+              onFieldSubmitted: (raw) {
+                final next = double.tryParse(raw);
+                if (next != null && next.isFinite) update(next);
+              },
+            ),
+          ),
+          if (keyframeNote != null) keyframeNote,
+        ],
+      );
+    }
+    if (value is List && value.isNotEmpty && value.every((item) => item is num)) {
+      final values = value.map((item) => (item as num).toDouble()).toList();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(label + ' · ' + values.length.toString() + ' channels',
+              style: const TextStyle(fontSize: 10)),
+          Wrap(
+            spacing: 6, runSpacing: 4,
+            children: [
+              for (var index = 0; index < values.length; index++)
+                SizedBox(
+                  width: 76, height: 34,
+                  child: TextFormField(
+                    key: ValueKey<String>(effect.id + matchName + index.toString() + values[index].toString()),
+                    initialValue: values[index].toStringAsFixed(3),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                    decoration: InputDecoration(
+                      labelText: ['X', 'Y', 'Z', 'W'][index.clamp(0, 3).toInt()],
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+                    ),
+                    onFieldSubmitted: (raw) {
+                      final next = double.tryParse(raw);
+                      if (next == null || !next.isFinite) return;
+                      final updated = [...values]..[index] = next;
+                      update(updated);
+                    },
+                  ),
+                ),
+            ],
+          ),
+          if (keyframeNote != null) keyframeNote,
+        ],
+      );
+    }
+    final options = parameter['options'];
+    if (options is List && options.isNotEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Text(label + ': ' +
+            (parameter['valueText']?.toString() ?? value?.toString() ?? 'Host option'),
+            style: const TextStyle(fontSize: 9, color: Color(0xFF9DABC3))),
+      );
     }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Text(
-        label + ': ' + (value?.toString() ?? 'Unsupported parameter type'),
-        style: const TextStyle(fontSize: 9, color: Color(0xFF9DABC3)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label + ': ' + (value?.toString() ?? 'Unsupported parameter type'),
+              style: const TextStyle(fontSize: 9, color: Color(0xFF9DABC3))),
+          if (keyframeNote != null) keyframeNote,
+        ],
       ),
     );
   }

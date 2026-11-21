@@ -1038,8 +1038,9 @@ class CompositionController extends ChangeNotifier {
   void setNativeEffectParameter(
     String effectInstanceId,
     String parameterMatchName,
-    Object? value,
-  ) {
+    Object? value, {
+    List<String>? parameterPath,
+  }) {
     final layer = selectedLayer;
     if (layer == null || layer.locked) return;
     final effects = layer.effects.map((effect) {
@@ -1051,7 +1052,16 @@ class CompositionController extends ChangeNotifier {
         if (raw is! Map) return raw;
         final item = Map<String, Object?>.from(raw);
         final matchName = item['matchName']?.toString() ?? '';
-        if (matchName == parameterMatchName) item['value'] = value;
+        final rawPath = item['path'];
+        final itemPath = rawPath is List
+            ? rawPath.map((part) => part.toString()).toList()
+            : const <String>[];
+        final pathMatches = parameterPath == null ||
+            (itemPath.length == parameterPath.length &&
+                List.generate(itemPath.length,
+                    (index) => itemPath[index] == parameterPath[index])
+                    .every((same) => same));
+        if (pathMatches && matchName == parameterMatchName) item['value'] = value;
         return item;
       }).toList();
       descriptor['parameters'] = parameters;

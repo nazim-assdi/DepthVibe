@@ -92,6 +92,42 @@ void main() {
     expect(descriptor['matchName'], 'Vendor.Glow');
   });
 
+  test('updates duplicate native parameter names by full host property path', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(
+            id: 'target',
+            name: 'Target',
+            kind: LayerKind.video,
+            effects: [
+              EffectInstance(
+                id: 'native-1',
+                effectId: 'native_effect',
+                name: 'Nested native effect',
+                nativeDescriptor: {
+                  'matchName': 'Vendor.Nested',
+                  'parameters': [
+                    {'matchName': 'Radius', 'path': ['GroupA', 'Radius'], 'value': 5.0},
+                    {'matchName': 'Radius', 'path': ['GroupB', 'Radius'], 'value': 15.0},
+                  ],
+                },
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'target',
+      ),
+    );
+    controller.setNativeEffectParameter(
+      'native-1', 'Radius', 25.0,
+      parameterPath: const ['GroupB', 'Radius'],
+    );
+    final parameters = controller.selectedLayer!.effects.single.nativeDescriptor['parameters'] as List;
+    expect((parameters[0] as Map)['value'], 5.0);
+    expect((parameters[1] as Map)['value'], 25.0);
+  });
+
   test('applies motion presets as editable keyframe tracks', () {
     final controller = CompositionController(
       document: const CompositionDocument(
