@@ -3,6 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:nitro_webgpu/nitro_webgpu.dart';
 
+import '../../../app/depthvibe_settings.dart';
+
 import '../domain/composition_models.dart';
 import 'obj_mesh_loader.dart';
 import 'parent_transform_resolver.dart';
@@ -129,6 +131,8 @@ class _Gpu3dMeshViewState extends State<Gpu3dMeshView> {
               compositionHeight: widget.compositionHeight,
               timeMs: widget.timeMs,
               animationIndex: widget.animationIndex,
+              maximumPreviewDimension: DepthVibeSettingsService
+                  .instance.performanceMode.maximumPreviewDimension,
             ),
           ),
           Positioned(
@@ -202,12 +206,18 @@ class _Gpu3dMeshViewState extends State<Gpu3dMeshView> {
         }
         final bytes = _vertexData.bytes;
         final vertexCount = _vertexData.vertexCount;
+        final performanceScale =
+            DepthVibeSettingsService.instance.performanceMode.gpuRenderScale;
+        final renderScale = boot.adapterType == 'integratedGpu' &&
+                performanceScale > 0.75
+            ? 0.75
+            : performanceScale;
         return Stack(
           fit: StackFit.expand,
           children: [
             WebGpuView(
               device: boot.device,
-              renderScale: boot.adapterType == 'integratedGpu' ? 0.75 : 1.0,
+              renderScale: renderScale,
               controller: _viewController,
               onFrame: (target, elapsed) async {
                 await _renderer.render(
