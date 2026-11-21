@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import '../data/effect_catalog.dart';
+import '../data/effect_preset_catalog.dart';
 import '../domain/composition_models.dart';
 import '../domain/color_grade_preset.dart';
 import '../data/motion_preset_catalog.dart';
@@ -727,6 +728,42 @@ class CompositionController extends ChangeNotifier {
         return mask.copyWith(keyframeTracks: tracks);
       }).toList(),
     ));
+  }
+
+  /// Applies an original multi-effect look as editable native effects.
+  /// Unknown effect IDs/parameters are ignored and values are clamped to the
+  /// registered parameter schema before they enter a project.
+  void applyEffectPreset(String presetId) {
+    final layer = selectedLayer;
+    final preset = EffectPresetCatalog.find(presetId);
+    if (layer == null || layer.locked || preset == null) return;
+
+    final additions = <EffectInstance>[];
+    for (final step in preset.steps) {
+      final definition = EffectCatalog.find(step.effectId);
+      if (definition == null) continue;
+      final parameters = <String, double>{
+        for (final parameter in definition.parameters)
+          parameter.id: parameter.defaultValue,
+      };
+      for (final entry in step.parameters.entries) {
+        final parameter = definition.parameters
+            .where((item) => item.id == entry.key)
+            .firstOrNull;
+        if (parameter == null || !entry.value.isFinite) continue;
+        parameters[entry.key] =
+            entry.value.clamp(parameter.min, parameter.max).toDouble();
+      }
+      additions.add(EffectInstance(
+        id: _id('preset_effect'),
+        effectId: definition.id,
+        name: definition.name,
+        parameters: parameters,
+        assetUri: definition.assetUri,
+      ));
+    }
+    if (additions.isEmpty) return;
+    _replace(layer.copyWith(effects: [...layer.effects, ...additions]));
   }
 
   void addEffect(String effectId) {
