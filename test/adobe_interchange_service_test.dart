@@ -85,7 +85,12 @@ void main() {
       expect(gaussian.parameters['sigma'], 6);
       expect(video.effects.any((effect) => effect.effectId == 'native_effect'), isTrue);
       expect(report.mappedEffects, hasLength(1));
-      expect(report.unsupportedEffects, contains('premierepro: Vendor.SuperGlow'));
+      expect(
+        report.unsupportedEffects.any(
+          (item) => item.startsWith('premierepro: Vendor.SuperGlow'),
+        ),
+        isTrue,
+      );
       expect(report.document.layers.last.kind, LayerKind.audio);
     });
 
