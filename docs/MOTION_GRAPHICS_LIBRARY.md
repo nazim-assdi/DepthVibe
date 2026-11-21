@@ -31,11 +31,26 @@ The transition picker exposes the full built-in xfade identifier family: fades/d
 
 The searchable preview browser groups transitions into Fade, Wipe, Move, Shape and Stylize, and the unified Asset Library provides 38 named recipes with preset timing values. Hovering a card runs a generated A/B motion sample and its Apply control inserts that transition for the selected clip. These thumbnails are illustrative previews, not a pixel-identical render of every native xfade implementation; final composition output uses FFmpeg's xfade filter.
 
-## Unified Asset Library
+## Unified Creative Asset Library
 
-The Library tab combines effect looks, editable motion recipes and transition recipes with one search field and type filters. Effect looks apply a set of registered native effects with validated parameter defaults; each effect remains independently editable and can be animated through its existing parameter controls. Motion recipes add ordinary, editable transform/opacity keyframes at the current playhead. Transition recipes add a native transition between two enabled visual clips and set its intended duration.
+The Library tab is organised into six primary categories plus transitions:
 
-The same panel links to .dvmpreset import/export, the signed publisher marketplace and the user-supplied Motion Bro pack browser. The online marketplace requires a publisher HTTPS catalog and an explicitly trusted signing key; it is not a free-for-all scraper of paid proprietary assets.
+| Category | Built-in entries | Apply behaviour |
+|---|---:|---|
+| Overlays & Stickers | 72 | 30 native effect overlays and 42 editable text/symbol stickers; user images can be imported as image layers |
+| Motion | 54 | Editable transform and opacity keyframes |
+| Audio Presets | 41 | Track gain, three-band EQ, pan and fade settings |
+| Titles & Lower Thirds | 39 | New editable text layers with typography, position and motion |
+| Color Presets | 48 | Native primary color-grade recipes |
+| Multi-effect Color Looks | 39 | Independently editable effect stacks |
+| Video Effects & Filters | 68 | Native visual effect registry, plus installed declarative extension effects |
+| Transitions | 38 recipes / 61 engine kinds | Native clip transitions and curated duration presets |
+
+The 399-entry count across the first eight collections is an entry count, not a count of unique media files. Some underlying effect IDs are intentionally reusable as single effects, overlay recipes and steps in multi-effect looks.
+
+The unified browser searches every category and exposes preview/apply actions. Applying a title or typographic sticker creates a real text layer; an image sticker can be imported as an image layer. Audio presets use the audio controls currently implemented in the project model—gain, low/mid/high EQ, pan and fades. They do not add reverb, de-essing, convolution or a full plugin rack.
+
+The same panel links to image/audio/LUT imports, .dvmpreset, the signed publisher marketplace, the user-supplied Motion Bro pack browser and a curated directory of open asset sources. Online sources are opened at their original websites; downloads are not silently repackaged. Check each item's licence and attribution requirements before import or redistribution.
 
 ## Adobe host interoperability
 
