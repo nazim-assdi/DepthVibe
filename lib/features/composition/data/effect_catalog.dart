@@ -477,6 +477,183 @@ class EffectCatalog {
       ],
       ffmpegFilter: 'hqdn3d',
     ),
+
+    EffectDefinition(
+      id: 'vibrance', name: 'Vibrance', category: 'Color',
+      description: 'Boost muted colours while keeping already-saturated areas controlled.',
+      parameters: [
+        EffectParameterDefinition(id: 'intensity', label: 'Intensity', min: -2, max: 2, defaultValue: 0.5),
+      ],
+      ffmpegFilter: 'vibrance',
+    ),
+    EffectDefinition(
+      id: 'color_contrast', name: 'Color Contrast', category: 'Color',
+      description: 'Shape red, green and blue colour contrast independently.',
+      parameters: [
+        EffectParameterDefinition(id: 'red', label: 'Red contrast', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'green', label: 'Green contrast', min: -1, max: 1, defaultValue: 0),
+        EffectParameterDefinition(id: 'blue', label: 'Blue contrast', min: -1, max: 1, defaultValue: 0),
+      ],
+      ffmpegFilter: 'colorcontrast',
+    ),
+    EffectDefinition(
+      id: 'auto_white_balance', name: 'Auto White Balance', category: 'Color',
+      description: 'Estimate neutral balance from the image using the gray-world method.',
+      parameters: [],
+      ffmpegFilter: 'grayworld',
+    ),
+    EffectDefinition(
+      id: 'rgb_channel_mixer', name: 'RGB Channel Mixer', category: 'Color',
+      description: 'Remix RGB channel contributions with an editable 3×3 matrix.',
+      parameters: [
+        for (final channel in const ['r', 'g', 'b'])
+          for (final source in const ['r', 'g', 'b'])
+            EffectParameterDefinition(
+              id: '$channel$source',
+              label: '$channel ← $source',
+              min: -2,
+              max: 2,
+              defaultValue: channel == source ? 1 : 0,
+            ),
+      ],
+      ffmpegFilter: 'colorchannelmixer',
+    ),
+    EffectDefinition(
+      id: 'adaptive_sharpen', name: 'Adaptive Sharpen', category: 'Blur & Sharpen',
+      description: 'Apply contrast-adaptive sharpening for crisp detail.',
+      parameters: [
+        EffectParameterDefinition(id: 'strength', label: 'Strength', min: 0, max: 1, defaultValue: 0.5),
+      ],
+      ffmpegFilter: 'cas',
+    ),
+    EffectDefinition(
+      id: 'median_denoise', name: 'Median Denoise', category: 'Noise Reduction',
+      description: 'Remove isolated speckles while preserving larger edges.',
+      parameters: [
+        EffectParameterDefinition(id: 'radius', label: 'Radius', min: 1, max: 7, defaultValue: 2),
+      ],
+      ffmpegFilter: 'median',
+    ),
+    EffectDefinition(
+      id: 'temporal_denoise', name: 'Temporal Median', category: 'Noise Reduction',
+      description: 'Reduce transient noise by comparing neighbouring frames.',
+      parameters: [
+        EffectParameterDefinition(id: 'radius', label: 'Frame radius', min: 1, max: 7, defaultValue: 3),
+      ],
+      ffmpegFilter: 'tmedian',
+    ),
+    EffectDefinition(
+      id: 'nlmeans_denoise', name: 'Non-Local Means Denoise', category: 'Noise Reduction',
+      description: 'Use patch similarity to reduce noise while retaining texture.',
+      parameters: [
+        EffectParameterDefinition(id: 'strength', label: 'Strength', min: 0.1, max: 12, defaultValue: 1.2),
+      ],
+      ffmpegFilter: 'nlmeans',
+    ),
+    EffectDefinition(
+      id: 'frame_blend', name: 'Frame Blend', category: 'Motion',
+      description: 'Blend consecutive frames for a soft temporal exposure effect.',
+      parameters: [],
+      ffmpegFilter: 'tblend',
+    ),
+    EffectDefinition(
+      id: 'wave_distortion', name: 'Wave Distortion', category: 'VFX',
+      description: 'Displace pixels with an animated horizontal wave field.',
+      parameters: [
+        EffectParameterDefinition(id: 'amount', label: 'Amplitude', min: 0, max: 30, defaultValue: 8, unit: 'px'),
+        EffectParameterDefinition(id: 'wavelength', label: 'Wavelength', min: 8, max: 300, defaultValue: 72, unit: 'px'),
+        EffectParameterDefinition(id: 'speed', label: 'Speed', min: 0, max: 8, defaultValue: 1),
+      ],
+      ffmpegFilter: 'geq',
+    ),
+    EffectDefinition(
+      id: 'heat_haze', name: 'Heat Haze', category: 'VFX',
+      description: 'Create a refractive heat shimmer with animated two-axis distortion.',
+      parameters: [
+        EffectParameterDefinition(id: 'amount', label: 'Distortion', min: 0, max: 24, defaultValue: 5, unit: 'px'),
+        EffectParameterDefinition(id: 'scale', label: 'Pattern scale', min: 8, max: 300, defaultValue: 90, unit: 'px'),
+        EffectParameterDefinition(id: 'speed', label: 'Speed', min: 0, max: 8, defaultValue: 1.4),
+      ],
+      ffmpegFilter: 'geq',
+    ),
+    EffectDefinition(
+      id: 'film_gate_weave', name: 'Film Gate Weave', category: 'Stylize',
+      description: 'Add subtle animated camera-gate rotation to emulate analogue film movement.',
+      parameters: [
+        EffectParameterDefinition(id: 'amplitude', label: 'Amplitude', min: 0, max: 3, defaultValue: 0.45, unit: '°'),
+        EffectParameterDefinition(id: 'speed', label: 'Speed', min: 0.1, max: 10, defaultValue: 2),
+      ],
+      ffmpegFilter: 'rotate',
+    ),
+    EffectDefinition(
+      id: 'camera_flash', name: 'Camera Flash', category: 'Lighting',
+      description: 'Lift exposure for a bright photographic flash frame.',
+      parameters: [
+        EffectParameterDefinition(id: 'brightness', label: 'Flash amount', min: 0, max: 2, defaultValue: 0.35),
+      ],
+      ffmpegFilter: 'eq',
+    ),
+    EffectDefinition(
+      id: 'letterbox', name: 'Cinematic Letterbox', category: 'Compositing',
+      description: 'Add adjustable top and bottom mattes for a widescreen finish.',
+      parameters: [
+        EffectParameterDefinition(id: 'ratio', label: 'Bar height', min: 0.02, max: 0.2, defaultValue: 0.1),
+      ],
+      ffmpegFilter: 'drawbox',
+    ),
+    EffectDefinition(
+      id: 'frame_border', name: 'Frame Border', category: 'Compositing',
+      description: 'Draw a clean, adjustable border around the composition frame.',
+      parameters: [
+        EffectParameterDefinition(id: 'thickness', label: 'Thickness', min: 1, max: 30, defaultValue: 6, unit: 'px'),
+        EffectParameterDefinition(id: 'opacity', label: 'Opacity', min: 0, max: 1, defaultValue: 0.8),
+      ],
+      ffmpegFilter: 'drawbox',
+    ),
+    EffectDefinition(
+      id: 'old_film', name: '8mm Old Film', category: 'Stylize',
+      description: 'Combine moving grain, warm colour bias and a soft vignette.',
+      parameters: [
+        EffectParameterDefinition(id: 'grain', label: 'Grain', min: 0, max: 100, defaultValue: 22),
+        EffectParameterDefinition(id: 'vignette', label: 'Vignette', min: 0.1, max: 1.5, defaultValue: 0.7),
+        EffectParameterDefinition(id: 'warmth', label: 'Warmth', min: 0, max: 1, defaultValue: 0.35),
+      ],
+      ffmpegFilter: 'noise,vignette,colorbalance',
+    ),
+    EffectDefinition(
+      id: 'analog_glitch', name: 'Analog Glitch', category: 'VFX',
+      description: 'Combine chroma displacement, moving tape noise and stepped frame rate.',
+      parameters: [
+        EffectParameterDefinition(id: 'shift', label: 'Chroma shift', min: 0, max: 20, defaultValue: 5, unit: 'px'),
+        EffectParameterDefinition(id: 'noise', label: 'Tape noise', min: 0, max: 100, defaultValue: 24),
+        EffectParameterDefinition(id: 'fps', label: 'Frame cadence', min: 2, max: 30, defaultValue: 18),
+      ],
+      ffmpegFilter: 'chromashift,noise,fps',
+    ),
+    EffectDefinition(
+      id: 'bleach_bypass', name: 'Bleach Bypass', category: 'Color',
+      description: 'Create a high-contrast, partially desaturated film response.',
+      parameters: [
+        EffectParameterDefinition(id: 'contrast', label: 'Contrast', min: 0.5, max: 2.5, defaultValue: 1.35),
+        EffectParameterDefinition(id: 'saturation', label: 'Saturation', min: 0, max: 1, defaultValue: 0.45),
+      ],
+      ffmpegFilter: 'hue,eq',
+    ),
+    EffectDefinition(
+      id: 'sepia', name: 'Sepia Tone', category: 'Color',
+      description: 'Apply a classic warm photographic monochrome matrix.',
+      parameters: [],
+      ffmpegFilter: 'colorchannelmixer',
+    ),
+    EffectDefinition(
+      id: 'edge_glow', name: 'Edge Glow', category: 'Stylize',
+      description: 'Extract bright contours and soften them into a luminous outline.',
+      parameters: [
+        EffectParameterDefinition(id: 'radius', label: 'Glow radius', min: 1, max: 40, defaultValue: 8, unit: 'px'),
+        EffectParameterDefinition(id: 'brightness', label: 'Glow brightness', min: 0, max: 2, defaultValue: 0.4),
+      ],
+      ffmpegFilter: 'edgedetect,gblur,eq',
+    ),
   ];
 
   static final Map<String, EffectDefinition> _extensionEffects = {};
@@ -495,6 +672,11 @@ class EffectCatalog {
     'average_blur', 'chroma_denoise', 'deband', 'deflicker',
     'scanlines', 'rgb_split', 'posterize_time', 'echo_trails',
     'vhs_warp', 'fisheye', 'radial_blur', 'noise_reduction',
+    'vibrance', 'color_contrast', 'auto_white_balance', 'rgb_channel_mixer',
+    'adaptive_sharpen', 'median_denoise', 'temporal_denoise', 'nlmeans_denoise',
+    'frame_blend', 'wave_distortion', 'heat_haze', 'film_gate_weave',
+    'camera_flash', 'letterbox', 'frame_border', 'old_film', 'analog_glitch',
+    'bleach_bypass', 'sepia', 'edge_glow',
   };
 
   static List<EffectDefinition> get allEffects =>
