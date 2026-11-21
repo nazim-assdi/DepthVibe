@@ -1,5 +1,4 @@
 import '../domain/composition_models.dart';
-import '../data/transition_catalog.dart';
 
 /// Translates native timeline curves into per-frame FFmpeg expressions.
 class FfmpegAnimationCompiler {
