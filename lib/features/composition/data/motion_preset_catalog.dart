@@ -299,6 +299,213 @@ class MotionPresetCatalog {
         ]),
       ],
     ),
+
+    MotionPresetDefinition(
+      id: 'fade_slide_up', name: 'Fade + Slide Up', category: 'Entrance',
+      description: 'Rise gently into position with a soft opacity ramp.',
+      durationMs: 820,
+      tracks: [
+        MotionPresetTrack('position.y', [
+          MotionPresetFrame(0, 0.16, mode: MotionPresetValueMode.compositionHeightOffset),
+          MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset),
+        ]),
+        MotionPresetTrack('opacity', [
+          MotionPresetFrame(0, 0), MotionPresetFrame(1, 100),
+        ]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'fade_slide_down', name: 'Fade + Slide Down', category: 'Entrance',
+      description: 'Drop softly into place with a gradual fade.',
+      durationMs: 820,
+      tracks: [
+        MotionPresetTrack('position.y', [
+          MotionPresetFrame(0, -0.16, mode: MotionPresetValueMode.compositionHeightOffset),
+          MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset),
+        ]),
+        MotionPresetTrack('opacity', [
+          MotionPresetFrame(0, 0), MotionPresetFrame(1, 100),
+        ]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'drop_in', name: 'Drop In', category: 'Entrance',
+      description: 'Fall from above, overshoot slightly and settle.',
+      durationMs: 900,
+      tracks: [
+        MotionPresetTrack('position.y', [
+          MotionPresetFrame(0, -0.9, mode: MotionPresetValueMode.compositionHeightOffset),
+          MotionPresetFrame(0.72, 0.06, mode: MotionPresetValueMode.compositionHeightOffset),
+          MotionPresetFrame(0.88, -0.025, mode: MotionPresetValueMode.compositionHeightOffset),
+          MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset),
+        ]),
+        MotionPresetTrack('opacity', [
+          MotionPresetFrame(0, 0), MotionPresetFrame(0.22, 100),
+        ]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'tilt_in', name: 'Tilt In', category: 'Entrance',
+      description: 'Swing from a slight diagonal angle into a clean upright position.',
+      durationMs: 760,
+      tracks: [
+        MotionPresetTrack('rotation.z', [
+          MotionPresetFrame(0, -24, mode: MotionPresetValueMode.offset),
+          MotionPresetFrame(0.72, 4, mode: MotionPresetValueMode.offset),
+          MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset),
+        ]),
+        MotionPresetTrack('opacity', [
+          MotionPresetFrame(0, 0), MotionPresetFrame(1, 100),
+        ]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'tilt_out', name: 'Tilt Out', category: 'Exit',
+      description: 'Tilt away while fading out.',
+      durationMs: 680,
+      tracks: [
+        MotionPresetTrack('rotation.z', [
+          MotionPresetFrame(0, 0, mode: MotionPresetValueMode.offset),
+          MotionPresetFrame(1, 28, mode: MotionPresetValueMode.offset),
+        ]),
+        MotionPresetTrack('opacity', [
+          MotionPresetFrame(0, 100), MotionPresetFrame(1, 0),
+        ]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'flip_y_in', name: 'Vertical Flip In', category: 'Entrance',
+      description: 'Reveal the layer from a compressed vertical edge.',
+      durationMs: 700,
+      tracks: [
+        MotionPresetTrack('scale.y', [
+          MotionPresetFrame(0, 0.02, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.82, 1.08, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier),
+        ]),
+        MotionPresetTrack('opacity', [
+          MotionPresetFrame(0, 0), MotionPresetFrame(1, 100),
+        ]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'zoom_bounce', name: 'Zoom Bounce', category: 'Scale',
+      description: 'Zoom in with a playful overshoot and elastic settle.',
+      durationMs: 960,
+      tracks: [
+        MotionPresetTrack('scale.x', [
+          MotionPresetFrame(0, 0.25, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.62, 1.16, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.82, 0.94, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier),
+        ]),
+        MotionPresetTrack('scale.y', [
+          MotionPresetFrame(0, 0.25, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.62, 1.16, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.82, 0.94, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier),
+        ]),
+        MotionPresetTrack('opacity', [
+          MotionPresetFrame(0, 0), MotionPresetFrame(0.25, 100),
+        ]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'overshoot_left', name: 'Overshoot Slide Left', category: 'Entrance',
+      description: 'Slide in from the right, pass the mark and settle.',
+      durationMs: 850,
+      tracks: [
+        MotionPresetTrack('position.x', [
+          MotionPresetFrame(0, 1, mode: MotionPresetValueMode.compositionWidthOffset),
+          MotionPresetFrame(0.72, -0.05, mode: MotionPresetValueMode.compositionWidthOffset),
+          MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset),
+        ]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'overshoot_right', name: 'Overshoot Slide Right', category: 'Entrance',
+      description: 'Slide in from the left, pass the mark and settle.',
+      durationMs: 850,
+      tracks: [
+        MotionPresetTrack('position.x', [
+          MotionPresetFrame(0, -1, mode: MotionPresetValueMode.compositionWidthOffset),
+          MotionPresetFrame(0.72, 0.05, mode: MotionPresetValueMode.compositionWidthOffset),
+          MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset),
+        ]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'wobble', name: 'Wobble', category: 'Attention',
+      description: 'Rock side to side with diminishing rotation.',
+      durationMs: 1000,
+      interpolation: Interpolation.easeInOut,
+      tracks: [
+        MotionPresetTrack('rotation.z', [
+          MotionPresetFrame(0, 0, mode: MotionPresetValueMode.offset),
+          MotionPresetFrame(0.18, -12, mode: MotionPresetValueMode.offset),
+          MotionPresetFrame(0.36, 10, mode: MotionPresetValueMode.offset),
+          MotionPresetFrame(0.55, -7, mode: MotionPresetValueMode.offset),
+          MotionPresetFrame(0.76, 4, mode: MotionPresetValueMode.offset),
+          MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset),
+        ]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'heartbeat', name: 'Heartbeat', category: 'Attention',
+      description: 'Two quick scale pulses with a smooth return to normal.',
+      durationMs: 880,
+      interpolation: Interpolation.easeInOut,
+      tracks: [
+        MotionPresetTrack('scale.x', [
+          MotionPresetFrame(0, 1, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.22, 1.1, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.38, 1, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.54, 1.12, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier),
+        ]),
+        MotionPresetTrack('scale.y', [
+          MotionPresetFrame(0, 1, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.22, 1.1, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.38, 1, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.54, 1.12, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier),
+        ]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'float', name: 'Float', category: 'Attention',
+      description: 'Drift upward and gently return to the original position.',
+      durationMs: 1400,
+      interpolation: Interpolation.easeInOut,
+      tracks: [
+        MotionPresetTrack('position.y', [
+          MotionPresetFrame(0, 0, mode: MotionPresetValueMode.offset),
+          MotionPresetFrame(0.5, -0.035, mode: MotionPresetValueMode.compositionHeightOffset),
+          MotionPresetFrame(1, 0, mode: MotionPresetValueMode.offset),
+        ]),
+      ],
+    ),
+    MotionPresetDefinition(
+      id: 'jelly', name: 'Jelly', category: 'Attention',
+      description: 'Combine alternating horizontal and vertical squash-stretch.',
+      durationMs: 900,
+      tracks: [
+        MotionPresetTrack('scale.x', [
+          MotionPresetFrame(0, 1, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.28, 1.18, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.55, 0.92, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.78, 1.04, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier),
+        ]),
+        MotionPresetTrack('scale.y', [
+          MotionPresetFrame(0, 1, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.28, 0.86, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.55, 1.08, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(0.78, 0.97, mode: MotionPresetValueMode.multiplier),
+          MotionPresetFrame(1, 1, mode: MotionPresetValueMode.multiplier),
+        ]),
+      ],
+    ),
   ];
 
   static MotionPresetDefinition? find(String id) {
