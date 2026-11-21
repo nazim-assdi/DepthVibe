@@ -35,8 +35,8 @@ class AudioPresetDefinition {
     midEqDb: midEqDb.clamp(-18, 18).toDouble(),
     highEqDb: highEqDb.clamp(-18, 18).toDouble(),
     pan: pan.clamp(-1, 1).toDouble(),
-    fadeInMs: fadeInMs.clamp(0, 30000),
-    fadeOutMs: fadeOutMs.clamp(0, 30000),
+    fadeInMs: fadeInMs.clamp(0, 30000).toInt(),
+    fadeOutMs: fadeOutMs.clamp(0, 30000).toInt(),
   );
 }
 
