@@ -64,7 +64,8 @@ class _Software3dMeshViewState extends State<Software3dMeshView> {
         oldWidget.compositionWidth != widget.compositionWidth ||
         oldWidget.compositionHeight != widget.compositionHeight ||
         oldWidget.timeMs != widget.timeMs ||
-        oldWidget.animationIndex != widget.animationIndex) {
+        oldWidget.animationIndex != widget.animationIndex ||
+        oldWidget.maximumPreviewDimension != widget.maximumPreviewDimension) {
       _render();
     }
   }
