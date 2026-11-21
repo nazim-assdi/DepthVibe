@@ -50,13 +50,21 @@ The 68 built-in native effects keep typed parameters and use the current FFmpeg/
 
 The 38 curated recipes map to existing TransitionKind values and specify intended durations. Applying a recipe requires at least two enabled visual clips. The editor uses the regular frame validator and FFmpeg export path; preview animation is illustrative.
 
+## Downloadable offline packs
+
+DepthVibe now includes a local asset pack installer. Its downloadable manifest contains 26 upstream archives: 24 DAEDAL packs published under CC0 1.0 and two complete CLR audio-library volumes. The catalogued archives total approximately 5,211,933,518 bytes (about 5.21 GB decimal) before extraction. DAEDAL provides original film-grain, light-leak, analog/VHS, bokeh/particles, camera/timecode, frame/letterbox, optical-flare, split-screen, LUT and SFX packs. CLR provides two audio volumes with item-level public-domain, CC BY and CC BY-SA records.
+
+The Library's **LOCAL OFFLINE ASSET PACKS** section can install an individual pack or download all 26 sequentially. It streams archives into app-support storage, checks HTTPS, archive size, ZIP CRC, duplicate/path/link hazards, requires a licence file, extracts the media and records installation metadata. Installed media remains on the device and works offline. It can be uninstalled separately from the app. The app itself does not embed the full 5.21 GB into its APK/desktop installer; the files are downloaded and bundled inside DepthVibe's local storage after the user chooses Install. This avoids an oversized application installer and gives the user control over device storage.
+
+AssetPolish's 3,869 CC0 vectors/animated icons/stickers do not have one whole-library archive. Download a selected-assets ZIP from AssetPolish and use **IMPORT ASSET ZIP**; DepthVibe requires the archive's source/licence notice and retains it with the pack. OpenMoji, Kenney, MOTION/LAB and other open sources remain available through the source directory and can be imported as licensed individual or selected ZIP packs. Commercial Motion Bro/paid packs are not copied or unlocked.
+
 ## Local import and online sources
 
 - PNG/JPG/WebP images can be imported as overlay/image layers.
 - WAV/MP3/M4A/AAC/FLAC/OGG files can be imported as audio layers.
 - `.cube` LUT files, `.dvmpreset` layer presets, and user-supplied Motion Bro `.mbr` packs retain their dedicated import workflows.
 - The signed Extension Marketplace downloads `.dvext` packages from an HTTPS catalog after the publisher signing key is explicitly trusted; package bytes are checked against the signed SHA-256 catalogue entry.
-- See [OPEN_ASSET_SOURCES.md](OPEN_ASSET_SOURCES.md) for optional public-domain and Creative Commons source libraries, including each source's licence boundary and import workflow.
+- See [OPEN_ASSET_SOURCES.md](OPEN_ASSET_SOURCES.md) for public-domain and Creative Commons sources. See [the offline pack manifest](../lib/features/composition/data/creative_asset_pack_catalog.dart) for the 26 downloadable archives.
 
 DepthVibe does not scrape arbitrary websites, bypass payment, unlock proprietary packs or silently install Adobe plug-ins. An online publisher feed must be configured by its operator; a live universal marketplace is not bundled by default.
 
