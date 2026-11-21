@@ -2198,6 +2198,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             _assetCountChip(Icons.color_lens_outlined, '${ColorPresetCatalog.all.length + EffectPresetCatalog.all.length} color looks'),
             _assetCountChip(Icons.auto_awesome, '${EffectCatalog.all.length} native effects'),
             _assetCountChip(Icons.swap_horiz, '${TransitionPresetCatalog.all.length} transition recipes'),
+            _assetCountChip(Icons.library_books_outlined, '399 built-in catalog entries'),
           ],
         ),
         const SizedBox(height: 8),
@@ -2310,6 +2311,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ),
           if (colors.isEmpty)
             const Text('No color presets match this search.', style: TextStyle(fontSize: 10)),
+          OutlinedButton.icon(
+            onPressed: _importColorLut,
+            icon: const Icon(Icons.file_open_outlined, size: 15),
+            label: const Text('IMPORT 3D .CUBE LUT'),
+          ),
           const Divider(height: 12),
           _panelHeader('MULTI-EFFECT COLOR LOOKS', Icons.auto_awesome),
           for (final preset in looks)
