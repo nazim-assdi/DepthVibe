@@ -47,6 +47,7 @@ import 'color_wheel_control.dart';
 import 'color_curve_editor.dart';
 import 'color_scopes_view.dart';
 import 'transition_preview_tile.dart';
+import 'effect_preview_tile.dart';
 
 class CompositionWorkspace extends StatefulWidget {
   const CompositionWorkspace({super.key});
@@ -2875,16 +2876,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ),
         const SizedBox(height: 8),
         for (final effect in filtered)
-          ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: Text(effect.name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-            subtitle: Text(effect.description, style: const TextStyle(fontSize: 9), maxLines: 2),
-            trailing: IconButton(
-              tooltip: 'Add effect',
-              icon: const Icon(Icons.add_circle_outline, size: 18),
-              onPressed: () => _controller.addEffect(effect.id),
-            ),
+          EffectPreviewTile(
+            effect: effect,
+            onApply: () => _controller.addEffect(effect.id),
           ),
         const Divider(),
         _panelHeader('APPLIED EFFECTS', Icons.tune),
