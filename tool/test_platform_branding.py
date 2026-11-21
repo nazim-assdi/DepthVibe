@@ -50,8 +50,8 @@ class PlatformBrandingTests(unittest.TestCase):
 
     def test_windows_impeller_falls_back_to_skia(self) -> None:
         source = (
-            '#include <flutter/dart_project.h>\\n'
-            'flutter::DartProject project(L"data");\\n'
+            '#include <flutter/dart_project.h>\n'
+            'flutter::DartProject project(L"data");\n'
             'FlutterWindow window(project);'
         )
         updated, count = disable_windows_impeller(source)
@@ -63,7 +63,7 @@ class PlatformBrandingTests(unittest.TestCase):
 
     def test_windows_impeller_setting_is_idempotent(self) -> None:
         source = (
-            'flutter::DartProject project(L"data");\\n'
+            'flutter::DartProject project(L"data");\n'
             'project.set_impeller_switch(flutter::ImpellerSwitch::Disabled);'
         )
         updated, count = disable_windows_impeller(source)
@@ -72,7 +72,7 @@ class PlatformBrandingTests(unittest.TestCase):
 
     def test_linux_impeller_falls_back_to_skia(self) -> None:
         source = (
-            'g_autoptr(FlDartProject) project = fl_dart_project_new();\\n'
+            'g_autoptr(FlDartProject) project = fl_dart_project_new();\n'
             'view = fl_view_new(project);'
         )
         updated, count = disable_linux_impeller(source)
@@ -81,7 +81,6 @@ class PlatformBrandingTests(unittest.TestCase):
             'fl_dart_project_set_enable_impeller(project, FALSE);',
             updated,
         )
-
 
 
 if __name__ == "__main__":
