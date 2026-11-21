@@ -14,7 +14,7 @@ void main() {
       expect(cancellation.isCancelled, isTrue);
       expect(cancelCalls, 1);
       expect(
-        cancellation.throwIfCancelled,
+        () => cancellation.throwIfCancelled(),
         throwsA(isA<CompositionExportCancelled>()),
       );
     });
