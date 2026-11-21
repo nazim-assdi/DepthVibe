@@ -1,5 +1,6 @@
-/// External open-asset sources. These are discovery links, not bundled files;
-/// every imported item must retain its own source and licence metadata.
+/// External open-asset discovery links. A selected subset has downloadable
+/// offline archives in CreativeAssetPackCatalog; other sources are user-imported.
+/// Every imported item must retain its own source and licence metadata.
 class OpenAssetSourceDefinition {
   const OpenAssetSourceDefinition({
     required this.id,
