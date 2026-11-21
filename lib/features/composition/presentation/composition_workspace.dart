@@ -4550,6 +4550,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       setState(() {
         final base = 'Project saved · ' +
             result.embeddedAssetCount.toString() + ' assets embedded.' +
+            (result.assetCreditCount == 0
+                ? ''
+                : ' ' + result.embeddedLicenseFileCount.toString() +
+                    ' licence files from ' + result.assetCreditCount.toString() +
+                    ' asset packs included.') +
+            (result.missingLicensePacks.isEmpty
+                ? ''
+                : ' Licence notices missing for: ' +
+                    result.missingLicensePacks.join(', ') + '.') +
             ' Version history keeps up to ' +
             CompositionProjectService.maxVersionHistory.toString() +
             ' earlier saves.';
@@ -4630,7 +4639,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       setState(() {
         _notice = 'Opened "' + imported.document.name + '" · ' +
             imported.document.layers.length.toString() + ' layers · ' +
-            imported.extractedAssetCount.toString() + ' restored assets.' +
+            imported.extractedAssetCount.toString() + ' restored media assets.' +
+            (imported.assetCredits.isEmpty
+                ? ''
+                : ' ' + imported.licenseFileCount.toString() +
+                    ' licence files from ' + imported.assetCredits.length.toString() +
+                    ' asset packs restored.') +
             (missingAssets.isEmpty
                 ? ''
                 : ' ' + missingAssets.length.toString() +

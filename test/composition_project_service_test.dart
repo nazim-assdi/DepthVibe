@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
@@ -125,6 +126,84 @@ void main() {
     expect(text.textBoxWidth, 1600);
     expect(text.textFontAssetUri, isNot(font.path));
     expect(await File(text.textFontAssetUri!).readAsBytes(), fontBytes);
+  });
+
+  test('embeds and restores asset-pack attribution and licence notices', () async {
+    final packRoot = Directory(
+      temporary.path + '/CreativeAssets/pack_demo',
+    );
+    final filesRoot = Directory(packRoot.path + '/files');
+    final mediaDirectory = Directory(filesRoot.path + '/overlays');
+    await mediaDirectory.create(recursive: true);
+
+    final media = File(mediaDirectory.path + '/grain.mp4')
+      ..writeAsBytesSync([1, 3, 5, 7, 9]);
+    const licenceText = 'Demo pack licence: CC0 1.0; source attribution retained.';
+    final licence = File(filesRoot.path + '/LICENSES.txt')
+      ..writeAsStringSync(licenceText);
+    await File(packRoot.path + '/pack.json').writeAsString(
+      jsonEncode({
+        'id': 'pack_demo',
+        'name': 'Demo Asset Pack',
+        'directoryPath': packRoot.path,
+        'sourceUrl': 'https://example.org/demo-pack',
+        'licenseLabel': 'CC0 1.0',
+        'installedAt': DateTime.utc(2026, 1, 1).toIso8601String(),
+        'fileCount': 2,
+        'expandedBytes': 64,
+      }),
+    );
+
+    final document = CompositionDocument(
+      name: 'Licensed Project',
+      layers: [
+        CompositionLayer(
+          id: 'overlay',
+          name: 'Film Grain',
+          kind: LayerKind.video,
+          sourceUri: media.path,
+        ),
+      ],
+    );
+    final archiveFile = File(temporary.path + '/licensed.dvproj');
+    final exported = await service.exportProject(
+      document,
+      outputFile: archiveFile,
+    );
+    expect(exported.embeddedAssetCount, 1);
+    expect(exported.embeddedLicenseFileCount, 1);
+    expect(exported.assetCreditCount, 1);
+    expect(exported.missingLicensePacks, isEmpty);
+
+    final archive = ZipDecoder().decodeBytes(await archiveFile.readAsBytes());
+    final notices = archive.files
+        .where((entry) => entry.name.startsWith('assets/_licenses/'))
+        .toList();
+    expect(notices, hasLength(1));
+    expect(
+      String.fromCharCodes(notices.single.readBytes()!),
+      contains('CC0 1.0'),
+    );
+
+    final imported = await service.importProject(
+      archiveFile,
+      projectsDirectory: Directory(temporary.path + '/restored_licensed'),
+    );
+    expect(imported.extractedAssetCount, 1);
+    expect(imported.assetCredits, hasLength(1));
+    expect(imported.licenseFileCount, 1);
+    expect(imported.assetCredits.single['sourceUrl'], 'https://example.org/demo-pack');
+    expect(imported.assetCredits.single['licenseLabel'], 'CC0 1.0');
+    final restoredLicencePath =
+        (imported.assetCredits.single['licenseFiles'] as List<String>).single;
+    expect(
+      await File(imported.projectDirectory.path + '/' + restoredLicencePath)
+          .readAsString(),
+      licenceText,
+    );
+    final restoredMedia = imported.document.layers.single.sourceUri!;
+    expect(await File(restoredMedia).readAsBytes(), [1, 3, 5, 7, 9]);
+    expect(await licence.exists(), isTrue);
   });
 
   test('rejects archives containing parent-directory traversal entries', () async {
