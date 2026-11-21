@@ -28,10 +28,10 @@ class OpenAssetSourceCatalog {
       id:'assetpolish',
       name:'AssetPolish Vector & Sticker Library',
       category:'Overlays & Stickers',
-      description:'Vector packs, animated icons and sticker artwork. Published collection includes original CC0 assets.',
+      description:'3,869 CC0 vector assets, including 219 animated icons and 119 animated stickers, plus themed SVG/PNG packs.',
       licenseLabel:'CC0 1.0',
       countLabel:'3,869 assets listed',
-      url:'https://www.assetpolish.com/licenses/',
+      url:'https://www.assetpolish.com/assets/',
     ),
     OpenAssetSourceDefinition(
       id:'daedal',
@@ -39,8 +39,8 @@ class OpenAssetSourceCatalog {
       category:'Overlays & Color',
       description:'Procedural LUTs, grain, light leaks, burns, bokeh, flares, frames and sound effects.',
       licenseLabel:'CC0 1.0 (published terms)',
-      countLabel:'LUTs · overlays · SFX',
-      url:'https://daedal.art/terms/',
+      countLabel:'34 resources · LUTs · 4K overlays · SFX',
+      url:'https://daedal.art/film-assets/',
     ),
     OpenAssetSourceDefinition(
       id:'clr_audio',
