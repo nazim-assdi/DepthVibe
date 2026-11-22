@@ -1355,7 +1355,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     if (compact) {
                       return Column(
                         children: [
-                          Expanded(child: _buildCanvas(doc, layer)),
+                          Expanded(child: _buildPlayheadAwareCanvas()),
                           SizedBox(height: 230, child: _buildActivePanel(layer)),
                         ],
                       );
@@ -1363,14 +1363,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     return Row(
                       children: [
                         SizedBox(width: 260, child: _buildLayerPanel(doc.layers)),
-                        Expanded(flex: 6, child: _buildCanvas(doc, layer)),
+                        Expanded(flex: 6, child: _buildPlayheadAwareCanvas()),
                         SizedBox(width: 330, child: _buildActivePanel(layer)),
                       ],
                     );
                   },
                 ),
               ),
-              _buildTimeline(doc.layers, doc.playheadMs, doc.durationMs),
+              _buildPlayheadAwareTimeline(),
               if (_rendering || _projectBusy)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -1526,6 +1526,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPlayheadAwareCanvas() {
+    return AnimatedBuilder(
+      animation: _controller.playhead,
+      builder: (context, _) =>
+          _buildCanvas(_controller.document, _controller.selectedLayer),
     );
   }
 
@@ -6875,6 +6883,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           onChanged: onChanged,
         ),
       ],
+    );
+  }
+
+  Widget _buildPlayheadAwareTimeline() {
+    return AnimatedBuilder(
+      animation: _controller.playhead,
+      builder: (context, _) {
+        final doc = _controller.document;
+        return _buildTimeline(doc.layers, doc.playheadMs, doc.durationMs);
+      },
     );
   }
 
