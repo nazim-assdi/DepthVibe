@@ -1567,10 +1567,15 @@ void main() {
     expect(controller.toggleShapeVertexSmooth(0), isTrue);
     final vertex = controller.selectedLayer!.shapeStyle!.pathVertices.first;
     expect(vertex.smooth, isTrue);
-    expect(vertex.inHandle.x / vertex.outHandle.x,
-        closeTo(-0.5, 0.0001));
-    expect(vertex.inHandle.y / vertex.outHandle.y,
-        closeTo(-0.5, 0.0001));
+    final cross = vertex.inHandle.x * vertex.outHandle.y -
+        vertex.inHandle.y * vertex.outHandle.x;
+    final dot = vertex.inHandle.x * vertex.outHandle.x +
+        vertex.inHandle.y * vertex.outHandle.y;
+    final inLengthSquared = vertex.inHandle.x * vertex.inHandle.x +
+        vertex.inHandle.y * vertex.inHandle.y;
+    expect(cross, closeTo(0, 0.000001));
+    expect(dot, lessThan(0));
+    expect(inLengthSquared, closeTo(0.01, 0.000001));
     controller.dispose();
   });
 
