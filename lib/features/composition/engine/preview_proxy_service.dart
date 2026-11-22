@@ -210,6 +210,13 @@ class PreviewProxyService {
         if (entity is! File || !entity.path.endsWith('.mp4')) continue;
         try {
           final stat = await entity.stat();
+          if (entity.path.endsWith('.part.mp4')) {
+            if (DateTime.now().difference(stat.modified) >
+                const Duration(minutes: 2)) {
+              await entity.delete();
+            }
+            continue;
+          }
           total += stat.size;
           entries.add((file: entity, size: stat.size, modified: stat.modified));
         } catch (_) {}
@@ -243,12 +250,13 @@ class PreviewProxyService {
   }) async {
     await outputFile.parent.create(recursive: true);
     final command = '-hide_banner -loglevel error -y '
-        '-threads 1 -i ${_quoteFfmpeg(sourcePath)} '
+        '-filter_threads 1 -threads 1 -i ${_quoteFfmpeg(sourcePath)} '
         '-map 0:v:0 -an -sn -dn '
         '-vf "fps=$frameRate,'
         'scale=$width:$width:force_original_aspect_ratio=decrease:'
         'force_divisible_by=2:flags=fast_bilinear" '
-        '-c:v mpeg4 -q:v 4 -pix_fmt yuv420p '
+        '-c:v mpeg4 -threads 1 -g $frameRate -bf 0 '
+        '-q:v 4 -pix_fmt yuv420p '
         '-movflags +faststart '
         '${_quoteFfmpeg(outputFile.path)}';
 
