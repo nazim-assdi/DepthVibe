@@ -1329,4 +1329,34 @@ void main() {
     controller.dispose();
   });
 
+
+  test('drawn Bezier mask preserves manual Pen direction handles', () {
+    final controller = CompositionController();
+    final id = controller.addLayer(LayerKind.image);
+    controller.addMask(
+      shape: MaskShape.bezier,
+      vertices: const [
+        MaskVertex(
+          anchor: Vector2(0, 0),
+          inHandle: Vector2(-0.15, 0),
+          outHandle: Vector2(0.15, 0),
+          smooth: true,
+        ),
+        MaskVertex(anchor: Vector2(1, 0)),
+        MaskVertex(anchor: Vector2(0.5, 1)),
+      ],
+      left: 0.15,
+      top: 0.2,
+      width: 0.4,
+      height: 0.5,
+    );
+    final mask = controller.document.layers
+        .firstWhere((item) => item.id == id)
+        .masks.single;
+    expect(mask.vertices.first.smooth, isTrue);
+    expect(mask.vertices.first.inHandle.x, -0.15);
+    expect(mask.vertices.first.outHandle.x, 0.15);
+    controller.dispose();
+  });
+
 }

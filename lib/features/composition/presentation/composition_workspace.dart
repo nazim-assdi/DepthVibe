@@ -804,6 +804,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   bool _previewMaskHistoryRecorded = false;
   String? _previewPenLayerId;
   final List<Offset> _previewPenPoints = [];
+  final List<Offset> _previewPenTangents = [];
+  int? _previewPenDraggingIndex;
   Size _previewPenLayerSize = Size.zero;
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
@@ -3321,12 +3323,39 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     setState(() {
       _previewPenLayerSize = layerSize;
       _previewPenPoints.add(point);
+      _previewPenTangents.add(Offset.zero);
     });
+  }
+
+  void _beginPreviewPenPointGesture(
+    CompositionLayer layer,
+    Offset localPosition,
+    Size layerSize,
+  ) {
+    _addPreviewPenPoint(layer, localPosition, layerSize);
+    _previewPenDraggingIndex = _previewPenPoints.isEmpty
+        ? null
+        : _previewPenPoints.length - 1;
+  }
+
+  void _updatePreviewPenPointGesture(Offset localPosition) {
+    final index = _previewPenDraggingIndex;
+    if (index == null || index < 0 || index >= _previewPenPoints.length) {
+      return;
+    }
+    setState(() {
+      _previewPenTangents[index] = localPosition - _previewPenPoints[index];
+    });
+  }
+
+  void _endPreviewPenPointGesture() {
+    _previewPenDraggingIndex = null;
   }
 
   void _finishPreviewPenPath() {
     final layer = _controller.selectedLayer;
     final points = List<Offset>.of(_previewPenPoints);
+    final tangents = List<Offset>.of(_previewPenTangents);
     final size = _previewPenLayerSize;
     if (layer == null ||
         layer.id != _previewPenLayerId ||
@@ -3352,12 +3381,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final spanX = math.max(0.0001, maxX - minX);
     final spanY = math.max(0.0001, maxY - minY);
     final vertices = [
-      for (final point in points)
+      for (var index = 0; index < points.length; index++)
         MaskVertex(
           anchor: Vector2(
-            ((point.dx - minX) / spanX).clamp(0.0, 1.0).toDouble(),
-            ((point.dy - minY) / spanY).clamp(0.0, 1.0).toDouble(),
+            ((points[index].dx - minX) / spanX).clamp(0.0, 1.0).toDouble(),
+            ((points[index].dy - minY) / spanY).clamp(0.0, 1.0).toDouble(),
           ),
+          inHandle: Vector2(
+            -tangents[index].dx / spanX,
+            -tangents[index].dy / spanY,
+          ),
+          outHandle: Vector2(
+            tangents[index].dx / spanX,
+            tangents[index].dy / spanY,
+          ),
+          smooth: tangents[index].distance > 0,
         ),
     ];
 
@@ -3373,8 +3411,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       _activePreviewTool = 'Mask';
       _previewPenLayerId = null;
       _previewPenPoints.clear();
+      _previewPenTangents.clear();
+      _previewPenDraggingIndex = null;
       _previewPenLayerSize = Size.zero;
-      _notice = 'Bezier mask created. Drag its vertices in the Composition panel.';
+      _notice = 'Bezier mask created. Drag vertices or direction handles in the Composition panel.';
     });
   }
 
@@ -3383,6 +3423,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       _activePreviewTool = 'Select';
       _previewPenLayerId = null;
       _previewPenPoints.clear();
+      _previewPenTangents.clear();
+      _previewPenDraggingIndex = null;
       _previewPenLayerSize = Size.zero;
     });
   }
@@ -4308,26 +4350,48 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             Size(visualWidth, visualHeight),
                           )
                       : null,
-                  onPanStart: layer.locked || _activePreviewTool != 'Select'
+                  onPanStart: layer.locked || _activePreviewTool == 'Hand'
                       ? null
-                      : (details) => _beginPreviewMove(
-                            layer,
-                            details.globalPosition,
-                          ),
-                  onPanUpdate: layer.locked || _activePreviewTool != 'Select'
+                      : (details) {
+                          if (_activePreviewTool == 'Select') {
+                            _beginPreviewMove(layer, details.globalPosition);
+                          } else if (_activePreviewTool == 'Pen') {
+                            _beginPreviewPenPointGesture(
+                              layer,
+                              details.localPosition,
+                              Size(visualWidth, visualHeight),
+                            );
+                          }
+                        },
+                  onPanUpdate: layer.locked || _activePreviewTool == 'Hand'
                       ? null
-                      : (details) => _updatePreviewMove(
-                            layer,
-                            details.globalPosition,
-                            canvasSize,
-                            doc,
-                          ),
-                  onPanEnd: layer.locked || _activePreviewTool != 'Select'
+                      : (details) {
+                          if (_activePreviewTool == 'Select') {
+                            _updatePreviewMove(
+                              layer,
+                              details.globalPosition,
+                              canvasSize,
+                              doc,
+                            );
+                          } else if (_activePreviewTool == 'Pen') {
+                            _updatePreviewPenPointGesture(details.localPosition);
+                          }
+                        },
+                  onPanEnd: layer.locked || _activePreviewTool == 'Hand'
                       ? null
-                      : (_) => _endPreviewMove(),
-                  onPanCancel: layer.locked || _activePreviewTool != 'Select'
+                      : (_) {
+                          if (_activePreviewTool == 'Select') {
+                            _endPreviewMove();
+                          } else if (_activePreviewTool == 'Pen') {
+                            _endPreviewPenPointGesture();
+                          }
+                        },
+                  onPanCancel: layer.locked || _activePreviewTool == 'Hand'
                       ? null
-                      : _endPreviewMove,
+                      : () {
+                          _endPreviewMove();
+                          _endPreviewPenPointGesture();
+                        },
                   child: RepaintBoundary(
                     child: Opacity(opacity: opacity, child: gradedVisual),
                   ),
@@ -4356,6 +4420,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   child: CustomPaint(
                     painter: _PreviewPenDraftPainter(
                       points: _previewPenPoints,
+                      tangents: _previewPenTangents,
                       color: Theme.of(context).extension<DepthVibePalette>()!.accent,
                     ),
                   ),
@@ -10673,18 +10738,35 @@ class _KeyframeGraphPainter extends CustomPainter {
 class _PreviewPenDraftPainter extends CustomPainter {
   const _PreviewPenDraftPainter({
     required this.points,
+    required this.tangents,
     required this.color,
   });
 
   final List<Offset> points;
+  final List<Offset> tangents;
   final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (points.isEmpty) return;
     final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (final point in points.skip(1)) {
-      path.lineTo(point.dx, point.dy);
+    for (var index = 0; index < points.length - 1; index++) {
+      final start = points[index];
+      final end = points[index + 1];
+      final startTangent =
+          index < tangents.length ? tangents[index] : Offset.zero;
+      final endTangent =
+          index + 1 < tangents.length ? tangents[index + 1] : Offset.zero;
+      final firstControl = start + startTangent;
+      final secondControl = end - endTangent;
+      path.cubicTo(
+        firstControl.dx,
+        firstControl.dy,
+        secondControl.dx,
+        secondControl.dy,
+        end.dx,
+        end.dy,
+      );
     }
     canvas.drawPath(
       path,
@@ -10694,7 +10776,20 @@ class _PreviewPenDraftPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round,
     );
-    for (final point in points) {
+    for (var index = 0; index < points.length; index++) {
+      final point = points[index];
+      final tangent = index < tangents.length ? tangents[index] : Offset.zero;
+      if (tangent.distance > 1) {
+        canvas.drawLine(
+          point - tangent,
+          point + tangent,
+          Paint()
+            ..color = const Color(0xFF55D7C4)
+            ..strokeWidth = 1,
+        );
+        canvas.drawCircle(point + tangent, 4, Paint()..color = const Color(0xFF55D7C4));
+        canvas.drawCircle(point - tangent, 4, Paint()..color = const Color(0xFF55D7C4));
+      }
       canvas.drawCircle(point, 4, Paint()..color = color);
       canvas.drawCircle(
         point,
@@ -10709,7 +10804,9 @@ class _PreviewPenDraftPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PreviewPenDraftPainter oldDelegate) =>
-      oldDelegate.points != points || oldDelegate.color != color;
+      oldDelegate.points != points ||
+      oldDelegate.tangents != tangents ||
+      oldDelegate.color != color;
 }
 
 class _PreviewMaskPathPainter extends CustomPainter {
