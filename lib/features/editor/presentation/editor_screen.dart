@@ -85,6 +85,78 @@ class _EditorScreenState extends State<EditorScreen> {
     _editor.addListener(_refresh);
   }
 
+  @override
+  void didUpdateWidget(covariant EditorScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.mediaPlaybackAvailable &&
+        widget.mediaPlaybackAvailable &&
+        _player == null) {
+      try {
+        final player = Player();
+        _player = player;
+        _attachPlayerStreams(player);
+        _previewError = null;
+        final path = _currentVideoPath;
+        if (path != null) {
+          unawaited(_startPreviewForExistingVideo(path));
+        }
+      } catch (error, stackTrace) {
+        _previewError = error.toString();
+        debugPrint(
+          'DepthVibe media player became available but could not start: '
+          '$error\\n$stackTrace',
+        );
+      }
+    }
+    if (oldWidget.startupWarning != widget.startupWarning &&
+        widget.startupWarning != null &&
+        _currentVideoPath == null) {
+      _status = widget.startupWarning;
+    }
+  }
+
+  Future<void> _startPreviewForExistingVideo(String path) async {
+    final player = _player;
+    if (!mounted || player == null) return;
+    try {
+      await player.open(Media(path), play: false).timeout(
+        const Duration(seconds: 20),
+      );
+      await player.setRate(_editor.project.speed).timeout(
+        const Duration(seconds: 5),
+      );
+      await player.setVolume(_editor.project.muted ? 0 : 100).timeout(
+        const Duration(seconds: 5),
+      );
+      if (!mounted || !identical(_player, player)) return;
+      if (_editor.project.sourceDurationMs <= 0 &&
+          widget.mediaProcessingAvailable) {
+        final duration = await _probeMediaDuration(path);
+        if (duration != null) _editor.setSourceDuration(duration);
+      }
+      if (!mounted || !identical(_player, player)) return;
+      setState(() {
+        _playbackAvailable = true;
+        _position = Duration.zero;
+        _previewError = null;
+        _status = 'Media loaded';
+      });
+      unawaited(_primePausedVideoPreview());
+    } catch (error, stackTrace) {
+      debugPrint(
+        'DepthVibe delayed media preview startup failed: '
+        '$error\\n$stackTrace',
+      );
+      if (mounted && identical(_player, player)) {
+        setState(() {
+          _playbackAvailable = false;
+          _previewError = error.toString();
+          _status = 'Preview unavailable; CPU timeline editing remains active';
+        });
+      }
+    }
+  }
+
   void _attachPlayerStreams(Player player) {
     _durationSubscription = player.stream.duration.listen((duration) {
       _editor.setSourceDuration(duration);

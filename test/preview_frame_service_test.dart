@@ -131,6 +131,12 @@ void main() {
         return _writeFrame(directory, 'shared-frame');
       },
     );
+    // Let the speculative request complete its asynchronous disk-cache
+    // lookup and enter the background queue before the visible request joins
+    // it. This makes the promotion scenario deterministic.
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(service.stats.pendingDecodes, 1);
+
     final visible = service.requestFrame(
       laneId: 'video-b',
       cacheKey: 'shared-frame',

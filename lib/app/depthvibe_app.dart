@@ -35,17 +35,19 @@ class _DepthVibeAppState extends State<DepthVibeApp> {
   }
 
   Future<void> _initializeServices() async {
-    if (_initializing || _ready) return;
+    if (_initializing) return;
 
-    // Give Flutter a chance to paint the first frame before native libraries
-    // load. A missing/failed media backend must never block the basic editor.
+    // Render the real editor before loading optional native services. A slow
+    // media codec, font scan or extension registry must never leave the app
+    // trapped on a blank/grey startup window.
     await WidgetsBinding.instance.endOfFrame;
-    if (!mounted || _initializing || _ready) return;
+    if (!mounted || _initializing) return;
 
     setState(() {
       _initializing = true;
+      _ready = true;
       _startupError = null;
-      _startupStage = 'Preparing your creative workspace…';
+      _startupStage = 'Loading optional services in the background…';
       _startupWarnings = const [];
       _mediaKitAvailable = false;
       _ffmpegAvailable = false;
@@ -54,32 +56,35 @@ class _DepthVibeAppState extends State<DepthVibeApp> {
     final warnings = <String>[];
     Future<void> optionalStep(
       String label,
-      Future<void> Function() initialize,
-    ) async {
-      if (mounted) {
-        setState(() => _startupStage = 'Loading $label…');
-      }
+      Future<void> Function() initialize, {
+      void Function()? onSuccess,
+    }) async {
       try {
-        await initialize();
+        await initialize().timeout(const Duration(seconds: 25));
+        onSuccess?.call();
       } catch (error, stackTrace) {
         warnings.add(label);
         debugPrint(
-          'DepthVibe optional startup service "$label" failed: $error\\n$stackTrace',
+          'DepthVibe optional startup service "$label" failed or timed out: '
+          '$error\\n$stackTrace',
         );
       }
     }
 
-    // These engines are optional for the UI, project controls, timeline and
-    // file picker. Individual features check availability when invoked.
+    // Media engines are enhancements only. The editor is already visible and
+    // remains usable even if either native runtime is missing or slow.
     await optionalStep('media playback engine', () async {
       MediaKit.ensureInitialized();
-      _mediaKitAvailable = true;
+    }, onSuccess: () {
+      if (mounted) setState(() => _mediaKitAvailable = true);
     });
     await optionalStep('video processing engine', () async {
       await FFmpegKitExtended.initialize();
-      _ffmpegAvailable = true;
+    }, onSuccess: () {
+      if (mounted) setState(() => _ffmpegAvailable = true);
     });
 
+    // These local services are also non-blocking for the basic editor.
     await optionalStep('font manager', FontManagerService.instance.initialize);
     await optionalStep(
       'appearance settings',
@@ -101,9 +106,10 @@ class _DepthVibeAppState extends State<DepthVibeApp> {
     if (!mounted) return;
     setState(() {
       _initializing = false;
-      _ready = true;
       _startupWarnings = List.unmodifiable(warnings);
-      _startupStage = 'DepthVibe is ready.';
+      _startupStage = warnings.isEmpty
+          ? 'DepthVibe is ready.'
+          : 'Editor ready; optional services need attention.';
     });
     unawaited(_refreshFontsSafely());
   }
