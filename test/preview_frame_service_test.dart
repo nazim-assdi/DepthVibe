@@ -127,6 +127,31 @@ void main() {
     service.dispose();
   });
 
+  test('slow decodes lower preview load and sustained fast decodes recover it', () {
+    final service = PreviewFrameService(maxConcurrentDecodes: 1);
+    service.configurePreviewProfile(width: 960, frameRate: 30);
+
+    expect(service.effectivePreviewWidth, 960);
+    expect(service.effectivePreviewFrameRate, 30);
+
+    for (var index = 0; index < 5; index++) {
+      service.recordDecodeDuration(const Duration(milliseconds: 120));
+    }
+    expect(service.effectivePreviewWidth, 768);
+    expect(service.effectivePreviewFrameRate, 27);
+
+    for (var index = 0; index < 40; index++) {
+      service.recordDecodeDuration(const Duration(milliseconds: 1));
+    }
+    expect(service.effectivePreviewWidth, greaterThan(768));
+    expect(service.effectivePreviewFrameRate, greaterThan(27));
+
+    service.configurePreviewProfile(width: 480, frameRate: 18);
+    expect(service.effectivePreviewWidth, 480);
+    expect(service.effectivePreviewFrameRate, 18);
+    service.dispose();
+  });
+
   test('decoder concurrency can be changed without exceeding the cap', () {
     final service = PreviewFrameService(maxConcurrentDecodes: 1);
 
