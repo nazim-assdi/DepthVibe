@@ -17,7 +17,7 @@ void main() {
       expect(DepthVibePerformanceMode.compatibility.previewFrameWidth, 480);
       expect(DepthVibePerformanceMode.compatibility.previewFrameRate, 18);
       expect(DepthVibePerformanceMode.compatibility.previewDecodeConcurrency, 1);
-      expect(DepthVibePerformanceMode.compatibility.videoHardwareDecoder, 'auto-safe');
+      expect(DepthVibePerformanceMode.compatibility.videoHardwareDecoder, 'no');
     });
 
     test('balanced mode stays between compatibility and quality', () {
