@@ -2235,11 +2235,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         onHorizontalDragUpdate: (details) {
           setState(() {
             if (left) {
-              _leftPanelWidth =
-                  (_leftPanelWidth + details.delta.dx).clamp(205.0, 420.0);
+              _leftPanelWidth = (_leftPanelWidth + details.delta.dx)
+                  .clamp(205.0, 420.0)
+                  .toDouble();
             } else {
-              _rightPanelWidth =
-                  (_rightPanelWidth - details.delta.dx).clamp(300.0, 560.0);
+              _rightPanelWidth = (_rightPanelWidth - details.delta.dx)
+                  .clamp(300.0, 560.0)
+                  .toDouble();
             }
           });
         },
@@ -9002,8 +9004,8 @@ class _KeyframeGraphPainter extends CustomPainter {
     final frames = [...track.keyframes]
       ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
     final values = frames.map((item) => item.value).toList();
-    var minimum = values.reduce(math.min);
-    var maximum = values.reduce(math.max);
+    var minimum = values.reduce((a, b) => a < b ? a : b);
+    var maximum = values.reduce((a, b) => a > b ? a : b);
     if ((maximum - minimum).abs() < 0.000001) {
       minimum -= 1;
       maximum += 1;
