@@ -232,7 +232,7 @@ class _DepthVibeSettingsDialogState extends State<DepthVibeSettingsDialog> {
                       ),
                     ] else if (_section == 'Performance') ...[
                       const Text(
-                        '3D PREVIEW PERFORMANCE',
+                        'LIVE VIDEO + 3D PREVIEW PERFORMANCE',
                         style: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 10,
@@ -289,7 +289,7 @@ class _DepthVibeSettingsDialogState extends State<DepthVibeSettingsDialog> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'This changes live 3D preview resolution only. Final exports keep the composition dimensions and quality settings.',
+                        'This changes live video and 3D preview workload only. Final exports keep the composition dimensions and quality settings.',
                         style: TextStyle(
                           fontSize: 10,
                           color: palette.secondaryText,
