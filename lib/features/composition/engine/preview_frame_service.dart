@@ -231,7 +231,6 @@ class _PendingPreviewFrame {
   _PendingPreviewFrame({
     required this.laneId,
     required this.key,
-    required this.cacheFile,
     required this.decode,
   });
 
