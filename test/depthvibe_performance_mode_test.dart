@@ -14,6 +14,7 @@ void main() {
         isFalse,
       );
       expect(DepthVibePerformanceMode.compatibility.videoOutputScale, 0.5);
+      expect(DepthVibePerformanceMode.compatibility.videoHardwareDecoder, 'no');
     });
 
     test('balanced mode stays between compatibility and quality', () {
@@ -27,6 +28,7 @@ void main() {
         isTrue,
       );
       expect(DepthVibePerformanceMode.balanced.videoOutputScale, 0.75);
+      expect(DepthVibePerformanceMode.balanced.videoHardwareDecoder, 'auto');
     });
 
     test('quality mode requests the largest preview dimensions', () {
@@ -40,6 +42,7 @@ void main() {
         isTrue,
       );
       expect(DepthVibePerformanceMode.quality.videoOutputScale, 1.0);
+      expect(DepthVibePerformanceMode.quality.videoHardwareDecoder, 'auto');
     });
 
     test('preview workload increases monotonically with quality', () {
