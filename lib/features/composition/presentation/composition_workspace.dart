@@ -7470,10 +7470,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   final uiText = stats.averageUiFrameMs <= 0
                       ? 'UI warming'
                       : '${stats.averageUiFrameMs.round()} ms UI';
+                  final queueText = stats.averageQueueWaitMs <= 0
+                      ? 'queue ready'
+                      : '${stats.averageQueueWaitMs.round()} ms queue';
                   return Text(
                     '${stats.effectivePreviewWidth}px · '
                     '${stats.effectivePreviewFrameRate} FPS · '
-                    '$decodeText · $uiText · '
+                    '$decodeText · $queueText · $uiText · '
                     '${stats.droppedRequests} skipped',
                     style: const TextStyle(
                       fontSize: 8,
