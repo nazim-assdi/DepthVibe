@@ -196,6 +196,15 @@ class PreviewFrameService {
       } catch (_) {}
     }
 
+    // Another caller may have scheduled this frame while the disk-cache
+    // lookup above was awaiting I/O. Join it instead of starting a duplicate.
+    final activeAfterDiskCheck = _activeByKey[cacheKey];
+    if (activeAfterDiskCheck != null) return activeAfterDiskCheck;
+    final queuedAfterDiskCheck = _pendingByKey[cacheKey];
+    if (queuedAfterDiskCheck != null) {
+      return queuedAfterDiskCheck.completer.future;
+    }
+
     final task = _PendingPreviewFrame(
       laneId: laneId,
       key: cacheKey,
@@ -288,13 +297,9 @@ class PreviewFrameService {
       if (_cache.length == 1) break;
       final oldest = _cache.remove(oldestKey)!;
       _cachedBytes = (_cachedBytes - oldest.bytes).clamp(0, 1 << 62).toInt();
-      try {
-        if (oldest.file.path != file.path && await oldest.file.exists()) {
-          await oldest.file.delete();
-        }
-      } catch (_) {
-        // A cache eviction failure must not interrupt preview playback.
-      }
+      // Keep the disk frame: a visible Image.file or the workspace's last
+      // displayed frame may still reference it. Disk trimming is handled by
+      // the preview-cache janitor, which knows the currently pinned frames.
     }
   }
 
