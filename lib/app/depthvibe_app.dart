@@ -22,6 +22,8 @@ class DepthVibeApp extends StatefulWidget {
 class _DepthVibeAppState extends State<DepthVibeApp> {
   bool _initializing = false;
   bool _ready = false;
+  bool _mediaKitAvailable = false;
+  bool _ffmpegAvailable = false;
   String _startupStage = 'Preparing your creative workspace…';
   String? _startupError;
   List<String> _startupWarnings = const [];
@@ -35,35 +37,19 @@ class _DepthVibeAppState extends State<DepthVibeApp> {
   Future<void> _initializeServices() async {
     if (_initializing || _ready) return;
 
-    // Let Flutter submit the first startup frame before loading native media
-    // libraries. This keeps slow/legacy Windows media initialisation from
-    // making a newly-created window appear as an empty grey surface.
+    // Give Flutter a chance to paint the first frame before native libraries
+    // load. A missing/failed media backend must never block the basic editor.
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted || _initializing || _ready) return;
 
     setState(() {
       _initializing = true;
       _startupError = null;
-      _startupStage = 'Starting native media engine…';
+      _startupStage = 'Preparing your creative workspace…';
       _startupWarnings = const [];
+      _mediaKitAvailable = false;
+      _ffmpegAvailable = false;
     });
-
-    try {
-      MediaKit.ensureInitialized();
-      if (mounted) {
-        setState(() => _startupStage = 'Preparing video and rendering engine…');
-      }
-      await FFmpegKitExtended.initialize();
-    } catch (error, stackTrace) {
-      debugPrint('DepthVibe core startup failed: $error\n$stackTrace');
-      if (!mounted) return;
-      setState(() {
-        _initializing = false;
-        _startupError = error.toString();
-        _startupStage = 'The required media engine could not be started.';
-      });
-      return;
-    }
 
     final warnings = <String>[];
     Future<void> optionalStep(
@@ -77,14 +63,36 @@ class _DepthVibeAppState extends State<DepthVibeApp> {
         await initialize();
       } catch (error, stackTrace) {
         warnings.add(label);
-        debugPrint('DepthVibe optional startup service "$label" failed: $error\n$stackTrace');
+        debugPrint(
+          'DepthVibe optional startup service "$label" failed: $error\\n$stackTrace',
+        );
       }
     }
 
+    // These engines are optional for the UI, project controls, timeline and
+    // file picker. Individual features check availability when invoked.
+    await optionalStep('media playback engine', () async {
+      MediaKit.ensureInitialized();
+      _mediaKitAvailable = true;
+    });
+    await optionalStep('video processing engine', () async {
+      await FFmpegKitExtended.initialize();
+      _ffmpegAvailable = true;
+    });
+
     await optionalStep('font manager', FontManagerService.instance.initialize);
-    await optionalStep('appearance settings', DepthVibeSettingsService.instance.initialize);
-    await optionalStep('extension manager', ExtensionManagerService.instance.initialize);
-    await optionalStep('Adobe connection service', AdobeBridgeService.instance.start);
+    await optionalStep(
+      'appearance settings',
+      DepthVibeSettingsService.instance.initialize,
+    );
+    await optionalStep(
+      'extension manager',
+      ExtensionManagerService.instance.initialize,
+    );
+    await optionalStep(
+      'Adobe connection service',
+      AdobeBridgeService.instance.start,
+    );
     await optionalStep(
       'extension marketplace updates',
       ExtensionMarketplaceService.instance.startAutoUpdater,
@@ -209,6 +217,8 @@ class _DepthVibeAppState extends State<DepthVibeApp> {
                   ? null
                   : 'Some optional services did not start: ' +
                       _startupWarnings.join(', '),
+              mediaPlaybackAvailable: _mediaKitAvailable,
+              mediaProcessingAvailable: _ffmpegAvailable,
             )
           : Builder(builder: _buildStartupScreen),
     );
