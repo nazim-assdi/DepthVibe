@@ -148,7 +148,7 @@ class PreviewProxyService {
           return descriptor.output;
         }
         final existing = _generationJobs[descriptor.key];
-        if (existing != null) return existing;
+        if (existing != null) return await existing;
 
         final partial = File(descriptor.output.path + '.part.mp4');
         final job = _generationTail.then((_) async {
