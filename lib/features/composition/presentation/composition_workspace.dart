@@ -93,6 +93,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         .instance.performanceMode.previewCacheFrameLimit,
   );
   Future<Directory>? _previewCacheDirectoryJob;
+  bool _previewCacheJanitorRunning = false;
+  int _previewFramesSinceTrim = 0;
   String _curveChannel = 'master';
   final CreativeAssetPackService _creativeAssetPacks =
       CreativeAssetPackService.instance;
@@ -123,6 +125,58 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       await directory.create(recursive: true);
       return directory;
     });
+  }
+
+  Future<void> _trimPreviewCacheIfNeeded() async {
+    _previewFramesSinceTrim++;
+    if (_previewFramesSinceTrim < 64 || _previewCacheJanitorRunning) return;
+    _previewFramesSinceTrim = 0;
+    _previewCacheJanitorRunning = true;
+    try {
+      final directory = await _previewCacheDirectory();
+      final pinnedPaths = _lastVideoFrames.values
+          .map((file) => file.path)
+          .toSet();
+      final entries = <({File file, int size, DateTime modified})>[];
+      var totalBytes = 0;
+
+      await for (final entity in directory.list(followLinks: false)) {
+        if (entity is! File ||
+            !entity.path.endsWith('.jpg') ||
+            entity.path.contains('.part.jpg')) {
+          continue;
+        }
+        try {
+          final stat = await entity.stat();
+          totalBytes += stat.size;
+          entries.add((
+            file: entity,
+            size: stat.size,
+            modified: stat.modified,
+          ));
+        } catch (_) {}
+      }
+
+      const hardLimitBytes = 512 * 1024 * 1024;
+      const targetBytes = 384 * 1024 * 1024;
+      if (totalBytes <= hardLimitBytes) return;
+
+      entries.sort((a, b) => a.modified.compareTo(b.modified));
+      for (final entry in entries) {
+        if (totalBytes <= targetBytes) break;
+        if (pinnedPaths.contains(entry.file.path)) continue;
+        try {
+          if (await entry.file.exists()) {
+            await entry.file.delete();
+            totalBytes -= entry.size;
+          }
+        } catch (_) {}
+      }
+    } catch (error, stackTrace) {
+      debugPrint('DepthVibe preview cache cleanup skipped: $error\\n$stackTrace');
+    } finally {
+      _previewCacheJanitorRunning = false;
+    }
   }
 
   Future<FileStat> _sourceStatFor(String path) {
@@ -168,14 +222,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               '-ss ${(seekMs / 1000).toStringAsFixed(3)} '
               '-i $quotedPath -map 0:v:0 -an -sn -dn '
               '-frames:v 1 '
-              '-vf "scale=\'if(gte(iw,ih),$width,-2)\':'
-              '\'if(gte(iw,ih),-2,$width)\':flags=fast_bilinear" '
+              '-vf "scale=$width:$width:force_original_aspect_ratio=decrease:'
+              'flags=fast_bilinear" '
               '-q:v 5 $quotedFrame';
           final session = await FFmpegKit.executeAsync(command).timeout(
             const Duration(seconds: 10),
             onTimeout: () {
               final activeSessions = FFmpegKit.getFFmpegSessions()
-                  .where((running) => running.getCommand().contains(frame.path))
+                  .where((running) =>
+                      running.getCommand().contains(partialFrame.path))
                   .toList();
               for (final running in activeSessions) {
                 running.cancel();
@@ -268,6 +323,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           !prefetch &&
           _latestRequestedFrameKey[layer.id] == requestKey) {
         _lastVideoFrames[layer.id] = frame;
+        unawaited(_trimPreviewCacheIfNeeded());
         // Warm one frame ahead. If the playhead moves elsewhere, the
         // scheduler replaces this pending request with the newest frame.
         final nextTimeMs =
