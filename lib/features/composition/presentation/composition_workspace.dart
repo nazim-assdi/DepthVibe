@@ -744,6 +744,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   double _renderProgress = 0;
   CompositionExportCancellation? _renderCancellation;
   String _panel = 'Layers';
+  String _leftPanel = 'Project';
+  String _leftEffectSearch = '';
+  String _workspacePreset = 'Standard';
+  String? _graphTrackLabel;
+  bool _graphEditorVisible = false;
+  double _leftPanelWidth = 260;
+  double _rightPanelWidth = 410;
+  final Set<String> _expandedTimelineLayers = {};
   String _effectCategory = 'All';
   String _effectSearch = '';
   String _transitionCategory = 'All';
@@ -1913,10 +1921,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       );
                     }
                     return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        SizedBox(width: 260, child: _buildLayerPanel(doc.layers)),
-                        Expanded(flex: 6, child: _buildPlayheadAwareCanvas()),
-                        SizedBox(width: 410, child: _buildActivePanel(layer)),
+                        SizedBox(
+                          width: _leftPanelWidth,
+                          child: _buildLayerPanel(doc.layers),
+                        ),
+                        _buildWorkspaceSplitter(left: true),
+                        Expanded(
+                          child: _buildPlayheadAwareCanvas(),
+                        ),
+                        _buildWorkspaceSplitter(left: false),
+                        SizedBox(
+                          width: _rightPanelWidth,
+                          child: _buildActivePanel(layer),
+                        ),
                       ],
                     );
                   },
@@ -1996,6 +2015,42 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ),
       ),
     );
+  }
+
+  void _applyWorkspacePreset(String preset) {
+    setState(() {
+      _workspacePreset = preset;
+      switch (preset) {
+        case 'Standard':
+          _leftPanel = 'Project';
+          _panel = 'Layers';
+          _graphEditorVisible = false;
+        case 'Animation':
+          _leftPanel = 'Project';
+          _panel = 'Animation';
+          _graphEditorVisible = true;
+        case 'Editing':
+          _leftPanel = 'Project';
+          _panel = 'Timing';
+          _graphEditorVisible = false;
+        case 'Effects':
+          _leftPanel = 'Effects & Presets';
+          _panel = 'Effects';
+          _graphEditorVisible = false;
+        case 'Color':
+          _leftPanel = 'Project';
+          _panel = 'Color';
+          _graphEditorVisible = false;
+        case 'Audio':
+          _leftPanel = 'Project';
+          _panel = 'Audio';
+          _graphEditorVisible = false;
+        case '3D':
+          _leftPanel = 'Project';
+          _panel = '3D';
+          _graphEditorVisible = false;
+      }
+    });
   }
 
   Widget _buildWorkspaceMenuBar() {
@@ -2112,11 +2167,24 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ],
             (panel) => setState(() => _panel = panel),
           ),
+          _workspaceMenuButton(
+            'Workspace',
+            const [
+              PopupMenuItem(value: 'Standard', child: Text('Standard')),
+              PopupMenuItem(value: 'Editing', child: Text('Editing')),
+              PopupMenuItem(value: 'Animation', child: Text('Animation')),
+              PopupMenuItem(value: 'Effects', child: Text('Effects')),
+              PopupMenuItem(value: 'Color', child: Text('Color')),
+              PopupMenuItem(value: 'Audio', child: Text('Audio')),
+              PopupMenuItem(value: '3D', child: Text('3D')),
+            ],
+            _applyWorkspacePreset,
+          ),
           const Spacer(),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: Text(
-              'EDITING WORKSPACE  •  ${_controller.document.layers.length} LAYERS',
+              '${_workspacePreset.toUpperCase()} WORKSPACE  •  ${_controller.document.layers.length} LAYERS',
               style: TextStyle(
                 fontSize: 8,
                 letterSpacing: 0.8,
@@ -2158,8 +2226,45 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  Widget _buildWorkspaceSplitter({required bool left}) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragUpdate: (details) {
+          setState(() {
+            if (left) {
+              _leftPanelWidth =
+                  (_leftPanelWidth + details.delta.dx).clamp(205.0, 420.0);
+            } else {
+              _rightPanelWidth =
+                  (_rightPanelWidth - details.delta.dx).clamp(300.0, 560.0);
+            }
+          });
+        },
+        onDoubleTap: () {
+          setState(() {
+            _leftPanelWidth = 260;
+            _rightPanelWidth = 410;
+          });
+        },
+        child: SizedBox(
+          width: 6,
+          child: Center(
+            child: Container(
+              width: 1,
+              color: palette.border,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildLayerPanel(List<CompositionLayer> layers) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final document = _controller.document;
     return Container(
       decoration: BoxDecoration(
         color: palette.panel,
@@ -2167,73 +2272,378 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       ),
       child: Column(
         children: [
-          _panelHeader('PROJECT / LAYER STACK', Icons.layers),
+          Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: palette.toolbar,
+              border: Border(bottom: BorderSide(color: palette.border)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _leftPanel == 'Project' ? Icons.folder_open : Icons.auto_awesome,
+                  size: 15,
+                  color: palette.accent,
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    _leftPanel == 'Project' ? 'PROJECT' : 'EFFECTS & PRESETS',
+                    style: TextStyle(
+                      fontSize: 10,
+                      letterSpacing: 1,
+                      fontWeight: FontWeight.w900,
+                      color: palette.primaryText,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Import video layer',
+                  onPressed: () => _addLayer(LayerKind.video),
+                  icon: const Icon(Icons.add, size: 17),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Choose left panel',
+                  onSelected: (value) => setState(() => _leftPanel = value),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'Project', child: Text('Project')),
+                    PopupMenuItem(value: 'Effects & Presets', child: Text('Effects & Presets')),
+                    PopupMenuItem(value: 'Info', child: Text('Composition Info')),
+                  ],
+                  child: const Padding(
+                    padding: EdgeInsets.all(5),
+                    child: Icon(Icons.more_vert, size: 17),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            height: 34,
+            decoration: BoxDecoration(
+              color: palette.panel,
+              border: Border(bottom: BorderSide(color: palette.border)),
+            ),
+            child: Row(
+              children: [
+                for (final tab in const ['Project', 'Effects & Presets', 'Info'])
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => _leftPanel = tab),
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: _leftPanel == tab
+                                  ? palette.accent
+                                  : Colors.transparent,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                        child: Text(
+                          tab == 'Effects & Presets' ? 'EFFECTS' : tab.toUpperCase(),
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: _leftPanel == tab
+                                ? FontWeight.w900
+                                : FontWeight.w600,
+                            color: _leftPanel == tab
+                                ? palette.primaryText
+                                : palette.secondaryText,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
           Expanded(
-            child: ListView.builder(
-              itemCount: layers.length,
-              itemBuilder: (context, index) {
-                final layer = layers[index];
-                final selected = layer.id == _controller.document.selectedLayerId;
-                var depth = 0;
-                var ancestorId = layer.parentId;
-                while (ancestorId != null && depth <= layers.length) {
-                  final parents = layers.where((item) => item.id == ancestorId);
-                  if (parents.isEmpty) break;
-                  ancestorId = parents.first.parentId;
-                  depth++;
-                }
-                final metadata = <String>[
+            child: switch (_leftPanel) {
+              'Effects & Presets' => _buildLeftEffectsPanel(),
+              'Info' => _buildCompositionInfoPanel(document),
+              _ => _buildProjectPanel(layers, document),
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProjectPanel(
+    List<CompositionLayer> layers,
+    CompositionDocument document,
+  ) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: palette.border)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                document.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: palette.primaryText,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                '${document.width} × ${document.height}  ·  ${document.frameRate.toStringAsFixed(0)} fps  ·  ${_time(document.durationMs)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 8, color: palette.secondaryText),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 7, 10, 5),
+          child: Row(
+            children: [
+              Icon(Icons.layers_outlined, size: 13, color: palette.secondaryText),
+              const SizedBox(width: 6),
+              Text(
+                'COMPOSITION LAYERS  (${layers.length})',
+                style: TextStyle(
+                  fontSize: 8,
+                  letterSpacing: 0.7,
+                  fontWeight: FontWeight.w900,
+                  color: palette.secondaryText,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: layers.length,
+            itemBuilder: (context, index) {
+              final layer = layers[index];
+              final selected = layer.id == document.selectedLayerId;
+              var depth = 0;
+              var ancestorId = layer.parentId;
+              while (ancestorId != null && depth <= layers.length) {
+                final parents = layers.where((item) => item.id == ancestorId);
+                if (parents.isEmpty) break;
+                ancestorId = parents.first.parentId;
+                depth++;
+              }
+              final metadata = <String>[
+                layer.kind == LayerKind.precomposition
+                    ? 'PSD group'
+                    : layer.kind.name,
+                if (layer.photoshopClipped)
+                  layer.clippingBaseLayerId == null
+                      ? 'clipped layer'
+                      : 'clipped to base',
+                if (layer.smartObjectResourceId != null) 'Smart Object',
+                if (layer.photoshopAdjustmentKey != null)
+                  'Adjustment ${layer.photoshopAdjustmentKey}',
+              ];
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.only(
+                  left: 8 + depth * 12,
+                  right: 4,
+                ),
+                selected: selected,
+                selectedTileColor: palette.accentSoft,
+                leading: Icon(
                   layer.kind == LayerKind.precomposition
-                      ? 'PSD group'
-                      : layer.kind.name,
-                  if (layer.photoshopClipped)
-                    layer.clippingBaseLayerId == null
-                        ? 'clipped layer'
-                        : 'clipped to base',
-                  if (layer.smartObjectResourceId != null) 'Smart Object',
-                  if (layer.photoshopAdjustmentKey != null)
-                    'Adjustment ${layer.photoshopAdjustmentKey}',
-                ];
-                return ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.only(
-                    left: 10 + depth * 14,
-                    right: 8,
-                  ),
-                  selected: selected,
-                  selectedTileColor: palette.accentSoft,
-                  leading: Icon(
-                    layer.kind == LayerKind.precomposition
-                        ? Icons.folder_open
-                        : _iconFor(layer.kind),
-                    size: 17,
-                  ),
-                  title: Text(layer.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
-                  subtitle: Text(metadata.join(' · '), maxLines: 1, style: const TextStyle(fontSize: 9)),
-                  trailing: Row(
+                      ? Icons.folder_open
+                      : _iconFor(layer.kind),
+                  size: 16,
+                  color: selected ? palette.accent : palette.secondaryText,
+                ),
+                title: Text(
+                  layer.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10),
+                ),
+                subtitle: Text(
+                  metadata.join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 8),
+                ),
+                trailing: SizedBox(
+                  width: 54,
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
                         visualDensity: VisualDensity.compact,
                         tooltip: layer.enabled ? 'Hide layer' : 'Show layer',
-                        onPressed: () => _controller.setLayerEnabled(layer.id, !layer.enabled),
-                        icon: Icon(layer.enabled ? Icons.visibility : Icons.visibility_off, size: 16),
+                        onPressed: () => _controller.setLayerEnabled(
+                          layer.id,
+                          !layer.enabled,
+                        ),
+                        icon: Icon(
+                          layer.enabled ? Icons.visibility : Icons.visibility_off,
+                          size: 14,
+                        ),
                       ),
                       IconButton(
                         visualDensity: VisualDensity.compact,
                         tooltip: layer.locked ? 'Unlock layer' : 'Lock layer',
-                        onPressed: () => _controller.setLayerLocked(layer.id, !layer.locked),
-                        icon: Icon(layer.locked ? Icons.lock : Icons.lock_open, size: 16),
+                        onPressed: () => _controller.setLayerLocked(
+                          layer.id,
+                          !layer.locked,
+                        ),
+                        icon: Icon(
+                          layer.locked ? Icons.lock : Icons.lock_open,
+                          size: 14,
+                        ),
                       ),
                     ],
                   ),
-                  onTap: () => _controller.selectLayer(layer.id),
-                );
-              },
+                ),
+                onTap: () => _controller.selectLayer(layer.id),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLeftEffectsPanel() {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final query = _leftEffectSearch.trim().toLowerCase();
+    final effects = EffectCatalog.all.where((effect) {
+      return query.isEmpty ||
+          (effect.name + ' ' + effect.category + ' ' + effect.description)
+              .toLowerCase()
+              .contains(query);
+    }).toList();
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: TextField(
+            onChanged: (value) => setState(() => _leftEffectSearch = value),
+            decoration: const InputDecoration(
+              isDense: true,
+              prefixIcon: Icon(Icons.search, size: 16),
+              hintText: 'Search effects and presets…',
             ),
           ),
-        ],
-      ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          child: Row(
+            children: [
+              Text(
+                '${effects.length} EFFECTS',
+                style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.7,
+                  color: palette.secondaryText,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                _selected == null ? 'SELECT A LAYER' : 'READY TO APPLY',
+                style: TextStyle(
+                  fontSize: 7,
+                  fontWeight: FontWeight.w800,
+                  color: _selected == null
+                      ? palette.secondaryText
+                      : palette.accent,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 7),
+            itemCount: effects.length,
+            itemBuilder: (context, index) {
+              final effect = effects[index];
+              return EffectPreviewTile(
+                effect: effect,
+                onApply: _selected == null
+                    ? () => setState(() {
+                          _notice = 'Select a layer before adding ${effect.name}.';
+                        })
+                    : () {
+                        _controller.addEffect(effect.id);
+                        setState(() => _panel = 'Effects');
+                      },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompositionInfoPanel(CompositionDocument document) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final selected = _selected;
+    final video = document.layers.where((layer) => layer.kind == LayerKind.video).length;
+    final audio = document.layers.where((layer) => layer.kind == LayerKind.audio).length;
+    final image = document.layers.where((layer) =>
+        layer.kind == LayerKind.image || layer.kind == LayerKind.photoshopLayer).length;
+    Widget info(String label, String value, IconData icon) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 10),
+          child: Row(
+            children: [
+              Icon(icon, size: 15, color: palette.secondaryText),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(label, style: TextStyle(fontSize: 9, color: palette.secondaryText)),
+              ),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  color: palette.primaryText,
+                ),
+              ),
+            ],
+          ),
+        );
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      children: [
+        _panelHeader('COMPOSITION INFO', Icons.info_outline),
+        info('Frame size', '${document.width} × ${document.height}', Icons.aspect_ratio),
+        info('Frame rate', '${document.frameRate.toStringAsFixed(3)} fps', Icons.speed),
+        info('Duration', _time(document.durationMs), Icons.timer_outlined),
+        info('Layers', document.layers.length.toString(), Icons.layers_outlined),
+        info('Video tracks', video.toString(), Icons.movie_outlined),
+        info('Audio tracks', audio.toString(), Icons.graphic_eq),
+        info('Images / PSD', image.toString(), Icons.image_outlined),
+        info('Transitions', document.transitions.length.toString(), Icons.compare_arrows),
+        info('Audio buses', document.audioBuses.length.toString(), Icons.tune),
+        const Divider(height: 22),
+        _panelHeader('SELECTION INFO', Icons.ads_click),
+        info('Selected', selected?.name ?? 'None', Icons.layers),
+        info('Keyframe tracks', selected?.keyframeTracks.length.toString() ?? '—', Icons.key),
+        info('Effects', selected?.effects.length.toString() ?? '—', Icons.auto_awesome),
+        info('Masks', selected?.masks.length.toString() ?? '—', Icons.crop_free),
+      ],
     );
   }
 
@@ -7827,6 +8237,134 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _controller.setPlayhead(target);
   }
 
+  List<({String label, KeyframeTrack track})> _graphTracksFor(
+    CompositionLayer? layer,
+  ) {
+    if (layer == null) return const [];
+    return [
+      for (final track in layer.keyframeTracks)
+        (label: 'Transform · ${track.property}', track: track),
+      for (final effect in layer.effects)
+        for (final track in effect.keyframeTracks)
+          (label: '${effect.name} · ${track.property}', track: track),
+      for (final mask in layer.masks)
+        for (final track in mask.keyframeTracks)
+          (label: 'Mask · ${mask.name} · ${track.property}', track: track),
+    ];
+  }
+
+  void _scrubGraph(double x, double width, int duration) {
+    if (width <= 0 || duration <= 0) return;
+    _pausePreviewPlayback();
+    _controller.setPlayhead(
+      (x / width * duration).round().clamp(0, duration),
+    );
+  }
+
+  Widget _buildGraphEditor(int duration) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final options = _graphTracksFor(_selected);
+    if (options.isEmpty) {
+      return Center(
+        child: Text(
+          _selected == null
+              ? 'Select a layer with animated properties to view its graph.'
+              : 'No keyframes yet. Add a keyframe to Transform, Effects or Masks.',
+          style: TextStyle(fontSize: 10, color: palette.secondaryText),
+        ),
+      );
+    }
+    final active = options.firstWhere(
+      (item) => item.label == _graphTrackLabel,
+      orElse: () => options.first,
+    );
+    if (_graphTrackLabel != active.label) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _graphTrackLabel != active.label) {
+          setState(() => _graphTrackLabel = active.label);
+        }
+      });
+    }
+    return Column(
+      children: [
+        SizedBox(
+          height: 30,
+          child: Row(
+            children: [
+              const Icon(Icons.show_chart, size: 14),
+              const SizedBox(width: 7),
+              Text(
+                'GRAPH EDITOR',
+                style: TextStyle(
+                  fontSize: 8,
+                  letterSpacing: 0.8,
+                  fontWeight: FontWeight.w900,
+                  color: palette.secondaryText,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: active.label,
+                  underline: const SizedBox.shrink(),
+                  style: TextStyle(fontSize: 9, color: palette.primaryText),
+                  items: options
+                      .map((item) => DropdownMenuItem(
+                            value: item.label,
+                            child: Text(
+                              item.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 9),
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (value) => setState(() => _graphTrackLabel = value),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '${active.track.keyframes.length} KEYS',
+                style: TextStyle(fontSize: 8, color: palette.secondaryText),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (details) => _scrubGraph(
+                details.localPosition.dx,
+                constraints.maxWidth,
+                duration,
+              ),
+              onHorizontalDragUpdate: (details) => _scrubGraph(
+                details.localPosition.dx,
+                constraints.maxWidth,
+                duration,
+              ),
+              child: CustomPaint(
+                size: Size(constraints.maxWidth, constraints.maxHeight),
+                painter: _KeyframeGraphPainter(
+                  track: active.track,
+                  durationMs: duration,
+                  playheadMs: _controller.document.playheadMs,
+                  gridColor: palette.border,
+                  curveColor: palette.accent,
+                  keyframeColor: const Color(0xFFE7C46D),
+                  playheadColor: const Color(0xFFFFA65C),
+                  textColor: palette.secondaryText,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildPlayheadAwareTimeline() {
     final doc = _controller.document;
     return AnimatedBuilder(
@@ -7935,8 +8473,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 icon: const Icon(Icons.diamond_outlined, size: 17),
               ),
               IconButton(
-                tooltip: 'Open keyframe / graph editor',
-                onPressed: () => setState(() => _panel = 'Animation'),
+                tooltip: _graphEditorVisible
+                    ? 'Show layer timeline'
+                    : 'Show Graph Editor',
+                color: _graphEditorVisible ? palette.accent : null,
+                onPressed: () => setState(() {
+                  _graphEditorVisible = !_graphEditorVisible;
+                  _panel = 'Animation';
+                }),
                 icon: const Icon(Icons.show_chart, size: 18),
               ),
               PopupMenuButton<TransitionKind>(
@@ -7961,7 +8505,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               _controller.setPlayhead(value.round());
             },
           ),
-          Expanded(child: layerRows),
+          Expanded(
+            child: _graphEditorVisible
+                ? _buildGraphEditor(duration)
+                : layerRows,
+          ),
         ],
       ),
     );
@@ -7972,6 +8520,98 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   /// The returned widget is passed as AnimatedBuilder.child, so playback ticks
   /// update only the time display/slider and the single playhead overlay rather
   /// than rebuilding every visible layer row and clip.
+  List<({String label, KeyframeTrack track})> _timelineTracksFor(
+    CompositionLayer layer,
+  ) {
+    return [
+      for (final track in layer.keyframeTracks)
+        (label: track.property, track: track),
+      for (final effect in layer.effects)
+        for (final track in effect.keyframeTracks)
+          (label: '${effect.name} · ${track.property}', track: track),
+      for (final mask in layer.masks)
+        for (final track in mask.keyframeTracks)
+          (label: 'Mask · ${mask.name} · ${track.property}', track: track),
+    ];
+  }
+
+  Widget _buildTimelinePropertyLane(
+    String label,
+    KeyframeTrack track,
+    int duration, {
+    required double labelWidth,
+  }) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final safeDuration = math.max(1, duration);
+    return SizedBox(
+      height: 20,
+      child: Row(
+        children: [
+          SizedBox(
+            width: labelWidth,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 25, right: 5),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 8,
+                  color: palette.secondaryText,
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: palette.appBackground.withValues(alpha: 0.6),
+                border: Border(
+                  top: BorderSide(color: palette.border.withValues(alpha: 0.45)),
+                  bottom: BorderSide(color: palette.border.withValues(alpha: 0.45)),
+                ),
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) => Stack(
+                  clipBehavior: Clip.hardEdge,
+                  children: [
+                    for (final keyframe in track.keyframes)
+                      Positioned(
+                        left: (keyframe.timeMs / safeDuration *
+                                constraints.maxWidth - 5)
+                            .clamp(0.0, math.max(0.0, constraints.maxWidth - 10))
+                            .toDouble(),
+                        top: 2,
+                        bottom: 2,
+                        child: Tooltip(
+                          message:
+                              '${_time(keyframe.timeMs)} · ${keyframe.value.toStringAsFixed(3)} · ${keyframe.interpolation.name}',
+                          child: GestureDetector(
+                            onTap: () {
+                              _pausePreviewPlayback();
+                              _controller.setPlayhead(keyframe.timeMs);
+                            },
+                            child: const Icon(
+                              Icons.diamond,
+                              size: 10,
+                              color: Color(0xFFE4C36B),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color paletteText(BuildContext context) =>
+      Theme.of(context).extension<DepthVibePalette>()!.primaryText;
+
   Widget _buildTimelineLayerRows(
     List<CompositionLayer> layers,
     int duration,
@@ -7980,6 +8620,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       builder: (context, constraints) {
         final labelWidth = math.min(130.0, constraints.maxWidth);
         final trackWidth = math.max(0.0, constraints.maxWidth - labelWidth);
+        final selectedId = _controller.document.selectedLayerId;
         return Stack(
           clipBehavior: Clip.hardEdge,
           children: [
@@ -7987,25 +8628,84 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               itemCount: layers.length,
               itemBuilder: (context, index) {
                 final layer = layers[index];
-                return InkWell(
-                  onTap: () => _controller.selectLayer(layer.id),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 130,
-                          child: Text(
-                            layer.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 10),
+                final selected = layer.id == selectedId;
+                final tracks = _timelineTracksFor(layer);
+                final expanded = selected ||
+                    _expandedTimelineLayers.contains(layer.id);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      color: selected
+                          ? const Color(0x223C65A8)
+                          : Colors.transparent,
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 130,
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 21,
+                                  child: IconButton(
+                                    padding: EdgeInsets.zero,
+                                    visualDensity: VisualDensity.compact,
+                                    tooltip: expanded
+                                        ? 'Collapse layer properties'
+                                        : 'Expand layer properties',
+                                    onPressed: () => setState(() {
+                                      if (_expandedTimelineLayers.contains(layer.id)) {
+                                        _expandedTimelineLayers.remove(layer.id);
+                                      } else {
+                                        _expandedTimelineLayers.add(layer.id);
+                                      }
+                                    }),
+                                    icon: Icon(
+                                      expanded
+                                          ? Icons.expand_more
+                                          : Icons.chevron_right,
+                                      size: 14,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: () => _controller.selectLayer(layer.id),
+                                    child: Text(
+                                      layer.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: selected
+                                            ? FontWeight.w900
+                                            : FontWeight.w500,
+                                        color: selected
+                                            ? const Color(0xFFEAF0FF)
+                                            : paletteText(context),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        Expanded(child: _buildTimelineClip(layer, duration)),
-                      ],
+                          Expanded(
+                            child: _buildTimelineClip(layer, duration),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                    if (expanded)
+                      for (final track in tracks)
+                        _buildTimelinePropertyLane(
+                          track.label,
+                          track.track,
+                          duration,
+                          labelWidth: labelWidth,
+                        ),
+                  ],
                 );
               },
             ),
@@ -8250,6 +8950,156 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         LayerKind.particle => Icons.auto_awesome,
         LayerKind.precomposition => Icons.layers_outlined,
       };
+}
+
+/// A lightweight, CPU-painted value graph for the selected animated property.
+class _KeyframeGraphPainter extends CustomPainter {
+  const _KeyframeGraphPainter({
+    required this.track,
+    required this.durationMs,
+    required this.playheadMs,
+    required this.gridColor,
+    required this.curveColor,
+    required this.keyframeColor,
+    required this.playheadColor,
+    required this.textColor,
+  });
+
+  final KeyframeTrack track;
+  final int durationMs;
+  final int playheadMs;
+  final Color gridColor;
+  final Color curveColor;
+  final Color keyframeColor;
+  final Color playheadColor;
+  final Color textColor;
+
+  void _drawLabel(Canvas canvas, String value, Offset offset, double maxWidth) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: value,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 8,
+          fontFeatures: const [ui.FontFeature.tabularFigures()],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout(maxWidth: maxWidth);
+    painter.paint(canvas, offset);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width < 40 || size.height < 30 || track.keyframes.isEmpty) return;
+    final plot = Rect.fromLTWH(
+      42,
+      8,
+      math.max(1, size.width - 54),
+      math.max(1, size.height - 28),
+    );
+    final frames = [...track.keyframes]
+      ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
+    final values = frames.map((item) => item.value).toList();
+    var minimum = values.reduce(math.min);
+    var maximum = values.reduce(math.max);
+    if ((maximum - minimum).abs() < 0.000001) {
+      minimum -= 1;
+      maximum += 1;
+    } else {
+      final padding = (maximum - minimum) * 0.16;
+      minimum -= padding;
+      maximum += padding;
+    }
+    final valueRange = maximum - minimum;
+    final safeDuration = math.max(1, durationMs);
+    double xAt(int time) =>
+        plot.left + time.clamp(0, safeDuration) / safeDuration * plot.width;
+    double yAt(double value) =>
+        plot.bottom - (value - minimum) / valueRange * plot.height;
+
+    final gridPaint = Paint()
+      ..color = gridColor.withValues(alpha: 0.65)
+      ..strokeWidth = 0.7;
+    for (var index = 0; index <= 4; index++) {
+      final y = plot.top + plot.height * index / 4;
+      canvas.drawLine(Offset(plot.left, y), Offset(plot.right, y), gridPaint);
+      final value = maximum - valueRange * index / 4;
+      _drawLabel(canvas, value.toStringAsFixed(2), Offset(2, y - 5), 36);
+    }
+    for (var index = 0; index <= 8; index++) {
+      final x = plot.left + plot.width * index / 8;
+      canvas.drawLine(Offset(x, plot.top), Offset(x, plot.bottom), gridPaint);
+      final seconds = (safeDuration * index / 8 / 1000).toStringAsFixed(1);
+      _drawLabel(canvas, seconds, Offset(x - 10, plot.bottom + 5), 24);
+    }
+
+    final curve = Path();
+    const segments = 120;
+    for (var index = 0; index <= segments; index++) {
+      final time = (safeDuration * index / segments).round();
+      final value = track.sample(time, fallback: frames.first.value);
+      final point = Offset(xAt(time), yAt(value));
+      if (index == 0) {
+        curve.moveTo(point.dx, point.dy);
+      } else {
+        curve.lineTo(point.dx, point.dy);
+      }
+    }
+    canvas.drawPath(
+      curve,
+      Paint()
+        ..color = curveColor
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round,
+    );
+
+    final diamondPaint = Paint()..color = keyframeColor;
+    for (final frame in frames) {
+      final center = Offset(xAt(frame.timeMs), yAt(frame.value));
+      final path = Path()
+        ..moveTo(center.dx, center.dy - 4)
+        ..lineTo(center.dx + 4, center.dy)
+        ..lineTo(center.dx, center.dy + 4)
+        ..lineTo(center.dx - 4, center.dy)
+        ..close();
+      canvas.drawPath(path, diamondPaint);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = const Color(0xFF171D2A)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.7,
+      );
+    }
+
+    final playheadX = xAt(playheadMs);
+    canvas.drawLine(
+      Offset(playheadX, plot.top),
+      Offset(playheadX, plot.bottom),
+      Paint()
+        ..color = playheadColor
+        ..strokeWidth = 1.2,
+    );
+    canvas.drawCircle(
+      Offset(playheadX, plot.top),
+      3,
+      Paint()..color = playheadColor,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _KeyframeGraphPainter oldDelegate) =>
+      oldDelegate.track != track ||
+      oldDelegate.durationMs != durationMs ||
+      oldDelegate.playheadMs != playheadMs ||
+      oldDelegate.gridColor != gridColor ||
+      oldDelegate.curveColor != curveColor ||
+      oldDelegate.keyframeColor != keyframeColor ||
+      oldDelegate.playheadColor != playheadColor ||
+      oldDelegate.textColor != textColor;
 }
 
 /// Clips a layer to its frame-evaluated polygon/Bezier mask stack.
