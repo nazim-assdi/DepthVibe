@@ -565,15 +565,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         return null;
       }
 
-      if (!prefetch) {
+      final isLatestVisibleFrame =
+          !prefetch && _latestRequestedFrameKey[layer.id] == requestKey;
+      if (isLatestVisibleFrame) {
         _previewFrameErrors.remove(layer.id);
-      }
-      final chunkFrameCount = math.max(1, previewFps.round());
-      if (!prefetch &&
-          frameIndex % chunkFrameCount == 0 &&
-          _latestRequestedFrameKey[layer.id] == requestKey) {
+        // Keep every successfully decoded playhead frame as the visible
+        // fallback while a later frame is loading or being retried.
         _lastVideoFrames[layer.id] = frame;
         unawaited(_trimPreviewCacheIfNeeded());
+      }
+      final chunkFrameCount = math.max(1, previewFps.round());
+      if (isLatestVisibleFrame &&
+          frameIndex % chunkFrameCount == 0) {
         // Prefetch one full batch ahead, but only once at the start of each
         // chunk; otherwise every visible frame would replace the pending job.
         final nextTimeMs = timelineTimeMs + 1000;
