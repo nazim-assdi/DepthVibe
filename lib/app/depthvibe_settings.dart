@@ -19,6 +19,18 @@ enum DepthVibePerformanceMode {
   final int maximumPreviewDimension;
   final double gpuRenderScale;
 
+  /// Compatibility mode deliberately uses CPU video output for machines
+  /// without a dependable Direct3D/OpenGL video path.
+  bool get enableVideoHardwareAcceleration =>
+      this != DepthVibePerformanceMode.compatibility;
+
+  /// Reduce CPU pixel-copy work in the software video output path.
+  double get videoOutputScale => switch (this) {
+        DepthVibePerformanceMode.compatibility => 0.5,
+        DepthVibePerformanceMode.balanced => 0.75,
+        DepthVibePerformanceMode.quality => 1.0,
+      };
+
   String get title => switch (this) {
         DepthVibePerformanceMode.compatibility => 'Compatibility',
         DepthVibePerformanceMode.balanced => 'Balanced',
