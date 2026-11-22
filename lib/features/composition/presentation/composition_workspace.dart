@@ -141,13 +141,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       var totalBytes = 0;
 
       await for (final entity in directory.list(followLinks: false)) {
-        if (entity is! File ||
-            !entity.path.endsWith('.jpg') ||
-            entity.path.contains('.part.jpg')) {
-          continue;
-        }
+        if (entity is! File || !entity.path.endsWith('.jpg')) continue;
         try {
           final stat = await entity.stat();
+          if (entity.path.contains('.part.jpg')) {
+            // Partial FFmpeg outputs from a crash/timeout are never valid
+            // cache entries. A live decode cannot last beyond the 10s timeout.
+            if (DateTime.now().difference(stat.modified) >
+                const Duration(minutes: 2)) {
+              await entity.delete();
+            }
+            continue;
+          }
           totalBytes += stat.size;
           entries.add((
             file: entity,
@@ -1876,8 +1881,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               return Image.file(
                 frame,
                 fit: BoxFit.fill,
-                cacheWidth: DepthVibeSettingsService
-                    .instance.performanceMode.previewFrameWidth,
+                cacheWidth: _previewFrameService.effectivePreviewWidth,
                 filterQuality: FilterQuality.low,
                 gaplessPlayback: true,
                 errorBuilder: (_, __, ___) => const Center(
@@ -7091,7 +7095,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       : '${stats.averageDecodeMs.round()} ms decode';
                   return Text(
                     '${stats.effectivePreviewWidth}px · '
-                    '${stats.effectivePreviewFrameRate} FPS · $decodeText',
+                    '${stats.effectivePreviewFrameRate} FPS · $decodeText · '
+                    '${stats.droppedRequests} skipped',
                     style: const TextStyle(
                       fontSize: 8,
                       color: Color(0xFF8D9CB3),
