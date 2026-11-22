@@ -37,6 +37,27 @@ void main() {
       controller.dispose();
     });
 
+    test('playhead notifies only preview listeners, not document inspectors', () {
+      final controller = CompositionController();
+      final layerId = controller.addLayer(LayerKind.video);
+      var documentNotifications = 0;
+      var playheadNotifications = 0;
+      controller.addListener(() => documentNotifications++);
+      controller.playhead.addListener(() => playheadNotifications++);
+
+      controller.setPlayhead(1200);
+
+      expect(controller.document.playheadMs, 1200);
+      expect(controller.playhead.value, 1200);
+      expect(playheadNotifications, 1);
+      expect(documentNotifications, 0);
+      expect(controller.undoHistoryLength, 1);
+
+      controller.selectLayer(layerId);
+      expect(documentNotifications, 1);
+      controller.dispose();
+    });
+
     test('opening another document clears the old history', () {
       final controller = CompositionController();
       controller.addLayer(LayerKind.video);
