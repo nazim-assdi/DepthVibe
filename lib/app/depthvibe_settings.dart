@@ -24,6 +24,11 @@ enum DepthVibePerformanceMode {
   bool get enableVideoHardwareAcceleration =>
       this != DepthVibePerformanceMode.compatibility;
 
+  /// Disable GPU video decoding in Compatibility mode. MPV accepts "no" to
+  /// force software decoding and "auto" for the normal platform choice.
+  String get videoHardwareDecoder =>
+      this == DepthVibePerformanceMode.compatibility ? 'no' : 'auto';
+
   /// Reduce CPU pixel-copy work in the software video output path.
   double get videoOutputScale => switch (this) {
         DepthVibePerformanceMode.compatibility => 0.5,
