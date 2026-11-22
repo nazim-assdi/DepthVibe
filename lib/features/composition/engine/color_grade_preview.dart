@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter/widgets.dart';
 
 import '../domain/composition_models.dart';
@@ -6,6 +8,22 @@ import '../domain/composition_models.dart';
 /// Final exports continue to use the native FFmpeg color pipeline.
 class ColorGradePreview {
   const ColorGradePreview._();
+
+  static const int maxCachedFilters = 512;
+  static final LinkedHashMap<_ColorGradeFilterCacheKey, ColorFilter>
+      _filterCache = LinkedHashMap<_ColorGradeFilterCacheKey, ColorFilter>();
+  static int _cacheHits = 0;
+  static int _cacheMisses = 0;
+
+  static int get cacheHits => _cacheHits;
+  static int get cacheMisses => _cacheMisses;
+  static int get cacheSize => _filterCache.length;
+
+  static void clearCache() {
+    _filterCache.clear();
+    _cacheHits = 0;
+    _cacheMisses = 0;
+  }
 
   static double value(
     EffectInstance grade,
@@ -82,6 +100,14 @@ class ColorGradePreview {
 
   static ColorFilter? filterFor(EffectInstance? grade, int timeMs) {
     if (grade == null || !grade.enabled) return null;
+    final key = _ColorGradeFilterCacheKey(grade, timeMs);
+    final cached = _filterCache.remove(key);
+    if (cached != null) {
+      _filterCache[key] = cached;
+      _cacheHits++;
+      return cached;
+    }
+    _cacheMisses++;
     final masterGamma = value(
       grade,
       'master_gamma',
@@ -145,6 +171,27 @@ class ColorGradePreview {
         ..add(bias.toDouble());
     }
     matrix.addAll(const <double>[0, 0, 0, 1, 0]);
-    return ColorFilter.matrix(matrix);
+    final filter = ColorFilter.matrix(matrix);
+    _filterCache[key] = filter;
+    while (_filterCache.length > maxCachedFilters) {
+      _filterCache.remove(_filterCache.keys.first);
+    }
+    return filter;
   }
+}
+
+class _ColorGradeFilterCacheKey {
+  const _ColorGradeFilterCacheKey(this.grade, this.timeMs);
+
+  final EffectInstance grade;
+  final int timeMs;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _ColorGradeFilterCacheKey &&
+      identical(grade, other.grade) &&
+      timeMs == other.timeMs;
+
+  @override
+  int get hashCode => Object.hash(identityHashCode(grade), timeMs);
 }

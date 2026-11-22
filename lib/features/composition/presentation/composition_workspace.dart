@@ -2056,6 +2056,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   Widget _buildCanvas(CompositionDocument doc, CompositionLayer? selected) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final resolvedTransforms = const ParentTransformResolver().resolveAll(
+      timeMs: doc.playheadMs,
+      layers: doc.layers,
+    );
+    final cameraLayer = doc.layers
+        .where((item) => item.kind == LayerKind.camera && item.enabled)
+        .firstOrNull;
+    final cameraTransform = cameraLayer == null
+        ? null
+        : resolvedTransforms[cameraLayer.id];
     return Container(
       color: palette.appBackground,
       padding: const EdgeInsets.all(18),
@@ -2086,6 +2096,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                               layer,
                               doc,
                               Size(canvasWidth, canvasHeight),
+                              resolvedTransforms: resolvedTransforms,
+                              cameraLayer: cameraLayer,
+                              cameraTransform: cameraTransform,
                             ),
                           if (selected != null)
                             Positioned(
@@ -2143,29 +2156,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   Widget _buildLayerVisual(
     CompositionLayer layer,
     CompositionDocument doc,
-    Size canvasSize,
-  ) {
+    Size canvasSize, {
+    required Map<String, ResolvedLayerTransform> resolvedTransforms,
+    required CompositionLayer? cameraLayer,
+    required ResolvedLayerTransform? cameraTransform,
+  }) {
     final timeMs = doc.playheadMs;
     if (layer.kind == LayerKind.video &&
         (timeMs < layer.startMs || timeMs >= layer.endMs)) {
       return const SizedBox.shrink();
     }
-    final resolved = const ParentTransformResolver().resolve(
-      layer: layer,
-      timeMs: timeMs,
-      layers: doc.layers,
-    );
-    if (!resolved.enabled) return const SizedBox.shrink();
-    final cameraLayer = doc.layers
-        .where((item) => item.kind == LayerKind.camera && item.enabled)
-        .firstOrNull;
-    final cameraTransform = cameraLayer == null
-        ? null
-        : const ParentTransformResolver().resolve(
-            layer: cameraLayer,
-            timeMs: timeMs,
-            layers: doc.layers,
-          );
+    final resolved = resolvedTransforms[layer.id];
+    if (resolved == null || !resolved.enabled) {
+      return const SizedBox.shrink();
+    }
     final projected = cameraLayer != null &&
             cameraTransform != null &&
             cameraTransform.enabled &&
@@ -2447,11 +2451,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               (candidate) => candidate.kind == LayerKind.light && candidate.enabled,
             ))
               SceneLight(
-                transform: const ParentTransformResolver().resolve(
-                  layer: item,
-                  timeMs: timeMs,
-                  layers: doc.layers,
-                ),
+                transform: resolvedTransforms[item.id]!,
                 settings: item.light ?? const LightSettings(),
               ),
           ];
