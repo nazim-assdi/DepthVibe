@@ -127,6 +127,25 @@ void main() {
     service.dispose();
   });
 
+  test('one-second batch decode time is normalized by its frame count', () {
+    final service = PreviewFrameService(maxConcurrentDecodes: 1);
+    service.configurePreviewProfile(width: 960, frameRate: 30);
+
+    for (var index = 0; index < 5; index++) {
+      service.recordDecodeDuration(
+        const Duration(milliseconds: 2160),
+        framesDecoded: 18,
+      );
+    }
+
+    // 2.16 seconds for 18 frames is 120 ms per frame, which is slower
+    // than the 30 FPS budget and must lower the preview profile.
+    expect(service.stats.lastDecodeMs, 120);
+    expect(service.effectivePreviewWidth, 768);
+    expect(service.effectivePreviewFrameRate, 27);
+    service.dispose();
+  });
+
   test('slow decodes lower preview load and sustained fast decodes recover it', () {
     final service = PreviewFrameService(maxConcurrentDecodes: 1);
     service.configurePreviewProfile(width: 960, frameRate: 30);
