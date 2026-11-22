@@ -105,6 +105,38 @@ void main() {
     service.dispose();
   });
 
+  test('scheduler queue latency is recorded separately from decode time', () async {
+    final service = PreviewFrameService(maxConcurrentDecodes: 1);
+    final firstGate = Completer<File?>();
+    final firstStarted = Completer<void>();
+
+    final first = service.requestFrame(
+      laneId: 'video-a',
+      cacheKey: 'slow-first',
+      cacheFile: File('${directory.path}/slow-first.jpg'),
+      decode: () {
+        if (!firstStarted.isCompleted) firstStarted.complete();
+        return firstGate.future;
+      },
+    );
+    await firstStarted.future;
+
+    final second = service.requestFrame(
+      laneId: 'video-b',
+      cacheKey: 'queued-second',
+      cacheFile: File('${directory.path}/queued-second.jpg'),
+      decode: () async => _writeFrame(directory, 'queued-second'),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 35));
+    firstGate.complete(await _writeFrame(directory, 'slow-first'));
+    expect(await first, isNotNull);
+    expect(await second, isNotNull);
+    expect(service.stats.lastQueueWaitMs, greaterThanOrEqualTo(25));
+    expect(service.stats.lastDecodeMs, lessThan(service.stats.lastQueueWaitMs));
+    service.dispose();
+  });
+
   test('LRU cache evicts old files after the configured frame limit', () async {
     final service = PreviewFrameService(
       maxConcurrentDecodes: 1,
@@ -151,6 +183,23 @@ void main() {
     expect(service.stats.lastUiFrameMs, 1);
     expect(service.stats.averageDecodeMs, 120);
     expect(service.stats.averageUiFrameMs, 1);
+    service.dispose();
+  });
+
+  test('queue backlog lowers preview load without inflating decoder time', () {
+    final service = PreviewFrameService(maxConcurrentDecodes: 1);
+    service.configurePreviewProfile(width: 960, frameRate: 30);
+
+    for (var index = 0; index < 5; index++) {
+      service.recordQueueWaitDuration(const Duration(milliseconds: 100));
+      service.recordDecodeDuration(const Duration(milliseconds: 1));
+    }
+
+    expect(service.stats.lastQueueWaitMs, 100);
+    expect(service.stats.averageQueueWaitMs, 100);
+    expect(service.stats.lastDecodeMs, 1);
+    expect(service.effectivePreviewWidth, 768);
+    expect(service.effectivePreviewFrameRate, 27);
     service.dispose();
   });
 
