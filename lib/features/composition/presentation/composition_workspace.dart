@@ -2158,8 +2158,49 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 cacheWidth: _previewFrameService.effectivePreviewWidth,
                 filterQuality: FilterQuality.low,
                 gaplessPlayback: true,
-                errorBuilder: (_, __, ___) => const Center(
-                  child: Icon(Icons.broken_image_outlined),
+                errorBuilder: (_, error, ___) => Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.broken_image_outlined,
+                          color: Color(0xFFFFA7A7),
+                          size: 28,
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'CACHED PREVIEW FRAME COULD NOT BE DISPLAYED',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Color(0xFFFFB4B4),
+                            fontSize: 8,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          error.toString(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Color(0xFFB8C3D5),
+                            fontSize: 8,
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => _retryVideoPreview(layer),
+                          icon: const Icon(Icons.refresh, size: 13),
+                          label: const Text(
+                            'RETRY FRAME',
+                            style: TextStyle(fontSize: 9),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               );
             }
