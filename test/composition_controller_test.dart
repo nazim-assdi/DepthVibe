@@ -1459,4 +1459,119 @@ void main() {
     controller.dispose();
   });
 
+
+  test('splits cubic shape path segments without changing the curve', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 4000,
+        layers: [
+          CompositionLayer(
+            id: 'shape',
+            name: 'Curve',
+            kind: LayerKind.shape,
+            shapeStyle: ShapeStyle(
+              primitive: ShapePrimitive.path,
+              pathClosed: false,
+              pathVertices: [
+                MaskVertex(
+                  anchor: Vector2(0.1, 0.2),
+                  outHandle: Vector2(0.25, 0.35),
+                ),
+                MaskVertex(
+                  anchor: Vector2(0.9, 0.8),
+                  inHandle: Vector2(-0.3, -0.25),
+                ),
+              ],
+            ),
+          ),
+        ],
+        selectedLayerId: 'shape',
+      ),
+    );
+    final before = controller.selectedLayer!.shapeStyle!;
+    final insertedIndex = controller.insertShapePathVertex(0, t: 0.5);
+    expect(insertedIndex, 1);
+    final after = controller.selectedLayer!.shapeStyle!;
+    expect(after.pathVertices, hasLength(3));
+    expect(after.pathVertices[1].smooth, isTrue);
+
+    final originalStart = before.pathVertices.first;
+    final originalEnd = before.pathVertices.last;
+    final newStart = after.pathVertices.first;
+    final newMiddle = after.pathVertices[1];
+    final newEnd = after.pathVertices.last;
+    expect(newStart.anchor.x + newStart.outHandle.x,
+        closeTo(originalStart.anchor.x + originalStart.outHandle.x * 0.5, 1));
+    expect(newMiddle.anchor.x, closeTo(0.5, 0.08));
+    expect(newEnd.anchor.x, originalEnd.anchor.x);
+
+    controller.undo();
+    expect(controller.selectedLayer!.shapeStyle!.pathVertices, hasLength(2));
+    controller.dispose();
+  });
+
+  test('shape path point deletion respects minimum count and keyframe safety', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 4000,
+        layers: [
+          CompositionLayer(
+            id: 'shape',
+            name: 'Open Path',
+            kind: LayerKind.shape,
+            shapeStyle: ShapeStyle(
+              primitive: ShapePrimitive.path,
+              pathClosed: false,
+              pathVertices: [
+                MaskVertex(anchor: Vector2(0.1, 0.5)),
+                MaskVertex(anchor: Vector2(0.5, 0.5)),
+                MaskVertex(anchor: Vector2(0.9, 0.5)),
+              ],
+            ),
+          ),
+        ],
+        selectedLayerId: 'shape',
+      ),
+    );
+    expect(controller.removeShapePathVertex(1), isTrue);
+    expect(controller.selectedLayer!.shapeStyle!.pathVertices, hasLength(2));
+    expect(controller.removeShapePathVertex(0), isFalse);
+    controller.dispose();
+  });
+
+  test('shape path smooth vertex aligns opposite Bezier handles', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(
+            id: 'shape',
+            name: 'Smooth',
+            kind: LayerKind.shape,
+            shapeStyle: ShapeStyle(
+              primitive: ShapePrimitive.path,
+              pathVertices: [
+                MaskVertex(
+                  anchor: Vector2(0.5, 0.5),
+                  inHandle: Vector2(-0.1, 0),
+                  outHandle: Vector2(0.2, 0.1),
+                ),
+                MaskVertex(anchor: Vector2(0.9, 0.5)),
+                MaskVertex(anchor: Vector2(0.5, 0.9)),
+              ],
+            ),
+          ),
+        ],
+        selectedLayerId: 'shape',
+      ),
+    );
+    expect(controller.toggleShapeVertexSmooth(0), isTrue);
+    final vertex = controller.selectedLayer!.shapeStyle!.pathVertices.first;
+    expect(vertex.smooth, isTrue);
+    expect(vertex.inHandle.x / vertex.outHandle.x,
+        closeTo(-0.5, 0.0001));
+    expect(vertex.inHandle.y / vertex.outHandle.y,
+        closeTo(-0.5, 0.0001));
+    controller.dispose();
+  });
+
 }

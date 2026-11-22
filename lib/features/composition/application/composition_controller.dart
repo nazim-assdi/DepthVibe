@@ -1777,6 +1777,157 @@ class CompositionController extends ChangeNotifier {
     _replace(layer.copyWith(enabled: enabled));
   }
 
+  bool _shapePathHasAnimation(CompositionLayer layer) =>
+      layer.keyframeTracks.any(
+        (track) => track.property.startsWith('shape.vertex.'),
+      );
+
+  /// Inserts a point by splitting the selected cubic Bezier segment exactly.
+  /// Returns the new vertex index, or null if the path cannot be edited safely.
+  int? insertShapePathVertex(int segmentIndex, {double t = 0.5}) {
+    final layer = selectedLayer;
+    if (layer == null || layer.locked || layer.kind != LayerKind.shape) {
+      return null;
+    }
+    final style = layer.shapeStyle;
+    if (style == null ||
+        style.primitive != ShapePrimitive.path ||
+        style.pathVertices.length < 2 ||
+        _shapePathHasAnimation(layer)) {
+      return null;
+    }
+    final vertices = [...style.pathVertices];
+    final segmentCount =
+        style.pathClosed ? vertices.length : vertices.length - 1;
+    if (segmentIndex < 0 || segmentIndex >= segmentCount) return null;
+
+    final parameter = t.clamp(0.001, 0.999).toDouble();
+    Vector2 mix(Vector2 a, Vector2 b) => Vector2(
+          a.x + (b.x - a.x) * parameter,
+          a.y + (b.y - a.y) * parameter,
+        );
+    final nextIndex = (segmentIndex + 1) % vertices.length;
+    final start = vertices[segmentIndex];
+    final end = vertices[nextIndex];
+    final p0 = start.anchor;
+    final p1 = Vector2(
+      p0.x + start.outHandle.x,
+      p0.y + start.outHandle.y,
+    );
+    final p3 = end.anchor;
+    final p2 = Vector2(
+      p3.x + end.inHandle.x,
+      p3.y + end.inHandle.y,
+    );
+
+    final p01 = mix(p0, p1);
+    final p12 = mix(p1, p2);
+    final p23 = mix(p2, p3);
+    final p012 = mix(p01, p12);
+    final p123 = mix(p12, p23);
+    final point = mix(p012, p123);
+
+    vertices[segmentIndex] = start.copyWith(
+      outHandle: Vector2(p01.x - p0.x, p01.y - p0.y),
+    );
+    vertices[nextIndex] = end.copyWith(
+      inHandle: Vector2(p23.x - p3.x, p23.y - p3.y),
+    );
+    final inserted = MaskVertex(
+      anchor: point,
+      inHandle: Vector2(
+        p012.x - point.x,
+        p012.y - point.y,
+      ),
+      outHandle: Vector2(
+        p123.x - point.x,
+        p123.y - point.y,
+      ),
+      smooth: true,
+    );
+    final insertIndex = segmentIndex + 1;
+    vertices.insert(insertIndex, inserted);
+    _replace(layer.copyWith(
+      shapeStyle: style.copyWith(pathVertices: vertices),
+    ));
+    return insertIndex;
+  }
+
+  bool removeShapePathVertex(int vertexIndex) {
+    final layer = selectedLayer;
+    if (layer == null || layer.locked || layer.kind != LayerKind.shape) {
+      return false;
+    }
+    final style = layer.shapeStyle;
+    if (style == null ||
+        style.primitive != ShapePrimitive.path ||
+        _shapePathHasAnimation(layer) ||
+        vertexIndex < 0 ||
+        vertexIndex >= style.pathVertices.length) {
+      return false;
+    }
+    final minimumVertices = style.pathClosed ? 3 : 2;
+    if (style.pathVertices.length <= minimumVertices) return false;
+    final vertices = [...style.pathVertices]..removeAt(vertexIndex);
+    _replace(layer.copyWith(
+      shapeStyle: style.copyWith(pathVertices: vertices),
+    ));
+    return true;
+  }
+
+  bool toggleShapeVertexSmooth(int vertexIndex) {
+    final layer = selectedLayer;
+    if (layer == null || layer.locked || layer.kind != LayerKind.shape) {
+      return false;
+    }
+    final style = layer.shapeStyle;
+    if (style == null ||
+        style.primitive != ShapePrimitive.path ||
+        vertexIndex < 0 ||
+        vertexIndex >= style.pathVertices.length) {
+      return false;
+    }
+    final vertices = [...style.pathVertices];
+    final old = vertices[vertexIndex];
+    if (old.smooth) {
+      vertices[vertexIndex] = old.copyWith(smooth: false);
+    } else {
+      final inLength = math.sqrt(
+        old.inHandle.x * old.inHandle.x +
+            old.inHandle.y * old.inHandle.y,
+      );
+      final outLength = math.sqrt(
+        old.outHandle.x * old.outHandle.x +
+            old.outHandle.y * old.outHandle.y,
+      );
+      if (outLength > 0.000001) {
+        final length = inLength > 0.000001 ? inLength : outLength;
+        vertices[vertexIndex] = old.copyWith(
+          smooth: true,
+          inHandle: Vector2(
+            -old.outHandle.x / outLength * length,
+            -old.outHandle.y / outLength * length,
+          ),
+        );
+      } else if (inLength > 0.000001) {
+        final length = outLength > 0.000001 ? outLength : inLength;
+        vertices[vertexIndex] = old.copyWith(
+          smooth: true,
+          outHandle: Vector2(
+            -old.inHandle.x / inLength * length,
+            -old.inHandle.y / inLength * length,
+          ),
+        );
+      } else {
+        vertices[vertexIndex] = old.copyWith(smooth: true);
+      }
+    }
+    _replace(layer.copyWith(
+      shapeStyle: style.copyWith(pathVertices: vertices),
+    ));
+    return true;
+  }
+
   void setShapeStyle(
     ShapeStyle style, {
     bool recordHistory = true,
