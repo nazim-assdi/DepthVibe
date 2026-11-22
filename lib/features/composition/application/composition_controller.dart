@@ -1352,6 +1352,59 @@ class CompositionController extends ChangeNotifier {
     _replace(layer.copyWith(keyframeTracks: tracks));
   }
 
+  /// Updates several transform channels as one undoable document operation.
+  /// Animated properties are edited at the current playhead. [autoKey] also
+  /// creates keyframes for channels that are not yet animated.
+  void updateTransformValues(
+    Map<String, double> values, {
+    bool autoKey = false,
+    bool recordHistory = true,
+  }) {
+    final layer = selectedLayer;
+    if (layer == null || layer.locked || values.isEmpty) return;
+    var transform = layer.transform;
+    final tracks = [...layer.keyframeTracks];
+    final timeMs = _document.playheadMs;
+
+    for (final entry in values.entries) {
+      if (!entry.value.isFinite) continue;
+      final trackIndex = tracks.indexWhere((track) => track.property == entry.key);
+      final shouldKeyframe = autoKey || trackIndex >= 0;
+      if (!shouldKeyframe) {
+        transform = transform.withValue(entry.key, entry.value);
+        continue;
+      }
+      final track = trackIndex < 0 ? KeyframeTrack(property: entry.key) : tracks[trackIndex];
+      final existingIndex = track.keyframes.indexWhere((item) => item.timeMs == timeMs);
+      final existing = existingIndex < 0 ? null : track.keyframes[existingIndex];
+      final updated = track.upsert(ScalarKeyframe(
+        timeMs: timeMs,
+        value: entry.value,
+        interpolation: existing?.interpolation ?? Interpolation.easeInOut,
+        inTangent: existing?.inTangent ?? 0,
+        outTangent: existing?.outTangent ?? 0,
+        bezier: existing?.bezier ?? const BezierCurve(),
+        metadata: existing?.metadata ?? const {},
+      ));
+      if (trackIndex < 0) {
+        tracks.add(updated);
+      } else {
+        tracks[trackIndex] = updated;
+      }
+    }
+
+    _set(
+      _document.copyWith(
+        layers: _document.layers
+            .map((item) => item.id == layer.id
+                ? layer.copyWith(transform: transform, keyframeTracks: tracks)
+                : item)
+            .toList(),
+      ),
+      recordHistory: recordHistory,
+    );
+  }
+
   void setTransformValue(String property, double value, {bool keyframe = false}) {
     final layer = selectedLayer;
     if (layer == null) return;

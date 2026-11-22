@@ -1098,4 +1098,99 @@ void main() {
     expect(layer.keyframeTracks, isEmpty);
   });
 
+
+  test('preview transform batch edits channels and records one undo step', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 5000,
+        layers: [
+          CompositionLayer(id: 'shape', name: 'Shape', kind: LayerKind.shape),
+        ],
+        selectedLayerId: 'shape',
+      ),
+    );
+    controller.updateTransformValues({
+      'position.x': 720,
+      'position.y': 360,
+      'scale.x': 150,
+      'scale.y': 125,
+    });
+    expect(controller.selectedLayer!.transform.position.x, 720);
+    expect(controller.selectedLayer!.transform.position.y, 360);
+    expect(controller.selectedLayer!.transform.scale.x, 150);
+    expect(controller.selectedLayer!.transform.scale.y, 125);
+    expect(controller.selectedLayer!.keyframeTracks, isEmpty);
+    controller.undo();
+    expect(controller.selectedLayer!.transform.position.x, 960);
+    expect(controller.selectedLayer!.transform.position.y, 540);
+    expect(controller.selectedLayer!.transform.scale.x, 100);
+    controller.dispose();
+  });
+
+  test('preview auto-key creates editable Position and Rotation tracks', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 5000,
+        playheadMs: 1000,
+        layers: [
+          CompositionLayer(id: 'shape', name: 'Shape', kind: LayerKind.shape),
+        ],
+        selectedLayerId: 'shape',
+      ),
+    );
+    controller.updateTransformValues({
+      'position.x': 700,
+      'position.y': 420,
+      'rotation.z': 32,
+    }, autoKey: true);
+    final layer = controller.selectedLayer!;
+    expect(layer.keyframeTracks.map((track) => track.property),
+        containsAll(['position.x', 'position.y', 'rotation.z']));
+    expect(layer.keyframeTracks.firstWhere((t) => t.property == 'position.x')
+        .keyframes.single.value, 700);
+    expect(layer.valueAt('position.y', 1000), 420);
+    expect(layer.valueAt('rotation.z', 1000), 32);
+
+    controller.updateTransformValues({
+      'position.x': 760,
+      'position.y': 460,
+      'rotation.z': 45,
+    }, autoKey: true, recordHistory: false);
+    controller.undo();
+    expect(controller.selectedLayer!.keyframeTracks, isEmpty);
+    controller.dispose();
+  });
+
+  test('preview drag updates an already animated property at playhead', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 5000,
+        playheadMs: 1500,
+        layers: [
+          CompositionLayer(
+            id: 'shape',
+            name: 'Shape',
+            kind: LayerKind.shape,
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'position.x',
+                keyframes: [
+                  ScalarKeyframe(timeMs: 0, value: 200),
+                  ScalarKeyframe(timeMs: 3000, value: 800),
+                ],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'shape',
+      ),
+    );
+    controller.updateTransformValues({'position.x': 520});
+    final track = controller.selectedLayer!.keyframeTracks.single;
+    expect(track.keyframes, hasLength(3));
+    expect(track.keyframes[1].timeMs, 1500);
+    expect(track.keyframes[1].value, 520);
+    controller.dispose();
+  });
+
 }

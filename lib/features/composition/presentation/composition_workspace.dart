@@ -774,6 +774,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   bool _graphDragHistoryRecorded = false;
   bool _graphScrubbing = false;
   bool _showCanvasGrid = true;
+  bool _autoKeyEnabled = false;
+  String? _previewMoveLayerId;
+  Offset _previewMoveLastGlobal = Offset.zero;
+  bool _previewMoveHistoryRecorded = false;
+  String? _previewResizeLayerId;
+  double _previewResizeStartScaleX = 100;
+  double _previewResizeStartScaleY = 100;
+  Offset _previewResizeLastGlobal = Offset.zero;
+  bool _previewResizeHistoryRecorded = false;
+  String? _previewRotateLayerId;
+  double _previewRotateStartDegrees = 0;
+  double _previewRotateStartPointerRadians = 0;
+  Offset _previewRotateCenterGlobal = Offset.zero;
+  bool _previewRotateHistoryRecorded = false;
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
   final Set<String> _expandedTimelineLayers = {};
@@ -2386,6 +2400,29 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             '${document.width} × ${document.height}',
             style: TextStyle(fontSize: 8, color: palette.secondaryText),
           ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+            tooltip: _autoKeyEnabled
+                ? 'Auto-Key enabled · preview transforms create keyframes'
+                : 'Auto-Key disabled · existing animated properties still update keys',
+            onPressed: () => setState(() => _autoKeyEnabled = !_autoKeyEnabled),
+            icon: Icon(
+              Icons.diamond_outlined,
+              size: 15,
+              color: _autoKeyEnabled ? palette.accent : palette.secondaryText,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'AUTO KEY',
+            style: TextStyle(
+              fontSize: 7,
+              fontWeight: FontWeight.w800,
+              color: _autoKeyEnabled ? palette.accent : palette.secondaryText,
+            ),
+          ),
           const SizedBox(width: 8),
           IconButton(
             visualDensity: VisualDensity.compact,
@@ -2827,6 +2864,309 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  void _beginPreviewMove(CompositionLayer layer, Offset globalPosition) {
+    if (layer.locked) return;
+    _pausePreviewPlayback();
+    _controller.selectLayer(layer.id);
+    _previewMoveLayerId = layer.id;
+    _previewMoveLastGlobal = globalPosition;
+    _previewMoveHistoryRecorded = false;
+  }
+
+  void _updatePreviewMove(
+    CompositionLayer layer,
+    Offset globalPosition,
+    Size canvasSize,
+    CompositionDocument document,
+  ) {
+    if (_previewMoveLayerId != layer.id) return;
+    final delta = globalPosition - _previewMoveLastGlobal;
+    _previewMoveLastGlobal = globalPosition;
+    final current = _controller.selectedLayer;
+    if (current == null || current.id != layer.id) return;
+    final timeMs = _controller.document.playheadMs;
+    _controller.updateTransformValues({
+      'position.x': current.valueAt('position.x', timeMs) +
+          delta.dx / canvasSize.width * document.width,
+      'position.y': current.valueAt('position.y', timeMs) +
+          delta.dy / canvasSize.height * document.height,
+    },
+      autoKey: _autoKeyEnabled,
+      recordHistory: !_previewMoveHistoryRecorded,
+    );
+    _previewMoveHistoryRecorded = true;
+  }
+
+  void _endPreviewMove() {
+    _previewMoveLayerId = null;
+    _previewMoveHistoryRecorded = false;
+  }
+
+  void _beginPreviewResize(CompositionLayer layer, Offset globalPosition) {
+    if (layer.locked) return;
+    _pausePreviewPlayback();
+    _controller.selectLayer(layer.id);
+    final timeMs = _controller.document.playheadMs;
+    _previewResizeLayerId = layer.id;
+    _previewResizeStartScaleX = layer.valueAt('scale.x', timeMs);
+    _previewResizeStartScaleY = layer.valueAt('scale.y', timeMs);
+    _previewResizeLastGlobal = globalPosition;
+    _previewResizeHistoryRecorded = false;
+  }
+
+  void _updatePreviewResize(
+    CompositionLayer layer,
+    Offset globalPosition, {
+    required double width,
+    required double height,
+    required double rotationRadians,
+    required int horizontalSign,
+    required int verticalSign,
+  }) {
+    if (_previewResizeLayerId != layer.id) return;
+    final screenDelta = globalPosition - _previewResizeLastGlobal;
+    _previewResizeLastGlobal = globalPosition;
+    final cosine = math.cos(rotationRadians);
+    final sine = math.sin(rotationRadians);
+    final localDelta = Offset(
+      screenDelta.dx * cosine + screenDelta.dy * sine,
+      -screenDelta.dx * sine + screenDelta.dy * cosine,
+    );
+    final scaleX = _previewResizeStartScaleX *
+        (1 + horizontalSign * localDelta.dx / math.max(1, width));
+    final scaleY = _previewResizeStartScaleY *
+        (1 + verticalSign * localDelta.dy / math.max(1, height));
+    final boundedX = scaleX.abs().clamp(2.0, 2000.0).toDouble() *
+        (scaleX.isNegative ? -1.0 : 1.0);
+    final boundedY = scaleY.abs().clamp(2.0, 2000.0).toDouble() *
+        (scaleY.isNegative ? -1.0 : 1.0);
+    _controller.updateTransformValues(
+      {'scale.x': boundedX, 'scale.y': boundedY},
+      autoKey: _autoKeyEnabled,
+      recordHistory: !_previewResizeHistoryRecorded,
+    );
+    _previewResizeHistoryRecorded = true;
+  }
+
+  void _endPreviewResize() {
+    _previewResizeLayerId = null;
+    _previewResizeHistoryRecorded = false;
+  }
+
+  void _beginPreviewRotate(
+    CompositionLayer layer,
+    RenderBox overlayBox,
+    Offset globalPosition,
+  ) {
+    if (layer.locked) return;
+    _pausePreviewPlayback();
+    _controller.selectLayer(layer.id);
+    final center = overlayBox.localToGlobal(
+      Offset(overlayBox.size.width / 2, overlayBox.size.height / 2),
+    );
+    final timeMs = _controller.document.playheadMs;
+    _previewRotateLayerId = layer.id;
+    _previewRotateCenterGlobal = center;
+    _previewRotateStartDegrees = layer.valueAt('rotation.z', timeMs);
+    _previewRotateStartPointerRadians = math.atan2(
+      globalPosition.dy - center.dy,
+      globalPosition.dx - center.dx,
+    );
+    _previewRotateHistoryRecorded = false;
+  }
+
+  void _updatePreviewRotate(CompositionLayer layer, Offset globalPosition) {
+    if (_previewRotateLayerId != layer.id) return;
+    final currentRadians = math.atan2(
+      globalPosition.dy - _previewRotateCenterGlobal.dy,
+      globalPosition.dx - _previewRotateCenterGlobal.dx,
+    );
+    var deltaRadians = currentRadians - _previewRotateStartPointerRadians;
+    while (deltaRadians > math.pi) {
+      deltaRadians -= math.pi * 2;
+    }
+    while (deltaRadians < -math.pi) {
+      deltaRadians += math.pi * 2;
+    }
+    _controller.updateTransformValues({
+      'rotation.z':
+          _previewRotateStartDegrees + deltaRadians * 180 / math.pi,
+    },
+      autoKey: _autoKeyEnabled,
+      recordHistory: !_previewRotateHistoryRecorded,
+    );
+    _previewRotateHistoryRecorded = true;
+  }
+
+  void _endPreviewRotate() {
+    _previewRotateLayerId = null;
+    _previewRotateHistoryRecorded = false;
+  }
+
+  Widget _previewScaleHandle(
+    CompositionLayer layer, {
+    required double left,
+    required double top,
+    required int horizontalSign,
+    required int verticalSign,
+    required double width,
+    required double height,
+    required double rotationRadians,
+  }) {
+    return Positioned(
+      left: left,
+      top: top,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanStart: (details) =>
+            _beginPreviewResize(layer, details.globalPosition),
+        onPanUpdate: (details) => _updatePreviewResize(
+          layer,
+          details.globalPosition,
+          width: width,
+          height: height,
+          rotationRadians: rotationRadians,
+          horizontalSign: horizontalSign,
+          verticalSign: verticalSign,
+        ),
+        onPanEnd: (_) => _endPreviewResize(),
+        onPanCancel: _endPreviewResize,
+        child: Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF4F6FF),
+            border: Border.all(color: const Color(0xFF536DFF), width: 2),
+            borderRadius: BorderRadius.circular(2),
+            boxShadow: const [
+              BoxShadow(color: Color(0x99000000), blurRadius: 4),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreviewSelectionOverlay(
+    CompositionLayer layer, {
+    required double width,
+    required double height,
+    required double rotationRadians,
+  }) {
+    return Builder(
+      builder: (overlayContext) => Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: const _PreviewSelectionOutlinePainter(),
+            ),
+          ),
+          if (!layer.locked) ...[
+            _previewScaleHandle(
+              layer,
+              left: -6,
+              top: -6,
+              horizontalSign: -1,
+              verticalSign: -1,
+              width: width,
+              height: height,
+              rotationRadians: rotationRadians,
+            ),
+            _previewScaleHandle(
+              layer,
+              left: width - 6,
+              top: -6,
+              horizontalSign: 1,
+              verticalSign: -1,
+              width: width,
+              height: height,
+              rotationRadians: rotationRadians,
+            ),
+            _previewScaleHandle(
+              layer,
+              left: -6,
+              top: height - 6,
+              horizontalSign: -1,
+              verticalSign: 1,
+              width: width,
+              height: height,
+              rotationRadians: rotationRadians,
+            ),
+            _previewScaleHandle(
+              layer,
+              left: width - 6,
+              top: height - 6,
+              horizontalSign: 1,
+              verticalSign: 1,
+              width: width,
+              height: height,
+              rotationRadians: rotationRadians,
+            ),
+            Positioned(
+              left: width / 2 - 6,
+              top: -31,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanStart: (details) {
+                  final renderObject = overlayContext.findRenderObject();
+                  if (renderObject is RenderBox) {
+                    _beginPreviewRotate(
+                      layer,
+                      renderObject,
+                      details.globalPosition,
+                    );
+                  }
+                },
+                onPanUpdate: (details) =>
+                    _updatePreviewRotate(layer, details.globalPosition),
+                onPanEnd: (_) => _endPreviewRotate(),
+                onPanCancel: _endPreviewRotate,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4FD5C4),
+                    border: Border.all(color: Colors.white, width: 1.5),
+                    shape: BoxShape.circle,
+                    boxShadow: const [
+                      BoxShadow(color: Color(0x99000000), blurRadius: 4),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMotionPathOverlay(
+    CompositionLayer? layer,
+    CompositionDocument document,
+    Size canvasSize,
+  ) {
+    if (layer == null) return const SizedBox.shrink();
+    final xTrack = layer.keyframeTracks.where(
+      (track) => track.property == 'position.x' && track.keyframes.length > 1,
+    );
+    final yTrack = layer.keyframeTracks.where(
+      (track) => track.property == 'position.y' && track.keyframes.length > 1,
+    );
+    if (xTrack.isEmpty || yTrack.isEmpty) return const SizedBox.shrink();
+    return IgnorePointer(
+      child: CustomPaint(
+        size: canvasSize,
+        painter: _PreviewMotionPathPainter(
+          layer: layer,
+          document: document,
+          color: Theme.of(context).extension<DepthVibePalette>()!.accent,
+        ),
+      ),
+    );
+  }
+
   Widget _buildPlayheadAwareCanvas() {
     return AnimatedBuilder(
       animation: _controller.playhead,
@@ -2886,6 +3226,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                               cameraLayer: cameraLayer,
                               cameraTransform: cameraTransform,
                             ),
+                          _buildMotionPathOverlay(
+                            selected,
+                            doc,
+                            Size(canvasWidth, canvasHeight),
+                          ),
                           if (selected != null)
                             Positioned(
                               right: 10,
@@ -3322,23 +3667,64 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ? maskedVisual
         : ColorFiltered(colorFilter: gradeFilter, child: maskedVisual);
 
+    final isSelected = doc.selectedLayerId == layer.id;
+    final visualWidth = width.clamp(1, canvasSize.width * 4).toDouble();
+    final visualHeight = height.clamp(1, canvasSize.height * 4).toDouble();
+    final rotationRadians = isMeshLayer ? 0.0 : rotation;
+
     return Positioned(
       left: left,
       top: top,
-      width: width.clamp(1, canvasSize.width * 4).toDouble(),
-      height: height.clamp(1, canvasSize.height * 4).toDouble(),
-      child: RepaintBoundary(
-        child: Opacity(
-          opacity: opacity,
-          child: Transform.rotate(
-            angle: isMeshLayer ? 0 : rotation,
-            child: Transform.scale(
-              scaleX: isMeshLayer ? 1 : (scaleX.isNegative ? -1 : 1),
-              scaleY: isMeshLayer ? 1 : (scaleY.isNegative ? -1 : 1),
-              child: gradedVisual,
+      width: visualWidth,
+      height: visualHeight,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: Transform.rotate(
+              angle: rotationRadians,
+              child: Transform.scale(
+                scaleX: isMeshLayer ? 1 : (scaleX.isNegative ? -1 : 1),
+                scaleY: isMeshLayer ? 1 : (scaleY.isNegative ? -1 : 1),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _controller.selectLayer(layer.id),
+                  onPanStart: layer.locked
+                      ? null
+                      : (details) => _beginPreviewMove(
+                            layer,
+                            details.globalPosition,
+                          ),
+                  onPanUpdate: layer.locked
+                      ? null
+                      : (details) => _updatePreviewMove(
+                            layer,
+                            details.globalPosition,
+                            canvasSize,
+                            doc,
+                          ),
+                  onPanEnd: layer.locked ? null : (_) => _endPreviewMove(),
+                  onPanCancel: layer.locked ? null : _endPreviewMove,
+                  child: RepaintBoundary(
+                    child: Opacity(opacity: opacity, child: gradedVisual),
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
+          if (isSelected)
+            Positioned.fill(
+              child: Transform.rotate(
+                angle: rotationRadians,
+                child: _buildPreviewSelectionOverlay(
+                  layer,
+                  width: visualWidth,
+                  height: visualHeight,
+                  rotationRadians: rotationRadians,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -9632,6 +10018,108 @@ class _KeyframeGraphPainter extends CustomPainter {
       oldDelegate.keyframeColor != keyframeColor ||
       oldDelegate.playheadColor != playheadColor ||
       oldDelegate.textColor != textColor;
+}
+
+class _PreviewSelectionOutlinePainter extends CustomPainter {
+  const _PreviewSelectionOutlinePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()
+        ..color = const Color(0xFF6E83FF)
+        ..strokeWidth = 1.2
+        ..style = PaintingStyle.stroke,
+    );
+    canvas.drawLine(
+      Offset(size.width / 2, -18),
+      Offset(size.width / 2, 0),
+      Paint()
+        ..color = const Color(0xAA6E83FF)
+        ..strokeWidth = 0.8,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PreviewSelectionOutlinePainter oldDelegate) => false;
+}
+
+class _PreviewMotionPathPainter extends CustomPainter {
+  const _PreviewMotionPathPainter({
+    required this.layer,
+    required this.document,
+    required this.color,
+  });
+
+  final CompositionLayer layer;
+  final CompositionDocument document;
+  final Color color;
+
+  Offset _pointAt(int timeMs, Size size) {
+    return Offset(
+      layer.valueAt('position.x', timeMs) /
+          math.max(1, document.width) * size.width,
+      layer.valueAt('position.y', timeMs) /
+          math.max(1, document.height) * size.height,
+    );
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final xTracks = layer.keyframeTracks.where((t) => t.property == 'position.x');
+    final yTracks = layer.keyframeTracks.where((t) => t.property == 'position.y');
+    if (xTracks.isEmpty || yTracks.isEmpty) return;
+    final times = <int>{
+      for (final key in xTracks.first.keyframes) key.timeMs,
+      for (final key in yTracks.first.keyframes) key.timeMs,
+    }.toList()..sort();
+    if (times.length < 2) return;
+
+    final path = Path();
+    const samples = 100;
+    for (var i = 0; i <= samples; i++) {
+      final time = times.first + ((times.last - times.first) * i / samples).round();
+      final point = _pointAt(time, size);
+      if (i == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color.withValues(alpha: 0.82)
+        ..strokeWidth = 1.8
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round,
+    );
+    for (final time in times) {
+      final point = _pointAt(time, size);
+      final diamond = Path()
+        ..moveTo(point.dx, point.dy - 5)
+        ..lineTo(point.dx + 5, point.dy)
+        ..lineTo(point.dx, point.dy + 5)
+        ..lineTo(point.dx - 5, point.dy)
+        ..close();
+      canvas.drawCircle(point, 7, Paint()..color = color.withValues(alpha: 0.16));
+      canvas.drawPath(diamond, Paint()..color = const Color(0xFFF5D27E));
+    }
+    canvas.drawCircle(
+      _pointAt(document.playheadMs, size),
+      4,
+      Paint()..color = const Color(0xFFFFA65C),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PreviewMotionPathPainter oldDelegate) =>
+      oldDelegate.layer != layer ||
+      oldDelegate.document.playheadMs != document.playheadMs ||
+      oldDelegate.document.width != document.width ||
+      oldDelegate.document.height != document.height ||
+      oldDelegate.color != color;
 }
 
 /// Clips a layer to its frame-evaluated polygon/Bezier mask stack.
