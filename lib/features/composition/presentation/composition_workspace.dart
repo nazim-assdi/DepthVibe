@@ -1108,15 +1108,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final document = _controller.document;
     if (document.durationMs <= 0) return;
 
-    final profile = DepthVibeSettingsService.instance.performanceMode;
-    final fps = math.min(document.frameRate, profile.previewFrameRate);
-    final interval = Duration(
-      microseconds: (1000000 / math.max(1, fps)).round(),
-    );
     final startTime = document.playheadMs >= document.durationMs - 1
         ? 0
         : document.playheadMs;
     final stopwatch = Stopwatch()..start();
+    var lastTickMs = -1;
 
     setState(() {
       _previewPlaying = true;
@@ -1125,20 +1121,38 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       }
     });
 
-    _previewPlaybackTimer = Timer.periodic(interval, (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      final duration = _controller.document.durationMs;
-      final nextTime = startTime + stopwatch.elapsedMilliseconds;
-      if (duration <= 0 || nextTime >= duration) {
-        _controller.setPlayhead(math.max(0, duration - 1));
-        _pausePreviewPlayback();
-        return;
-      }
-      _controller.setPlayhead(nextTime);
-    });
+    // Poll cheaply, but move the playhead only at the scheduler's current
+    // adaptive FPS. If decodes slow down, the transport cadence follows it;
+    // when performance recovers, the adaptive controller raises it again.
+    _previewPlaybackTimer = Timer.periodic(
+      const Duration(milliseconds: 16),
+      (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        final currentDocument = _controller.document;
+        final effectiveFps = math.min(
+          currentDocument.frameRate,
+          _previewFrameService.effectivePreviewFrameRate,
+        );
+        final frameIntervalMs = (1000 / math.max(1, effectiveFps)).round();
+        final elapsedMs = stopwatch.elapsedMilliseconds;
+        if (lastTickMs >= 0 && elapsedMs - lastTickMs < frameIntervalMs) {
+          return;
+        }
+        lastTickMs = elapsedMs;
+
+        final duration = currentDocument.durationMs;
+        final nextTime = startTime + elapsedMs;
+        if (duration <= 0 || nextTime >= duration) {
+          _controller.setPlayhead(math.max(0, duration - 1));
+          _pausePreviewPlayback();
+          return;
+        }
+        _controller.setPlayhead(nextTime);
+      },
+    );
   }
 
   void _cancelCompositionRender() {
