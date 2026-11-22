@@ -8437,9 +8437,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ? 24.0
           : _controller.document.frameRate;
       final frame = (geometry.timeAt(position) * fps / 1000).round();
-      final snappedTime = (frame * 1000 / fps).round().clamp(0, duration);
+      final snappedTime =
+          (frame * 1000 / fps).round().clamp(0, duration).toInt();
       final value = geometry.valueAt(position);
-      _controller.updateKeyframe(
+      final resolvedTime = _controller.updateKeyframe(
         track.property,
         draggingTime,
         snappedTime,
@@ -8448,16 +8449,17 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         maskId: maskId,
         recordHistory: !_graphDragHistoryRecorded,
       );
+      if (resolvedTime == null) return;
       _graphDragHistoryRecorded = true;
-      _draggingGraphKeyframeMs = snappedTime;
-      _selectedGraphKeyframeMs = snappedTime;
+      _draggingGraphKeyframeMs = resolvedTime;
+      _selectedGraphKeyframeMs = resolvedTime;
       return;
     }
 
     if (_graphScrubbing) {
       _pausePreviewPlayback();
       _controller.setPlayhead(
-        geometry.timeAt(position).round().clamp(0, duration),
+        geometry.timeAt(position).round().clamp(0, duration).toInt(),
       );
     }
   }
@@ -9268,8 +9270,12 @@ class _KeyframeGraphGeometry {
       for (final frame in track.keyframes)
         graphValueAtTime(frame.timeMs),
     ].where((value) => value.isFinite).toList();
-    var low = samples.isEmpty ? 0.0 : samples.reduce(math.min);
-    var high = samples.isEmpty ? 1.0 : samples.reduce(math.max);
+    var low = samples.isEmpty
+        ? 0.0
+        : samples.reduce((a, b) => a < b ? a : b);
+    var high = samples.isEmpty
+        ? 1.0
+        : samples.reduce((a, b) => a > b ? a : b);
     if ((high - low).abs() < 0.000001) {
       final padding = math.max(1.0, high.abs() * 0.15);
       low -= padding;
@@ -9295,8 +9301,10 @@ class _KeyframeGraphGeometry {
       return track.sample(timeMs, fallback: track.keyframes.first.value);
     }
     const halfWindowMs = 8;
-    final before = (timeMs - halfWindowMs).clamp(0, durationMs);
-    final after = (timeMs + halfWindowMs).clamp(0, durationMs);
+    final before =
+        (timeMs - halfWindowMs).clamp(0, durationMs).toInt();
+    final after =
+        (timeMs + halfWindowMs).clamp(0, durationMs).toInt();
     if (after <= before) return 0;
     final deltaSeconds = (after - before) / 1000;
     final deltaValue = track.sample(

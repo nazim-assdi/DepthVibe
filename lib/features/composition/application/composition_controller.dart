@@ -1386,7 +1386,7 @@ class CompositionController extends ChangeNotifier {
   /// The target time is constrained between neighbouring keys so a drag cannot
   /// overwrite or reorder another keyframe. A complete drag can be recorded as
   /// one undo step by setting [recordHistory] to false after its first update.
-  void updateKeyframe(
+  int? updateKeyframe(
     String property,
     int fromTimeMs,
     int toTimeMs,
@@ -1396,7 +1396,8 @@ class CompositionController extends ChangeNotifier {
     bool recordHistory = true,
   }) {
     final layer = selectedLayer;
-    if (layer == null || !value.isFinite) return;
+    if (layer == null || !value.isFinite) return null;
+    int? resolvedTimeMs;
 
     final frameStepMs = math.max(
       1,
@@ -1427,6 +1428,7 @@ class CompositionController extends ChangeNotifier {
           : toTimeMs.clamp(lowerBound, upperBound).toInt();
 
       final old = ordered[orderedIndex];
+      resolvedTimeMs = targetTime;
       ordered[orderedIndex] = ScalarKeyframe(
         timeMs: targetTime,
         value: value,
@@ -1451,11 +1453,12 @@ class CompositionController extends ChangeNotifier {
           keyframeTracks: effect.keyframeTracks.map(update).toList(),
         );
       }).toList();
+      if (resolvedTimeMs == null) return null;
       _replaceWithHistory(
         layer.copyWith(effects: effects),
         recordHistory: recordHistory,
       );
-      return;
+      return resolvedTimeMs;
     }
 
     if (maskId != null) {
@@ -1465,17 +1468,20 @@ class CompositionController extends ChangeNotifier {
           keyframeTracks: mask.keyframeTracks.map(update).toList(),
         );
       }).toList();
+      if (resolvedTimeMs == null) return null;
       _replaceWithHistory(
         layer.copyWith(masks: masks),
         recordHistory: recordHistory,
       );
-      return;
+      return resolvedTimeMs;
     }
 
+    if (resolvedTimeMs == null) return null;
     _replaceWithHistory(
       layer.copyWith(keyframeTracks: layer.keyframeTracks.map(update).toList()),
       recordHistory: recordHistory,
     );
+    return resolvedTimeMs;
   }
 
   void _replaceWithHistory(
