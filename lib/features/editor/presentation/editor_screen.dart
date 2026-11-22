@@ -132,8 +132,9 @@ class _EditorScreenState extends State<EditorScreen> {
     });
 
     try {
-      // Unmount the old Video widget before releasing its Player/texture.
-      await Future<void>.delayed(Duration.zero);
+      // Wait until the old Video widget is unmounted before releasing the
+      // native output texture owned by its Player.
+      await WidgetsBinding.instance.endOfFrame;
       await _durationSubscription?.cancel();
       await _positionSubscription?.cancel();
       _durationSubscription = null;
