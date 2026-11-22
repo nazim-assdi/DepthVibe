@@ -621,6 +621,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   void _retryVideoPreview(CompositionLayer layer) {
     _previewFrameErrors.remove(layer.id);
     _latestRequestedFrameKey.remove(layer.id);
+    final failedFrame = _lastVideoFrames.remove(layer.id);
+    if (failedFrame != null) {
+      unawaited(failedFrame.delete().catchError((_) => failedFrame));
+    }
     final marker = '_${layer.id}_';
     _videoFrameJobs.removeWhere((key, _) => key.contains(marker));
     if (mounted) {
