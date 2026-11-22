@@ -99,7 +99,9 @@ class _EditorScreenState extends State<EditorScreen> {
   Future<Duration?> _probeMediaDuration(String path) async {
     if (!widget.mediaProcessingAvailable) return null;
     try {
-      final session = await FFprobeKit.getMediaInformationAsync(path);
+      final session = await FFprobeKit
+          .getMediaInformationAsync(path)
+          .timeout(const Duration(seconds: 20));
       if (session is! MediaInformationSession) return null;
       final seconds = session.getMediaInformation()?.duration;
       return MediaDurationParser.parseSeconds(seconds);
@@ -125,18 +127,39 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Future<void> _openVideo(String path) async {
     _editor.loadVideo(path);
+
+    // Activate the project and timeline immediately. Native playback and
+    // metadata probing are optional enhancements, never a prerequisite for
+    // importing media or editing project properties.
+    if (mounted) {
+      setState(() {
+        _ready = true;
+        _playbackAvailable = false;
+        _position = Duration.zero;
+        _status = 'Media imported — preparing preview; timeline is ready';
+      });
+    }
+
     var playbackReady = false;
     final player = _player;
     if (player != null) {
       try {
-        await player.open(Media(path), play: false);
-        await player.setRate(_editor.project.speed);
-        await player.setVolume(_editor.project.muted ? 0 : 100);
+        await player
+            .open(Media(path), play: false)
+            .timeout(const Duration(seconds: 20));
+        await player
+            .setRate(_editor.project.speed)
+            .timeout(const Duration(seconds: 5));
+        await player
+            .setVolume(_editor.project.muted ? 0 : 100)
+            .timeout(const Duration(seconds: 5));
         playbackReady = true;
         _previewError = null;
       } catch (error, stackTrace) {
         _previewError = error.toString();
-        debugPrint('DepthVibe video preview failed; keeping edit mode active: $error\\n$stackTrace');
+        debugPrint(
+          'DepthVibe video preview failed; keeping edit mode active: $error\\n$stackTrace',
+        );
       }
     }
 
@@ -149,7 +172,6 @@ class _EditorScreenState extends State<EditorScreen> {
 
     if (!mounted) return;
     setState(() {
-      _ready = true;
       _playbackAvailable = playbackReady;
       _position = Duration.zero;
       _status = playbackReady
