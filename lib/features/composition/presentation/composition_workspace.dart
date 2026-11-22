@@ -430,6 +430,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addTimingsCallback(_onFlutterFrameTimings);
     _controller.addListener(_onCompositionChanged);
     ExtensionManagerService.instance.addListener(_onExtensionsChanged);
     _motionBroService.addListener(_onMotionBroPacksChanged);
@@ -444,6 +445,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_checkForCrashRecovery());
     });
+  }
+
+  void _onFlutterFrameTimings(List<ui.FrameTiming> timings) {
+    if (_previewPlaying || timings.isNotEmpty) {
+      for (final timing in timings) {
+        _previewFrameService.recordUiFrameDuration(
+          timing.buildDuration + timing.rasterDuration,
+        );
+      }
+    }
   }
 
   void _onExtensionsChanged() {
@@ -1376,6 +1387,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _motionBroService.removeListener(_onMotionBroPacksChanged);
     _creativeAssetPacks.removeListener(_onCreativeAssetPacksChanged);
     AdobeBridgeService.instance.detachController(_controller);
+    WidgetsBinding.instance.removeTimingsCallback(_onFlutterFrameTimings);
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_autosaveIfNeeded());
     _previewFrameService.dispose();
