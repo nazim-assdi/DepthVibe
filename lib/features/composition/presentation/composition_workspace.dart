@@ -800,6 +800,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   String? _previewMaskLayerId;
   String? _previewMaskId;
   int? _previewMaskVertexIndex;
+  String _previewMaskDragComponent = 'anchor';
   Offset _previewMaskLastGlobal = Offset.zero;
   bool _previewMaskHistoryRecorded = false;
   String? _previewPenLayerId;
@@ -3493,18 +3494,42 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  Offset _previewMaskHandlePosition(
+    MaskModel mask,
+    int vertexIndex,
+    String component,
+    Size size,
+    int timeMs,
+  ) {
+    final anchor = _previewMaskVertexPosition(mask, vertexIndex, size, timeMs);
+    final outline = _previewMaskBaseOutline(mask);
+    if (outline.isEmpty) return anchor;
+    final xs = outline.map((point) => point.dx);
+    final ys = outline.map((point) => point.dy);
+    final spanX = math.max(0.0001, xs.reduce(math.max) - xs.reduce(math.min));
+    final spanY = math.max(0.0001, ys.reduce(math.max) - ys.reduce(math.min));
+    final handleX = mask.vertexValueAt(vertexIndex, '$component.x', timeMs);
+    final handleY = mask.vertexValueAt(vertexIndex, '$component.y', timeMs);
+    return anchor + Offset(
+      handleX / spanX * mask.valueAt('width', timeMs) * size.width,
+      handleY / spanY * mask.valueAt('height', timeMs) * size.height,
+    );
+  }
+
   void _beginPreviewMaskVertex(
     CompositionLayer layer,
     MaskModel mask,
     int vertexIndex,
-    Offset globalPosition,
-  ) {
+    Offset globalPosition, {
+    String component = 'anchor',
+  }) {
     if (layer.locked || _activePreviewTool != 'Mask') return;
     _pausePreviewPlayback();
     _controller.selectLayer(layer.id);
     _previewMaskLayerId = layer.id;
     _previewMaskId = mask.id;
     _previewMaskVertexIndex = vertexIndex;
+    _previewMaskDragComponent = component;
     _previewMaskLastGlobal = globalPosition;
     _previewMaskHistoryRecorded = false;
   }
@@ -3514,12 +3539,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     MaskModel originalMask,
     int vertexIndex,
     Offset globalPosition, {
+    String component = 'anchor',
     required Size size,
     required double rotationRadians,
   }) {
     if (_previewMaskLayerId != layer.id ||
         _previewMaskId != originalMask.id ||
-        _previewMaskVertexIndex != vertexIndex) {
+        _previewMaskVertexIndex != vertexIndex ||
+        _previewMaskDragComponent != component) {
       return;
     }
     final screenDelta = globalPosition - _previewMaskLastGlobal;
@@ -3549,19 +3576,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final timeMs = _controller.document.playheadMs;
     final widthRatio = math.max(0.0001, mask.valueAt('width', timeMs));
     final heightRatio = math.max(0.0001, mask.valueAt('height', timeMs));
-    final x = mask.vertexValueAt(vertexIndex, 'anchor.x', timeMs) +
+    final propertyX = '$component.x';
+    final propertyY = '$component.y';
+    final x = mask.vertexValueAt(vertexIndex, propertyX, timeMs) +
         delta.dx / math.max(1, size.width) * spanX / widthRatio;
-    final y = mask.vertexValueAt(vertexIndex, 'anchor.y', timeMs) +
+    final y = mask.vertexValueAt(vertexIndex, propertyY, timeMs) +
         delta.dy / math.max(1, size.height) * spanY / heightRatio;
     final animatedPath = _autoKeyEnabled ||
         mask.keyframeTracks.any((track) =>
-            track.property == 'vertex.$vertexIndex.anchor.x' ||
-            track.property == 'vertex.$vertexIndex.anchor.y');
+            track.property == 'vertex.$vertexIndex.$propertyX' ||
+            track.property == 'vertex.$vertexIndex.$propertyY');
 
     _controller.setMaskVertexAnimatedValue(
       mask.id,
       vertexIndex,
-      'anchor.x',
+      propertyX,
       x,
       keyframe: animatedPath,
       recordHistory: !_previewMaskHistoryRecorded,
@@ -3569,7 +3598,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _controller.setMaskVertexAnimatedValue(
       mask.id,
       vertexIndex,
-      'anchor.y',
+      propertyY,
       y,
       keyframe: animatedPath,
       recordHistory: false,
@@ -3581,6 +3610,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _previewMaskLayerId = null;
     _previewMaskId = null;
     _previewMaskVertexIndex = null;
+    _previewMaskDragComponent = 'anchor';
     _previewMaskHistoryRecorded = false;
   }
 
@@ -3647,6 +3677,68 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   ),
                 ),
               ),
+        if (_activePreviewTool == 'Mask')
+          for (final mask in masks)
+            if (mask.shape == MaskShape.bezier)
+              for (var index = 0; index < mask.vertices.length; index++)
+                for (final component in const ['inHandle', 'outHandle'])
+                  if (mask.vertexValueAt(index, '$component.x', timeMs).abs() +
+                          mask.vertexValueAt(index, '$component.y', timeMs).abs() >
+                      0.001)
+                    Positioned(
+                      left: _previewMaskHandlePosition(
+                                mask,
+                                index,
+                                component,
+                                size,
+                                timeMs,
+                              ).dx -
+                          5,
+                      top: _previewMaskHandlePosition(
+                                mask,
+                                index,
+                                component,
+                                size,
+                                timeMs,
+                              ).dy -
+                          5,
+                      width: 10,
+                      height: 10,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onPanStart: (details) => _beginPreviewMaskVertex(
+                          layer,
+                          mask,
+                          index,
+                          details.globalPosition,
+                          component: component,
+                        ),
+                        onPanUpdate: (details) => _updatePreviewMaskVertex(
+                          layer,
+                          mask,
+                          index,
+                          details.globalPosition,
+                          component: component,
+                          size: size,
+                          rotationRadians: rotationRadians,
+                        ),
+                        onPanEnd: (_) => _endPreviewMaskVertex(),
+                        onPanCancel: _endPreviewMaskVertex,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF55D7C4),
+                            border: Border.all(color: Colors.white, width: 1),
+                            shape: BoxShape.circle,
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0xAA000000),
+                                blurRadius: 3,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
       ],
     );
   }
@@ -10820,20 +10912,104 @@ class _PreviewMaskPathPainter extends CustomPainter {
   final int timeMs;
   final Color color;
 
+  Offset _mapPoint(
+    MaskModel mask,
+    List<Offset> outline,
+    Offset point,
+    Size size,
+  ) {
+    final xs = outline.map((item) => item.dx);
+    final ys = outline.map((item) => item.dy);
+    final minX = xs.reduce(math.min);
+    final maxX = xs.reduce(math.max);
+    final minY = ys.reduce(math.min);
+    final maxY = ys.reduce(math.max);
+    final spanX = (maxX - minX).abs() < 0.0001 ? 1.0 : maxX - minX;
+    final spanY = (maxY - minY).abs() < 0.0001 ? 1.0 : maxY - minY;
+    return Offset(
+      mask.valueAt('left', timeMs) * size.width +
+          (point.dx - minX) / spanX *
+              mask.valueAt('width', timeMs) * size.width,
+      mask.valueAt('top', timeMs) * size.height +
+          (point.dy - minY) / spanY *
+              mask.valueAt('height', timeMs) * size.height,
+    );
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
-    for (var index = 0; index < masks.length; index++) {
+    for (var maskIndex = 0; maskIndex < masks.length; maskIndex++) {
+      final mask = masks[maskIndex];
       final path = _AnimatedMaskClipper(
-        masks: [masks[index]],
+        masks: [mask],
         timeMs: timeMs,
       ).getClip(size);
+      final pathColor = maskIndex.isEven
+          ? color
+          : const Color(0xFFFFC66D);
       canvas.drawPath(
         path,
         Paint()
-          ..color = index.isEven ? color : const Color(0xFFFFC66D)
+          ..color = pathColor
           ..strokeWidth = 1.4
           ..style = PaintingStyle.stroke,
       );
+
+      if (mask.shape != MaskShape.bezier) continue;
+      final outline = _AnimatedMaskClipper(
+        masks: [mask],
+        timeMs: timeMs,
+      )._baseOutline(mask);
+      if (outline.isEmpty) continue;
+      for (var index = 0; index < mask.vertices.length; index++) {
+        final anchor = Offset(
+          mask.vertexValueAt(index, 'anchor.x', timeMs),
+          mask.vertexValueAt(index, 'anchor.y', timeMs),
+        );
+        final vertex = mask.vertices[index];
+        for (final component in const ['inHandle', 'outHandle']) {
+          final handle = Offset(
+            mask.vertexValueAt(index, '$component.x', timeMs),
+            mask.vertexValueAt(index, '$component.y', timeMs),
+          );
+          if (handle.distance < 0.001) continue;
+          final endpoint = _mapPoint(
+            mask,
+            outline,
+            anchor + handle,
+            size,
+          );
+          final origin = _mapPoint(mask, outline, anchor, size);
+          canvas.drawLine(
+            origin,
+            endpoint,
+            Paint()
+              ..color = const Color(0xFF55D7C4)
+              ..strokeWidth = 1,
+          );
+          canvas.drawCircle(
+            endpoint,
+            4,
+            Paint()..color = const Color(0xFF55D7C4),
+          );
+        }
+        final anchorPoint = _mapPoint(mask, outline, anchor, size);
+        canvas.drawRect(
+          Rect.fromCenter(center: anchorPoint, width: 8, height: 8),
+          Paint()..color = Colors.white,
+        );
+        // Prevent the unused vertex instance from hiding a future style hook.
+        if (vertex.smooth) {
+          canvas.drawCircle(
+            anchorPoint,
+            6,
+            Paint()
+              ..color = color
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1,
+          );
+        }
+      }
     }
   }
 

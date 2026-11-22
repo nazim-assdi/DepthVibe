@@ -1359,4 +1359,59 @@ void main() {
     controller.dispose();
   });
 
+
+  test('Bezier tangent handles accept animated component values', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 4000,
+        playheadMs: 800,
+        layers: [
+          CompositionLayer(
+            id: 'shape',
+            name: 'Shape',
+            kind: LayerKind.shape,
+            masks: [
+              MaskModel(
+                id: 'mask',
+                name: 'Curve',
+                shape: MaskShape.bezier,
+                vertices: [
+                  MaskVertex(
+                    anchor: Vector2(0.2, 0.2),
+                    smooth: true,
+                  ),
+                  MaskVertex(anchor: Vector2(0.8, 0.2)),
+                  MaskVertex(anchor: Vector2(0.5, 0.8)),
+                ],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'shape',
+      ),
+    );
+    controller.setMaskVertexAnimatedValue(
+      'mask',
+      0,
+      'outHandle.x',
+      0.22,
+      keyframe: true,
+    );
+    controller.setMaskVertexAnimatedValue(
+      'mask',
+      0,
+      'outHandle.y',
+      -0.08,
+      keyframe: true,
+      recordHistory: false,
+    );
+    final mask = controller.selectedLayer!.masks.single;
+    expect(mask.vertexValueAt(0, 'outHandle.x', 800), 0.22);
+    expect(mask.vertexValueAt(0, 'outHandle.y', 800), -0.08);
+    expect(mask.keyframeTracks, hasLength(2));
+    controller.undo();
+    expect(controller.selectedLayer!.masks.single.keyframeTracks, isEmpty);
+    controller.dispose();
+  });
+
 }
