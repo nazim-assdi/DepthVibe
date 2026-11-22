@@ -14,7 +14,10 @@ void main() {
         isFalse,
       );
       expect(DepthVibePerformanceMode.compatibility.videoOutputScale, 0.5);
-      expect(DepthVibePerformanceMode.compatibility.videoHardwareDecoder, 'no');
+      expect(DepthVibePerformanceMode.compatibility.previewFrameWidth, 480);
+      expect(DepthVibePerformanceMode.compatibility.previewFrameRate, 18);
+      expect(DepthVibePerformanceMode.compatibility.previewDecodeConcurrency, 1);
+      expect(DepthVibePerformanceMode.compatibility.videoHardwareDecoder, 'auto-safe');
     });
 
     test('balanced mode stays between compatibility and quality', () {
@@ -28,7 +31,10 @@ void main() {
         isTrue,
       );
       expect(DepthVibePerformanceMode.balanced.videoOutputScale, 0.75);
-      expect(DepthVibePerformanceMode.balanced.videoHardwareDecoder, 'auto');
+      expect(DepthVibePerformanceMode.balanced.previewFrameWidth, 640);
+      expect(DepthVibePerformanceMode.balanced.previewFrameRate, 24);
+      expect(DepthVibePerformanceMode.balanced.previewDecodeConcurrency, 1);
+      expect(DepthVibePerformanceMode.balanced.videoHardwareDecoder, 'auto-safe');
     });
 
     test('quality mode requests the largest preview dimensions', () {
@@ -42,7 +48,10 @@ void main() {
         isTrue,
       );
       expect(DepthVibePerformanceMode.quality.videoOutputScale, 1.0);
-      expect(DepthVibePerformanceMode.quality.videoHardwareDecoder, 'auto');
+      expect(DepthVibePerformanceMode.quality.previewFrameWidth, 960);
+      expect(DepthVibePerformanceMode.quality.previewFrameRate, 30);
+      expect(DepthVibePerformanceMode.quality.previewDecodeConcurrency, 2);
+      expect(DepthVibePerformanceMode.quality.videoHardwareDecoder, 'auto-safe');
     });
 
     test('preview workload increases monotonically with quality', () {
