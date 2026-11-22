@@ -346,7 +346,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       final chunkStartFrame =
           (frameIndex ~/ chunkFrameCount) * chunkFrameCount;
 
-      return _previewFrameService.requestFrame(
+      return await _previewFrameService.requestFrame(
         laneId: laneId,
         cacheKey: diskKey,
         cacheFile: frame,
