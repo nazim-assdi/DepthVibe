@@ -41,6 +41,11 @@ class _EditorScreenState extends State<EditorScreen> {
   final EditorController _editor = EditorController();
   Player? _player;
   VideoController? _videoController;
+  DepthVibePerformanceMode? _videoControllerProfile;
+  String? _currentVideoPath;
+  bool _reconfiguringPreview = false;
+  bool _openingVideo = false;
+  bool _profileChangedDuringOpen = false;
   final VideoExportService _exporter = const VideoExportService();
 
   StreamSubscription<Duration>? _durationSubscription;
@@ -57,6 +62,7 @@ class _EditorScreenState extends State<EditorScreen> {
   void initState() {
     super.initState();
     _status = widget.startupWarning;
+    DepthVibeSettingsService.instance.addListener(_onPreviewSettingsChanged);
 
     // The project editor and file picker do not depend on a media player.
     // Create Player only after the app has confirmed MediaKit initialised.
@@ -64,14 +70,7 @@ class _EditorScreenState extends State<EditorScreen> {
       try {
         final player = Player();
         _player = player;
-        _durationSubscription = player.stream.duration.listen((duration) {
-          _editor.setSourceDuration(duration);
-        });
-        _positionSubscription = player.stream.position.listen((position) {
-          if (!mounted) return;
-          setState(() => _position = position);
-          _editor.setPlayhead(position);
-        });
+        _attachPlayerStreams(player);
       } catch (error, stackTrace) {
         _previewError = error.toString();
         debugPrint('DepthVibe media player unavailable: $error\\n$stackTrace');
@@ -83,18 +82,143 @@ class _EditorScreenState extends State<EditorScreen> {
     _editor.addListener(_refresh);
   }
 
+  void _attachPlayerStreams(Player player) {
+    _durationSubscription = player.stream.duration.listen((duration) {
+      _editor.setSourceDuration(duration);
+    });
+    _positionSubscription = player.stream.position.listen((position) {
+      if (!mounted) return;
+      setState(() => _position = position);
+      _editor.setPlayhead(position);
+    });
+  }
+
+  void _onPreviewSettingsChanged() {
+    if (!mounted) return;
+    final profile = DepthVibeSettingsService.instance.performanceMode;
+    if (_openingVideo &&
+        _videoControllerProfile != null &&
+        _videoControllerProfile != profile) {
+      _profileChangedDuringOpen = true;
+    } else if (_currentVideoPath != null &&
+        _videoControllerProfile != null &&
+        _videoControllerProfile != profile) {
+      unawaited(_reconfigureVideoPreview());
+    }
+    setState(() {});
+  }
+
+  Future<void> _reconfigureVideoPreview() async {
+    if (_reconfiguringPreview ||
+        !mounted ||
+        _currentVideoPath == null ||
+        _player == null) {
+      return;
+    }
+
+    _reconfiguringPreview = true;
+    final path = _currentVideoPath!;
+    final oldPlayer = _player!;
+    final resumePlaying = oldPlayer.state.playing;
+    final resumePosition = _position > Duration.zero
+        ? _position
+        : oldPlayer.state.position;
+
+    setState(() {
+      _playbackAvailable = false;
+      _videoController = null;
+      _videoControllerProfile = null;
+      _status = 'Updating video preview renderer…';
+    });
+
+    try {
+      // Unmount the old Video widget before releasing its Player/texture.
+      await Future<void>.delayed(Duration.zero);
+      await _durationSubscription?.cancel();
+      await _positionSubscription?.cancel();
+      _durationSubscription = null;
+      _positionSubscription = null;
+      await oldPlayer.dispose();
+
+      if (!mounted) return;
+      final player = Player();
+      _player = player;
+      _attachPlayerStreams(player);
+
+      await player.open(Media(path), play: false).timeout(
+        const Duration(seconds: 20),
+      );
+      await player.setRate(_editor.project.speed).timeout(
+        const Duration(seconds: 5),
+      );
+      await player.setVolume(_editor.project.muted ? 0 : 100).timeout(
+        const Duration(seconds: 5),
+      );
+      if (resumePosition > Duration.zero) {
+        await player.seek(resumePosition).timeout(
+          const Duration(seconds: 8),
+        );
+      }
+      if (resumePlaying) await player.play().timeout(
+        const Duration(seconds: 8),
+      );
+
+      if (!mounted) return;
+      _videoControllerProfile =
+          DepthVibeSettingsService.instance.performanceMode;
+      _previewError = null;
+      setState(() {
+        _playbackAvailable = true;
+        _position = resumePosition;
+        _status = 'Video preview renderer updated';
+      });
+    } catch (error, stackTrace) {
+      debugPrint(
+        'DepthVibe preview renderer reconfiguration failed: '
+        '$error\\n$stackTrace',
+      );
+      if (mounted) {
+        _previewError = error.toString();
+        setState(() {
+          _playbackAvailable = false;
+          _status =
+              'Preview renderer could not be restarted; timeline editing remains available';
+        });
+      }
+    } finally {
+      _reconfiguringPreview = false;
+      if (mounted &&
+          _profileChangedDuringOpen &&
+          _videoControllerProfile !=
+              DepthVibeSettingsService.instance.performanceMode) {
+        _profileChangedDuringOpen = false;
+        unawaited(_reconfigureVideoPreview());
+      }
+    }
+  }
+
   VideoController? _videoControllerForPreview() {
     final player = _player;
-    if (player == null || !_playbackAvailable) return null;
-    return _videoController ??= VideoController(
+    if (player == null || !_playbackAvailable || _reconfiguringPreview) {
+      return null;
+    }
+    final profile = DepthVibeSettingsService.instance.performanceMode;
+    if (_videoController != null && _videoControllerProfile != profile) {
+      unawaited(_reconfigureVideoPreview());
+      return null;
+    }
+    if (_videoController != null) return _videoController;
+
+    _videoControllerProfile = profile;
+    _videoController = VideoController(
       player,
       configuration: VideoControllerConfiguration(
-        enableHardwareAcceleration: DepthVibeSettingsService
-            .instance.performanceMode.enableVideoHardwareAcceleration,
-        hwdec: DepthVibeSettingsService.instance.performanceMode.videoHardwareDecoder,
-        scale: DepthVibeSettingsService.instance.performanceMode.videoOutputScale,
+        enableHardwareAcceleration: profile.enableVideoHardwareAcceleration,
+        hwdec: profile.videoHardwareDecoder,
+        scale: profile.videoOutputScale,
       ),
     );
+    return _videoController;
   }
 
   Future<Duration?> _probeMediaDuration(String path) async {
@@ -127,6 +251,9 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   Future<void> _openVideo(String path) async {
+    _currentVideoPath = path;
+    _openingVideo = true;
+    _profileChangedDuringOpen = false;
     _editor.loadVideo(path);
 
     // Activate the project and timeline immediately. Native playback and
@@ -171,6 +298,7 @@ class _EditorScreenState extends State<EditorScreen> {
       if (duration != null) _editor.setSourceDuration(duration);
     }
 
+    _openingVideo = false;
     if (!mounted) return;
     setState(() {
       _playbackAvailable = playbackReady;
@@ -179,6 +307,10 @@ class _EditorScreenState extends State<EditorScreen> {
           ? 'Media loaded'
           : 'Media imported — CPU timeline editing remains available; preview is unavailable';
     });
+    if (_profileChangedDuringOpen) {
+      _profileChangedDuringOpen = false;
+      unawaited(_reconfigureVideoPreview());
+    }
   }
 
   Future<void> _openSettings() => DepthVibeSettingsDialog.show(context);
@@ -994,6 +1126,7 @@ class _EditorScreenState extends State<EditorScreen> {
 
   @override
   void dispose() {
+    DepthVibeSettingsService.instance.removeListener(_onPreviewSettingsChanged);
     _editor.removeListener(_refresh);
     _editor.dispose();
     _durationSubscription?.cancel();
