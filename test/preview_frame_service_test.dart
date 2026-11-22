@@ -55,6 +55,114 @@ void main() {
     service.dispose();
   });
 
+  test('visible requests run before queued background prefetch frames', () async {
+    final service = PreviewFrameService(maxConcurrentDecodes: 1);
+    final blockerGate = Completer<File?>();
+    final blockerStarted = Completer<void>();
+    final order = <String>[];
+
+    final blocker = service.requestFrame(
+      laneId: 'blocker',
+      cacheKey: 'blocker-frame',
+      cacheFile: File('${directory.path}/blocker.jpg'),
+      decode: () {
+        if (!blockerStarted.isCompleted) blockerStarted.complete();
+        return blockerGate.future;
+      },
+    );
+    await blockerStarted.future;
+
+    final background = service.requestFrame(
+      laneId: 'video-b',
+      cacheKey: 'background-frame',
+      cacheFile: File('${directory.path}/background.jpg'),
+      isPrefetch: true,
+      decode: () async {
+        order.add('background');
+        return _writeFrame(directory, 'background');
+      },
+    );
+    final visible = service.requestFrame(
+      laneId: 'video-c',
+      cacheKey: 'visible-frame',
+      cacheFile: File('${directory.path}/visible.jpg'),
+      decode: () async {
+        order.add('visible');
+        return _writeFrame(directory, 'visible');
+      },
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(service.stats.pendingDecodes, 2);
+    blockerGate.complete(await _writeFrame(directory, 'blocker'));
+    await blocker;
+    await visible;
+    await background;
+
+    expect(order, <String>['visible', 'background']);
+    expect(service.stats.pendingDecodes, 0);
+    service.dispose();
+  });
+
+  test('foreground requests promote matching queued prefetch frames', () async {
+    final service = PreviewFrameService(maxConcurrentDecodes: 1);
+    final blockerGate = Completer<File?>();
+    final blockerStarted = Completer<void>();
+    final order = <String>[];
+
+    final blocker = service.requestFrame(
+      laneId: 'blocker',
+      cacheKey: 'blocker-frame',
+      cacheFile: File('${directory.path}/blocker-2.jpg'),
+      decode: () {
+        if (!blockerStarted.isCompleted) blockerStarted.complete();
+        return blockerGate.future;
+      },
+    );
+    await blockerStarted.future;
+
+    final prefetch = service.requestFrame(
+      laneId: 'video-b',
+      cacheKey: 'shared-frame',
+      cacheFile: File('${directory.path}/shared-frame.jpg'),
+      isPrefetch: true,
+      decode: () async {
+        order.add('shared');
+        return _writeFrame(directory, 'shared-frame');
+      },
+    );
+    final visible = service.requestFrame(
+      laneId: 'video-b',
+      cacheKey: 'shared-frame',
+      cacheFile: File('${directory.path}/shared-frame.jpg'),
+      decode: () async {
+        order.add('duplicate-visible-decode');
+        return _writeFrame(directory, 'shared-frame-visible');
+      },
+    );
+    final otherBackground = service.requestFrame(
+      laneId: 'video-c',
+      cacheKey: 'other-background-frame',
+      cacheFile: File('${directory.path}/other-background.jpg'),
+      isPrefetch: true,
+      decode: () async {
+        order.add('other-background');
+        return _writeFrame(directory, 'other-background');
+      },
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(service.stats.pendingDecodes, 2);
+    blockerGate.complete(await _writeFrame(directory, 'blocker-2'));
+    await blocker;
+    await prefetch;
+    await visible;
+    await otherBackground;
+
+    expect(order, <String>['shared', 'other-background']);
+    service.dispose();
+  });
+
   test('new playhead request drops stale queued frames for the same layer', () async {
     final service = PreviewFrameService(maxConcurrentDecodes: 1);
     final activeGate = Completer<File?>();
