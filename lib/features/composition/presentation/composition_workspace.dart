@@ -710,12 +710,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
   void _onFlutterFrameTimings(List<ui.FrameTiming> timings) {
-    if (_previewPlaying || timings.isNotEmpty) {
-      for (final timing in timings) {
-        _previewFrameService.recordUiFrameDuration(
-          timing.buildDuration + timing.rasterDuration,
-        );
-      }
+    if (!_previewPlaying) return;
+    for (final timing in timings) {
+      _previewFrameService.recordUiFrameDuration(
+        timing.buildDuration + timing.rasterDuration,
+      );
     }
   }
 
@@ -7398,11 +7397,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 builder: (context) {
                   final stats = _previewFrameService.stats;
                   final decodeText = stats.averageDecodeMs <= 0
-                      ? 'warming up'
+                      ? 'decode warming'
                       : '${stats.averageDecodeMs.round()} ms decode';
+                  final uiText = stats.averageUiFrameMs <= 0
+                      ? 'UI warming'
+                      : '${stats.averageUiFrameMs.round()} ms UI';
                   return Text(
                     '${stats.effectivePreviewWidth}px · '
-                    '${stats.effectivePreviewFrameRate} FPS · $decodeText · '
+                    '${stats.effectivePreviewFrameRate} FPS · '
+                    '$decodeText · $uiText · '
                     '${stats.droppedRequests} skipped',
                     style: const TextStyle(
                       fontSize: 8,
