@@ -58,15 +58,20 @@ void main() {
   test('new playhead request drops stale queued frames for the same layer', () async {
     final service = PreviewFrameService(maxConcurrentDecodes: 1);
     final activeGate = Completer<File?>();
+    final activeStarted = Completer<void>();
     var newestDecodeCalls = 0;
 
     final active = service.requestFrame(
       laneId: 'video-a',
       cacheKey: 'frame-0',
       cacheFile: File('${directory.path}/frame-0.jpg'),
-      decode: () => activeGate.future,
+      decode: () {
+        if (!activeStarted.isCompleted) activeStarted.complete();
+        return activeGate.future;
+      },
     );
-    await Future<void>.delayed(Duration.zero);
+    await activeStarted.future;
+    expect(service.stats.activeDecodes, 1);
 
     final stale = service.requestFrame(
       laneId: 'video-a',
@@ -120,7 +125,9 @@ void main() {
 
     expect(first, isNotNull);
     expect(second, isNotNull);
-    expect(await first!.exists(), isFalse);
+    // The in-memory LRU forgets the older frame, but the disk cache keeps
+    // it available for a later seek and a workspace rebuild.
+    expect(await first!.exists(), isTrue);
     expect(await second!.exists(), isTrue);
     expect(service.stats.cachedFrames, 1);
     expect(service.stats.cachedBytes, 256);
