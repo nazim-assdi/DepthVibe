@@ -3299,7 +3299,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _controller.selectLayer(layer.id);
     setState(() {
       _activePreviewTool = 'Pen';
-      _panel = 'Masks';
+      _panel = layer.kind == LayerKind.shape ? 'Shape' : 'Masks';
       _previewPenLayerId = layer.id;
       _previewPenPoints.clear();
       _previewPenLayerSize = Size.zero;
@@ -3400,22 +3400,53 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ),
     ];
 
-    _controller.addMask(
-      shape: MaskShape.bezier,
-      vertices: vertices,
-      left: left,
-      top: top,
-      width: width,
-      height: height,
-    );
+    if (layer.kind == LayerKind.shape) {
+      final shapeVertices = [
+        for (var index = 0; index < points.length; index++)
+          MaskVertex(
+            anchor: Vector2(
+              (points[index].dx / size.width).clamp(0.0, 1.0).toDouble(),
+              (points[index].dy / size.height).clamp(0.0, 1.0).toDouble(),
+            ),
+            inHandle: Vector2(
+              -tangents[index].dx / size.width,
+              -tangents[index].dy / size.height,
+            ),
+            outHandle: Vector2(
+              tangents[index].dx / size.width,
+              tangents[index].dy / size.height,
+            ),
+            smooth: tangents[index].distance > 0,
+          ),
+      ];
+      final currentStyle = layer.shapeStyle ?? const ShapeStyle();
+      _controller.setShapeStyle(
+        currentStyle.copyWith(
+          primitive: ShapePrimitive.path,
+          pathVertices: shapeVertices,
+          pathClosed: true,
+        ),
+      );
+    } else {
+      _controller.addMask(
+        shape: MaskShape.bezier,
+        vertices: vertices,
+        left: left,
+        top: top,
+        width: width,
+        height: height,
+      );
+    }
     setState(() {
-      _activePreviewTool = 'Mask';
+      _activePreviewTool = layer.kind == LayerKind.shape ? 'Shape' : 'Mask';
       _previewPenLayerId = null;
       _previewPenPoints.clear();
       _previewPenTangents.clear();
       _previewPenDraggingIndex = null;
       _previewPenLayerSize = Size.zero;
-      _notice = 'Bezier mask created. Drag vertices or direction handles in the Composition panel.';
+      _notice = layer.kind == LayerKind.shape
+          ? 'Bezier shape path created on the selected shape layer.'
+          : 'Bezier mask created. Drag vertices or direction handles in the Composition panel.';
     });
   }
 
@@ -3995,9 +4026,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 Icons.gesture,
                 _activePreviewTool == 'Pen',
                 onTap: () {
-                  final layer = _controller.selectedLayer;
+                  var layer = _controller.selectedLayer;
+                  if (layer == null) {
+                    _controller.addLayer(
+                      LayerKind.shape,
+                      name: 'Bezier Shape',
+                    );
+                    layer = _controller.selectedLayer;
+                  }
                   if (layer == null || layer.locked) {
-                    setState(() => _notice = 'Select an unlocked layer before drawing a Bezier mask.');
+                    setState(() => _notice = 'Select an unlocked layer before drawing a path.');
                     return;
                   }
                   _beginPreviewPenPath(layer);
@@ -11313,6 +11351,38 @@ class _ShapeLayerPainter extends CustomPainter {
     return Color(0xFF000000 | parsed);
   }
 
+  Path _vectorPath(Size size) {
+    final path = Path();
+    final vertices = style.pathVertices;
+    if (vertices.length < 2) return path;
+    Offset map(Vector2 point) => Offset(
+          point.x * size.width,
+          point.y * size.height,
+        );
+    path.moveTo(
+      vertices.first.anchor.x * size.width,
+      vertices.first.anchor.y * size.height,
+    );
+    final segments = style.pathClosed ? vertices.length : vertices.length - 1;
+    for (var index = 0; index < segments; index++) {
+      final next = (index + 1) % vertices.length;
+      final start = vertices[index];
+      final end = vertices[next];
+      final p1 = map(Vector2(
+        start.anchor.x + start.outHandle.x,
+        start.anchor.y + start.outHandle.y,
+      ));
+      final p2 = map(Vector2(
+        end.anchor.x + end.inHandle.x,
+        end.anchor.y + end.inHandle.y,
+      ));
+      final p3 = map(end.anchor);
+      path.cubicTo(p1.dx, p1.dy, p2.dx, p2.dy, p3.dx, p3.dy);
+    }
+    if (style.pathClosed) path.close();
+    return path;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final path = Path();
@@ -11339,7 +11409,8 @@ class _ShapeLayerPainter extends CustomPainter {
         final center = Offset(size.width / 2, size.height / 2);
         final radius = math.min(size.width, size.height) / 2;
         for (var index = 0; index < count; index++) {
-          final starInner = style.primitive == ShapePrimitive.star && index.isOdd;
+          final starInner =
+              style.primitive == ShapePrimitive.star && index.isOdd;
           final pointRadius = starInner ? radius * 0.42 : radius;
           final angle = -math.pi / 2 + index * math.pi * 2 / count;
           final point = Offset(
@@ -11355,11 +11426,12 @@ class _ShapeLayerPainter extends CustomPainter {
         path.close();
         break;
       case ShapePrimitive.path:
-        path.addRect(Offset.zero & size);
+        path.addPath(_vectorPath(size), Offset.zero);
         break;
     }
 
-    if (style.fillColor.toLowerCase() != 'transparent') {
+    final hasFill = style.primitive != ShapePrimitive.path || style.pathClosed;
+    if (hasFill && style.fillColor.toLowerCase() != 'transparent') {
       canvas.drawPath(path, Paint()..color = _color(style.fillColor));
     }
     if (style.strokeWidth > 0) {

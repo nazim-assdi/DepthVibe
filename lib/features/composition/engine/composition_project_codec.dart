@@ -347,10 +347,19 @@ class CompositionProjectCodec {
         'strokeWidth': style.strokeWidth,
         'cornerRadius': style.cornerRadius,
         'points': style.points,
+        'pathVertices': style.pathVertices.map((vertex) => <String, Object?>{
+              'anchor': vertex.anchor.toJson(),
+              'inHandle': vertex.inHandle.toJson(),
+              'outHandle': vertex.outHandle.toJson(),
+              'smooth': vertex.smooth,
+            }).toList(),
+        'pathClosed': style.pathClosed,
       };
 
   static ShapeStyle _decodeShapeStyle(Object? raw) {
     final json = _asMap(raw, 'shape style');
+    final pathVertices =
+        _asList(json['pathVertices'] ?? const [], 'shape path vertices');
     return ShapeStyle(
       primitive: _enumValue(
         ShapePrimitive.values,
@@ -362,6 +371,20 @@ class CompositionProjectCodec {
       strokeWidth: _number(json['strokeWidth'], 0),
       cornerRadius: _number(json['cornerRadius'], 0),
       points: _integer(json['points'], 5),
+      pathVertices: pathVertices.map((rawVertex) {
+        final vertex = _asMap(rawVertex, 'shape path vertex');
+        return MaskVertex(
+          anchor: Vector2.fromJson(_asMap(vertex['anchor'], 'shape anchor')),
+          inHandle: Vector2.fromJson(
+            _asMap(vertex['inHandle'], 'shape in handle'),
+          ),
+          outHandle: Vector2.fromJson(
+            _asMap(vertex['outHandle'], 'shape out handle'),
+          ),
+          smooth: _boolean(vertex['smooth'], false),
+        );
+      }).toList(),
+      pathClosed: _boolean(json['pathClosed'], true),
     );
   }
 

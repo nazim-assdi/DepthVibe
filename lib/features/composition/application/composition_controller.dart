@@ -1777,10 +1777,16 @@ class CompositionController extends ChangeNotifier {
     _replace(layer.copyWith(enabled: enabled));
   }
 
-  void setShapeStyle(ShapeStyle style) {
+  void setShapeStyle(
+    ShapeStyle style, {
+    bool recordHistory = true,
+  }) {
     final layer = selectedLayer;
     if (layer == null || layer.kind != LayerKind.shape) return;
-    _replace(layer.copyWith(shapeStyle: style));
+    _replace(
+      layer.copyWith(shapeStyle: style),
+      recordHistory: recordHistory,
+    );
   }
 
   void setCameraSettings(CameraSettings settings) {

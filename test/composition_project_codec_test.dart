@@ -327,4 +327,45 @@ void main() {
       throwsA(isA<FormatException>()),
     );
   });
+
+  test('round-trips editable Bezier vector shape paths and tangent handles', () {
+    const document = CompositionDocument(
+      layers: [
+        CompositionLayer(
+          id: 'shape-path',
+          name: 'Custom Vector',
+          kind: LayerKind.shape,
+          shapeStyle: ShapeStyle(
+            primitive: ShapePrimitive.path,
+            fillColor: '#FF336699',
+            strokeColor: '#FFFFFFFF',
+            strokeWidth: 4,
+            pathClosed: true,
+            pathVertices: [
+              MaskVertex(
+                anchor: Vector2(0.1, 0.2),
+                inHandle: Vector2(-0.1, 0),
+                outHandle: Vector2(0.2, 0.1),
+                smooth: true,
+              ),
+              MaskVertex(anchor: Vector2(0.8, 0.2)),
+              MaskVertex(anchor: Vector2(0.5, 0.9)),
+            ],
+          ),
+        ),
+      ],
+    );
+    final restored = CompositionProjectCodec.decodeDocument(
+      CompositionProjectCodec.encodeDocument(document),
+    );
+    final style = restored.layers.single.shapeStyle!;
+    expect(style.primitive, ShapePrimitive.path);
+    expect(style.pathClosed, isTrue);
+    expect(style.pathVertices, hasLength(3));
+    expect(style.pathVertices.first.smooth, isTrue);
+    expect(style.pathVertices.first.outHandle.x, 0.2);
+    expect(style.pathVertices.first.outHandle.y, 0.1);
+    expect(style.pathVertices.first.inHandle.x, -0.1);
+  });
+
 }

@@ -769,6 +769,8 @@ class ShapeStyle {
     this.strokeWidth = 0,
     this.cornerRadius = 0,
     this.points = 5,
+    this.pathVertices = const [],
+    this.pathClosed = true,
   });
 
   final ShapePrimitive primitive;
@@ -777,6 +779,8 @@ class ShapeStyle {
   final double strokeWidth;
   final double cornerRadius;
   final int points;
+  final List<MaskVertex> pathVertices;
+  final bool pathClosed;
 
   ShapeStyle copyWith({
     ShapePrimitive? primitive,
@@ -785,6 +789,8 @@ class ShapeStyle {
     double? strokeWidth,
     double? cornerRadius,
     int? points,
+    List<MaskVertex>? pathVertices,
+    bool? pathClosed,
   }) => ShapeStyle(
     primitive: primitive ?? this.primitive,
     fillColor: fillColor ?? this.fillColor,
@@ -792,6 +798,8 @@ class ShapeStyle {
     strokeWidth: strokeWidth ?? this.strokeWidth,
     cornerRadius: cornerRadius ?? this.cornerRadius,
     points: points ?? this.points,
+    pathVertices: pathVertices ?? this.pathVertices,
+    pathClosed: pathClosed ?? this.pathClosed,
   );
 }
 
