@@ -812,6 +812,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   final List<Offset> _previewPenPoints = [];
   final List<Offset> _previewPenTangents = [];
   int? _previewPenDraggingIndex;
+  bool _previewPenPathClosed = true;
   Size _previewPenLayerSize = Size.zero;
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
@@ -3403,8 +3404,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         layer.id != _previewPenLayerId ||
         size.width <= 0 ||
         size.height <= 0 ||
-        points.length < 3) {
-      setState(() => _notice = 'A closed mask path needs at least three points.');
+        points.length <
+            (layer.kind == LayerKind.shape && !_previewPenPathClosed ? 2 : 3)) {
+      setState(() => _notice = layer.kind == LayerKind.shape &&
+              !_previewPenPathClosed
+          ? 'An open vector path needs at least two points.'
+          : 'A closed path needs at least three points.');
       return;
     }
 
@@ -3465,7 +3470,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         currentStyle.copyWith(
           primitive: ShapePrimitive.path,
           pathVertices: shapeVertices,
-          pathClosed: true,
+          pathClosed: _previewPenPathClosed,
         ),
       );
     } else {
@@ -3484,6 +3489,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       _previewPenPoints.clear();
       _previewPenTangents.clear();
       _previewPenDraggingIndex = null;
+      _previewPenPathClosed = true;
       _previewPenLayerSize = Size.zero;
       _notice = layer.kind == LayerKind.shape
           ? 'Bezier shape path created on the selected shape layer.'
@@ -3498,6 +3504,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       _previewPenPoints.clear();
       _previewPenTangents.clear();
       _previewPenDraggingIndex = null;
+      _previewPenPathClosed = true;
       _previewPenLayerSize = Size.zero;
     });
   }
@@ -3667,7 +3674,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     if (_autoKeyEnabled || existingKeyframes) {
       _controller.updateTransformValues(
         {propertyX: x, propertyY: y},
-        autoKey: _autoKeyEnabled,
+        autoKey: _autoKeyEnabled || existingKeyframes,
         recordHistory: !_previewShapeHistoryRecorded,
       );
     } else {
@@ -4295,6 +4302,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   _beginPreviewPenPath(layer);
                 },
               ),
+              if (_activePreviewTool == 'Pen' &&
+                  _controller.selectedLayer?.kind == LayerKind.shape)
+                _toolChip(
+                  _previewPenPathClosed ? 'Closed' : 'Open',
+                  _previewPenPathClosed ? Icons.check_box : Icons.check_box_outline_blank,
+                  _previewPenPathClosed,
+                  onTap: () => setState(
+                    () => _previewPenPathClosed = !_previewPenPathClosed,
+                  ),
+                ),
               if (_activePreviewTool == 'Pen') ...[
                 _toolChip(
                   'Finish Path',

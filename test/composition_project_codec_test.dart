@@ -366,6 +366,28 @@ void main() {
     expect(style.pathVertices.first.outHandle.x, 0.2);
     expect(style.pathVertices.first.outHandle.y, 0.1);
     expect(style.pathVertices.first.inHandle.x, -0.1);
+
+    const openDocument = CompositionDocument(
+      layers: [
+        CompositionLayer(
+          id: 'open-path',
+          name: 'Open Stroke',
+          kind: LayerKind.shape,
+          shapeStyle: ShapeStyle(
+            primitive: ShapePrimitive.path,
+            pathClosed: false,
+            pathVertices: [
+              MaskVertex(anchor: Vector2(0.1, 0.5)),
+              MaskVertex(anchor: Vector2(0.9, 0.5)),
+            ],
+          ),
+        ),
+      ],
+    );
+    final openRestored = CompositionProjectCodec.decodeDocument(
+      CompositionProjectCodec.encodeDocument(openDocument),
+    );
+    expect(openRestored.layers.single.shapeStyle!.pathClosed, isFalse);
   });
 
 }
