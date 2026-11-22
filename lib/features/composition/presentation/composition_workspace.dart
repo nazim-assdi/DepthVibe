@@ -130,6 +130,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   Future<File?> _decodePreviewFrame({
     required String path,
     required int seekMs,
+    required String laneId,
     required String cacheKey,
     required int width,
     required int decodeThreads,
@@ -149,7 +150,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       );
       final profile = DepthVibeSettingsService.instance.performanceMode;
       return _previewFrameService.requestFrame(
-        laneId: cacheKey.split('_').first,
+        laneId: laneId,
         cacheKey: diskKey,
         cacheFile: frame,
         decode: () async {
@@ -231,6 +232,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final job = _decodePreviewFrame(
       path: path,
       seekMs: seekMs,
+      laneId: layer.id,
       cacheKey: '${layer.id}_${frameIndex}_'
           '${previewFps.toStringAsFixed(1)}',
       width: width,
