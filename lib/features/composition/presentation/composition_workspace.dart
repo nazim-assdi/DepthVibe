@@ -3401,16 +3401,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final points = List<Offset>.of(_previewPenPoints);
     final tangents = List<Offset>.of(_previewPenTangents);
     final size = _previewPenLayerSize;
-    if (layer == null ||
-        layer.id != _previewPenLayerId ||
+    if (layer == null) {
+      setState(() => _notice = 'Select a layer before finishing a path.');
+      return;
+    }
+    if (layer.id != _previewPenLayerId ||
         size.width <= 0 ||
         size.height <= 0 ||
         points.length <
             (layer.kind == LayerKind.shape && !_previewPenPathClosed ? 2 : 3)) {
-      setState(() => _notice = layer.kind == LayerKind.shape &&
-              !_previewPenPathClosed
-          ? 'An open vector path needs at least two points.'
-          : 'A closed path needs at least three points.');
+      setState(() {
+        _notice = layer.kind == LayerKind.shape && !_previewPenPathClosed
+            ? 'An open vector path needs at least two points.'
+            : 'A closed path needs at least three points.';
+      });
       return;
     }
 
