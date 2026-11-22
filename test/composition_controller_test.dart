@@ -1012,13 +1012,16 @@ void main() {
       ),
     );
 
-    controller.updateKeyframe('position.x', 400, 800, 220);
-    controller.updateKeyframe(
-      'position.x',
-      800,
+    expect(controller.updateKeyframe('position.x', 400, 800, 220), 800);
+    expect(
+      controller.updateKeyframe(
+        'position.x',
+        800,
+        900,
+        240,
+        recordHistory: false,
+      ),
       900,
-      240,
-      recordHistory: false,
     );
 
     final keys = controller.selectedLayer!.keyframeTracks.single.keyframes;

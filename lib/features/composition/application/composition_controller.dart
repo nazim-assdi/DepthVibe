@@ -1449,8 +1449,7 @@ class CompositionController extends ChangeNotifier {
     bool recordHistory = true,
   }) {
     final layer = selectedLayer;
-    if (layer == null || !value.isFinite) return null;
-    int? resolvedTimeMs;
+    if (layer == null || layer.locked || !value.isFinite) return null;
 
     final frameStepMs = math.max(
       1,
@@ -1459,30 +1458,24 @@ class CompositionController extends ChangeNotifier {
           : (1000 / _document.frameRate).round()),
     );
 
-    KeyframeTrack update(KeyframeTrack track) {
-      if (track.property != property) return track;
-      final ordered = [...track.keyframes]
+    KeyframeTrack? updateTrack(KeyframeTrack track) {
+      if (track.property != property) return null;
+      final frames = [...track.keyframes]
         ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
-      final orderedIndex = ordered.indexWhere(
-        (item) => item.timeMs == fromTimeMs,
-      );
-      if (orderedIndex < 0) return track;
+      final index = frames.indexWhere((item) => item.timeMs == fromTimeMs);
+      if (index < 0) return null;
 
-      final previous = orderedIndex > 0 ? ordered[orderedIndex - 1] : null;
-      final next = orderedIndex < ordered.length - 1
-          ? ordered[orderedIndex + 1]
-          : null;
-      final lowerBound = previous == null ? 0 : previous.timeMs + frameStepMs;
-      final upperBound = next == null
+      final previous = index > 0 ? frames[index - 1] : null;
+      final next = index < frames.length - 1 ? frames[index + 1] : null;
+      final minimumTime = previous == null ? 0 : previous.timeMs + frameStepMs;
+      final maximumTime = next == null
           ? _document.durationMs
           : next.timeMs - frameStepMs;
-      final targetTime = lowerBound > upperBound
-          ? fromTimeMs
-          : toTimeMs.clamp(lowerBound, upperBound).toInt();
-
-      final old = ordered[orderedIndex];
-      resolvedTimeMs = targetTime;
-      ordered[orderedIndex] = ScalarKeyframe(
+      if (minimumTime > maximumTime) return null;
+      final targetTime =
+          toTimeMs.clamp(minimumTime, maximumTime).toInt();
+      final old = frames[index];
+      frames[index] = ScalarKeyframe(
         timeMs: targetTime,
         value: value,
         interpolation: old.interpolation,
@@ -1491,22 +1484,32 @@ class CompositionController extends ChangeNotifier {
         bezier: old.bezier,
         metadata: old.metadata,
       );
-      ordered.sort((a, b) => a.timeMs.compareTo(b.timeMs));
+      frames.sort((a, b) => a.timeMs.compareTo(b.timeMs));
       return KeyframeTrack(
         property: track.property,
-        keyframes: ordered,
+        keyframes: frames,
         enabled: track.enabled,
       );
     }
 
+    int? resolvedTimeMs;
     if (effectId != null) {
+      var changed = false;
       final effects = layer.effects.map((effect) {
         if (effect.id != effectId) return effect;
-        return effect.copyWith(
-          keyframeTracks: effect.keyframeTracks.map(update).toList(),
-        );
+        final tracks = effect.keyframeTracks.map((track) {
+          final updated = updateTrack(track);
+          if (updated == null) return track;
+          changed = true;
+          resolvedTimeMs = updated.keyframes
+              .firstWhere((item) => item.value == value &&
+                  item.timeMs >= 0)
+              .timeMs;
+          return updated;
+        }).toList();
+        return effect.copyWith(keyframeTracks: tracks);
       }).toList();
-      if (resolvedTimeMs == null) return null;
+      if (!changed) return null;
       _replaceWithHistory(
         layer.copyWith(effects: effects),
         recordHistory: recordHistory,
@@ -1515,13 +1518,22 @@ class CompositionController extends ChangeNotifier {
     }
 
     if (maskId != null) {
+      var changed = false;
       final masks = layer.masks.map((mask) {
         if (mask.id != maskId) return mask;
-        return mask.copyWith(
-          keyframeTracks: mask.keyframeTracks.map(update).toList(),
-        );
+        final tracks = mask.keyframeTracks.map((track) {
+          final updated = updateTrack(track);
+          if (updated == null) return track;
+          changed = true;
+          resolvedTimeMs = updated.keyframes
+              .firstWhere((item) => item.value == value &&
+                  item.timeMs >= 0)
+              .timeMs;
+          return updated;
+        }).toList();
+        return mask.copyWith(keyframeTracks: tracks);
       }).toList();
-      if (resolvedTimeMs == null) return null;
+      if (!changed) return null;
       _replaceWithHistory(
         layer.copyWith(masks: masks),
         recordHistory: recordHistory,
@@ -1529,9 +1541,19 @@ class CompositionController extends ChangeNotifier {
       return resolvedTimeMs;
     }
 
-    if (resolvedTimeMs == null) return null;
+    var changed = false;
+    final tracks = layer.keyframeTracks.map((track) {
+      final updated = updateTrack(track);
+      if (updated == null) return track;
+      changed = true;
+      resolvedTimeMs = updated.keyframes
+          .firstWhere((item) => item.value == value && item.timeMs >= 0)
+          .timeMs;
+      return updated;
+    }).toList();
+    if (!changed) return null;
     _replaceWithHistory(
-      layer.copyWith(keyframeTracks: layer.keyframeTracks.map(update).toList()),
+      layer.copyWith(keyframeTracks: tracks),
       recordHistory: recordHistory,
     );
     return resolvedTimeMs;
