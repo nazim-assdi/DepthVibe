@@ -94,17 +94,30 @@ class PreviewFrameService {
 
   /// Feed Flutter build+raster time into the same adaptive quality governor.
   void recordUiFrameDuration(Duration duration) {
-    recordDecodeDuration(duration);
+    _recordPerformanceSample(duration);
   }
 
   /// Feed measured native decode time back into the adaptive preview profile.
   /// Five slow frames lower quality; forty fast frames restore it gradually.
-  void recordDecodeDuration(Duration duration) {
-    final milliseconds = duration.inMilliseconds.clamp(0, 60000).toInt();
-    _lastDecodeMs = milliseconds;
+  void recordDecodeDuration(
+    Duration duration, {
+    int framesDecoded = 1,
+  }) {
+    _recordPerformanceSample(
+      Duration(
+        microseconds:
+            (duration.inMicroseconds / framesDecoded.clamp(1, 1000000)).round(),
+      ),
+    );
+  }
+
+  void _recordPerformanceSample(Duration duration) {
+    final milliseconds =
+        (duration.inMicroseconds / 1000).clamp(0, 60000).toDouble();
+    _lastDecodeMs = milliseconds.round();
     _completedDecodes++;
     _averageDecodeMs = _completedDecodes == 1
-        ? milliseconds.toDouble()
+        ? milliseconds
         : (_averageDecodeMs * 0.8) + (milliseconds * 0.2);
 
     final frameBudgetMs = 1000 / _effectivePreviewFrameRate;
@@ -165,6 +178,7 @@ class PreviewFrameService {
     required String cacheKey,
     required File cacheFile,
     required PreviewFrameDecoder decode,
+    int decodedFrameCount = 1,
   }) async {
     if (_disposed) return null;
 
@@ -214,6 +228,7 @@ class PreviewFrameService {
       laneId: laneId,
       key: cacheKey,
       decode: decode,
+      decodedFrameCount: decodedFrameCount,
     );
 
     // Keep only the newest requested frame for each video layer. This is the
@@ -252,7 +267,6 @@ class PreviewFrameService {
   }
 
   Future<void> _run(_PendingPreviewFrame task) async {
-    final stopwatch = Stopwatch()..start();
     try {
       final decoded = await task.decode();
       File? result;
@@ -272,8 +286,10 @@ class PreviewFrameService {
       // the editor responsive rather than failing the whole composition.
       if (!task.completer.isCompleted) task.completer.complete(null);
     } finally {
-      stopwatch.stop();
-      recordDecodeDuration(stopwatch.elapsed);
+      recordDecodeDuration(
+        task.requestedAt.elapsed,
+        framesDecoded: task.decodedFrameCount,
+      );
       _activeByKey.remove(task.key);
       _activeCount = (_activeCount - 1).clamp(0, 1 << 30).toInt();
       _pump();
@@ -334,10 +350,13 @@ class _PendingPreviewFrame {
     required this.laneId,
     required this.key,
     required this.decode,
-  });
+    required this.decodedFrameCount,
+  }) : requestedAt = Stopwatch()..start();
 
   final String laneId;
   final String key;
   final PreviewFrameDecoder decode;
+  final int decodedFrameCount;
+  final Stopwatch requestedAt;
   final Completer<File?> completer = Completer<File?>();
 }
