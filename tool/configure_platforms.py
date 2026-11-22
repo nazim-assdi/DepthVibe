@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 
 from platform_branding import (
     disable_linux_impeller,
-    configure_windows_gpu_path,
+    configure_windows_renderer_fallback,
     replace_linux_window_title,
     replace_windows_window_title,
 )
@@ -277,7 +277,7 @@ def configure_windows_branding() -> None:
     if main_cpp.exists():
         text = main_cpp.read_text(encoding="utf-8")
         updated, count = replace_windows_window_title(text)
-        updated, renderer_count = configure_windows_gpu_path(updated)
+        updated, renderer_count = configure_windows_renderer_fallback(updated)
         if count or renderer_count:
             main_cpp.write_text(updated, encoding="utf-8")
         elif "window.Create" in text and '"DepthVibe"' not in text:
