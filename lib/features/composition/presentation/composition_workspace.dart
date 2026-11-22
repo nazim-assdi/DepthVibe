@@ -604,7 +604,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           !prefetch && _latestRequestedFrameKey[layer.id] == requestKey;
       if (isLatestVisibleFrame) {
         _previewFrameErrors.remove(layer.id);
-        if (_previewPlaying) _schedulePreviewProxy(path);
+        if (_previewPlaying && _previewDecoderNeedsProxy()) {
+          _schedulePreviewProxy(path);
+        }
         // Keep every successfully decoded playhead frame as the visible
         // fallback while a later frame is loading or being retried.
         _lastVideoFrames[layer.id] = frame;
@@ -638,6 +640,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     return job;
   }
 
+  bool _previewDecoderNeedsProxy() {
+    final profile = DepthVibeSettingsService.instance.performanceMode;
+    final stats = _previewFrameService.stats;
+    final frameBudgetMs = 1000 / profile.previewFrameRate;
+    return (stats.lastDecodeMs > 0 &&
+            stats.averageDecodeMs > frameBudgetMs * 1.2) ||
+        stats.averageQueueWaitMs > frameBudgetMs * 1.2;
+  }
+
   void _schedulePreviewProxy(String sourcePath) {
     final profile = DepthVibeSettingsService.instance.performanceMode;
     final requestKey =
@@ -645,7 +656,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     if (!_previewProxyRequests.add(requestKey)) return;
     unawaited(
       Future<void>.delayed(const Duration(seconds: 2)).then((_) {
-        if (!mounted || !_previewPlaying) return null;
+        if (!mounted || !_previewPlaying) {
+          _previewProxyRequests.remove(requestKey);
+          return null;
+        }
         return _previewProxyService.queueProxy(
           sourcePath: sourcePath,
           width: profile.previewFrameWidth,
@@ -664,6 +678,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
   void _retryVideoPreview(CompositionLayer layer) {
+    final sourcePath = layer.sourceUri;
+    if (sourcePath != null) {
+      _previewProxyRequests.removeWhere((key) => key.startsWith('$sourcePath|'));
+    }
     _previewFrameErrors.remove(layer.id);
     _latestRequestedFrameKey.remove(layer.id);
     final failedFrame = _lastVideoFrames.remove(layer.id);
