@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../app/depthvibe_brand_mark.dart';
@@ -14,6 +15,7 @@ import '../../../features/composition/presentation/composition_workspace.dart';
 import '../../../features/extensions/presentation/extension_manager_screen.dart';
 import '../../fonts/presentation/font_manager_dialog.dart';
 import '../../../features/media/data/media_picker_service.dart';
+import '../../../features/media/data/media_duration_parser.dart';
 import '../../../features/media/presentation/camera_capture_screen.dart';
 import '../application/editor_controller.dart';
 import '../data/video_export_service.dart';
@@ -23,9 +25,13 @@ class EditorScreen extends StatefulWidget {
   const EditorScreen({
     super.key,
     this.startupWarning,
+    this.mediaPlaybackAvailable = true,
+    this.mediaProcessingAvailable = true,
   });
 
   final String? startupWarning;
+  final bool mediaPlaybackAvailable;
+  final bool mediaProcessingAvailable;
 
   @override
   State<EditorScreen> createState() => _EditorScreenState();
@@ -33,14 +39,16 @@ class EditorScreen extends StatefulWidget {
 
 class _EditorScreenState extends State<EditorScreen> {
   final EditorController _editor = EditorController();
-  final Player _player = Player();
-  late final VideoController _videoController = VideoController(_player);
+  Player? _player;
+  VideoController? _videoController;
   final VideoExportService _exporter = const VideoExportService();
 
   StreamSubscription<Duration>? _durationSubscription;
   StreamSubscription<Duration>? _positionSubscription;
   Duration _position = Duration.zero;
   bool _ready = false;
+  bool _playbackAvailable = false;
+  String? _previewError;
   bool _exporting = false;
   double _exportProgress = 0;
   String? _status;
@@ -49,15 +57,56 @@ class _EditorScreenState extends State<EditorScreen> {
   void initState() {
     super.initState();
     _status = widget.startupWarning;
-    _durationSubscription = _player.stream.duration.listen((duration) {
-      _editor.setSourceDuration(duration);
-    });
-    _positionSubscription = _player.stream.position.listen((position) {
-      if (!mounted) return;
-      setState(() => _position = position);
-      _editor.setPlayhead(position);
-    });
+
+    // The project editor and file picker do not depend on a media player.
+    // Create Player only after the app has confirmed MediaKit initialised.
+    if (widget.mediaPlaybackAvailable) {
+      try {
+        final player = Player();
+        _player = player;
+        _durationSubscription = player.stream.duration.listen((duration) {
+          _editor.setSourceDuration(duration);
+        });
+        _positionSubscription = player.stream.position.listen((position) {
+          if (!mounted) return;
+          setState(() => _position = position);
+          _editor.setPlayhead(position);
+        });
+      } catch (error, stackTrace) {
+        _previewError = error.toString();
+        debugPrint('DepthVibe media player unavailable: $error\\n$stackTrace');
+      }
+    } else {
+      _previewError = 'The optional media playback engine did not initialise.';
+    }
+
     _editor.addListener(_refresh);
+  }
+
+  VideoController? _videoControllerForPreview() {
+    final player = _player;
+    if (player == null || !_playbackAvailable) return null;
+    return _videoController ??= VideoController(
+      player,
+      configuration: VideoControllerConfiguration(
+        enableHardwareAcceleration: DepthVibeSettingsService
+            .instance.performanceMode.enableVideoHardwareAcceleration,
+        scale: DepthVibeSettingsService.instance.performanceMode.videoOutputScale,
+      ),
+    );
+  }
+
+  Future<Duration?> _probeMediaDuration(String path) async {
+    if (!widget.mediaProcessingAvailable) return null;
+    try {
+      final session = await FFprobeKit.getMediaInformationAsync(path);
+      if (session is! MediaInformationSession) return null;
+      final seconds = session.getMediaInformation()?.duration;
+      return MediaDurationParser.parseSeconds(seconds);
+    } catch (error, stackTrace) {
+      debugPrint('DepthVibe media metadata probe failed: $error\\n$stackTrace');
+      return null;
+    }
   }
 
   void _refresh() {
@@ -76,14 +125,36 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Future<void> _openVideo(String path) async {
     _editor.loadVideo(path);
-    await _player.open(Media(path), play: false);
-    await _player.setRate(_editor.project.speed);
-    await _player.setVolume(_editor.project.muted ? 0 : 100);
+    var playbackReady = false;
+    final player = _player;
+    if (player != null) {
+      try {
+        await player.open(Media(path), play: false);
+        await player.setRate(_editor.project.speed);
+        await player.setVolume(_editor.project.muted ? 0 : 100);
+        playbackReady = true;
+        _previewError = null;
+      } catch (error, stackTrace) {
+        _previewError = error.toString();
+        debugPrint('DepthVibe video preview failed; keeping edit mode active: $error\\n$stackTrace');
+      }
+    }
+
+    // FFprobe reads duration without creating a GPU video surface. This keeps
+    // the timeline usable when the playback/output backend cannot start.
+    if (!playbackReady && _editor.project.sourceDurationMs <= 0) {
+      final duration = await _probeMediaDuration(path);
+      if (duration != null) _editor.setSourceDuration(duration);
+    }
+
     if (!mounted) return;
     setState(() {
       _ready = true;
+      _playbackAvailable = playbackReady;
       _position = Duration.zero;
-      _status = 'Media loaded';
+      _status = playbackReady
+          ? 'Media loaded'
+          : 'Media imported — CPU timeline editing remains available; preview is unavailable';
     });
   }
 
@@ -117,22 +188,50 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Future<void> _seek(double value) async {
     final position = Duration(milliseconds: value.round());
-    await _player.seek(position);
+    if (mounted) setState(() => _position = position);
     _editor.setPlayhead(position);
+    final player = _player;
+    if (_playbackAvailable && player != null) {
+      try {
+        await player.seek(position);
+      } catch (error) {
+        _showMessage('Preview seek unavailable: $error');
+      }
+    }
   }
 
   Future<void> _setMuted(bool value) async {
     _editor.setMuted(value);
-    if (_ready) await _player.setVolume(value ? 0 : 100);
+    final player = _player;
+    if (_playbackAvailable && player != null) {
+      try {
+        await player.setVolume(value ? 0 : 100);
+      } catch (error) {
+        _showMessage('Preview audio control unavailable: $error');
+      }
+    }
   }
 
   Future<void> _changeSpeed(double value) async {
     _editor.setSpeed(value);
-    if (_ready) await _player.setRate(value);
+    final player = _player;
+    if (_playbackAvailable && player != null) {
+      try {
+        await player.setRate(value);
+      } catch (error) {
+        _showMessage('Preview speed control unavailable: $error');
+      }
+    }
   }
 
   Future<void> _export() async {
     if (_exporting) return;
+    if (!widget.mediaProcessingAvailable) {
+      _showMessage(
+        'The video processing engine is unavailable. Import and editing remain available.',
+      );
+      return;
+    }
     setState(() {
       _exporting = true;
       _exportProgress = 0;
@@ -381,7 +480,11 @@ class _EditorScreenState extends State<EditorScreen> {
           _toolButton(
             icon: Icons.ios_share,
             label: 'Export MP4',
-            onPressed: _exporting || !_editor.project.hasVideo ? null : _export,
+            onPressed: _exporting ||
+                    !_editor.project.hasVideo ||
+                    !widget.mediaProcessingAvailable
+                ? null
+                : _export,
             primary: true,
           ),
         ],
@@ -392,6 +495,7 @@ class _EditorScreenState extends State<EditorScreen> {
   Widget _buildPreviewArea({bool compact = false}) {
     final project = _editor.project;
     final width = compact ? double.infinity : null;
+    final videoController = _videoControllerForPreview();
     final previewContent = AspectRatio(
       aspectRatio: project.aspect.ratio,
       child: ClipRRect(
@@ -401,16 +505,20 @@ class _EditorScreenState extends State<EditorScreen> {
           children: [
             Container(
               color: const Color(0xFF070A10),
-              child: _ready
-                  ? Transform.rotate(
-                      angle: project.rotationDegrees * math.pi / 180,
-                      child: Video(
-                        controller: _videoController,
-                        controls: NoVideoControls,
-                        fit: project.canvasFit == CanvasFit.fit ? BoxFit.contain : BoxFit.cover,
-                      ),
-                    )
-                  : _buildEmptyPreview(),
+              child: !_ready
+                  ? _buildEmptyPreview()
+                  : videoController == null
+                      ? _buildSoftwareFallbackPreview()
+                      : Transform.rotate(
+                          angle: project.rotationDegrees * math.pi / 180,
+                          child: Video(
+                            controller: videoController,
+                            controls: NoVideoControls,
+                            fit: project.canvasFit == CanvasFit.fit
+                                ? BoxFit.contain
+                                : BoxFit.cover,
+                          ),
+                        ),
             ),
             if (project.title.isNotEmpty || project.caption.isNotEmpty)
               Positioned(
@@ -486,26 +594,40 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   Widget _buildPlaybackControls() {
+    final player = _player;
+    final canPlay = _ready && _playbackAvailable && player != null;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         IconButton.filledTonal(
-          onPressed: !_ready ? null : () => _player.seek(Duration.zero),
+          onPressed: !_ready ? null : () => _seek(0),
           icon: const Icon(Icons.replay),
         ),
         const SizedBox(width: 12),
         IconButton.filled(
-          onPressed: !_ready
+          onPressed: !canPlay
               ? null
               : () async {
-                  if (_player.state.playing) {
-                    await _player.pause();
-                  } else {
-                    await _player.play();
+                  try {
+                    if (player.state.playing) {
+                      await player.pause();
+                    } else {
+                      await player.play();
+                    }
+                    if (mounted) setState(() {});
+                  } catch (error) {
+                    if (mounted) {
+                      setState(() {
+                        _playbackAvailable = false;
+                        _previewError = error.toString();
+                        _status = 'Playback stopped; timeline editing remains active';
+                      });
+                    }
                   }
-                  if (mounted) setState(() {});
                 },
-          icon: Icon(_player.state.playing ? Icons.pause : Icons.play_arrow),
+          icon: Icon(
+            player?.state.playing == true ? Icons.pause : Icons.play_arrow,
+          ),
         ),
         const SizedBox(width: 12),
         IconButton.filledTonal(
@@ -513,6 +635,38 @@ class _EditorScreenState extends State<EditorScreen> {
           icon: const Icon(Icons.rotate_right),
         ),
       ],
+    );
+  }
+
+  Widget _buildSoftwareFallbackPreview() {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.movie_filter_outlined, size: 48, color: palette.accent),
+            const SizedBox(height: 12),
+            Text(
+              'CPU EDITING MODE',
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              _previewError ??
+                  'Media is imported. Playback preview is unavailable, but the timeline and project controls remain active.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: palette.secondaryText, fontSize: 11),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -819,7 +973,7 @@ class _EditorScreenState extends State<EditorScreen> {
     _editor.dispose();
     _durationSubscription?.cancel();
     _positionSubscription?.cancel();
-    _player.dispose();
+    _player?.dispose();
     super.dispose();
   }
 }
