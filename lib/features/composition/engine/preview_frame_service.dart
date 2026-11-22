@@ -127,7 +127,7 @@ class PreviewFrameService {
     int framesDecoded = 1,
   }) {
     final milliseconds = (duration.inMicroseconds /
-            framesDecoded.clamp(1, 1000000))
+            (framesDecoded.clamp(1, 1000000) * 1000))
         .clamp(0, 60000)
         .toDouble();
     _completedDecodes++;
