@@ -82,6 +82,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       LinkedHashMap<String, Future<File?>>();
   final Map<String, File> _lastVideoFrames = {};
   final Map<String, String> _latestRequestedFrameKey = {};
+  final Map<String, String> _previewFrameErrors = {};
   final LinkedHashMap<String, Future<FileStat>> _sourceStatJobs =
       LinkedHashMap<String, Future<FileStat>>();
   final Map<String, Future<img.Image?>> _scopeImageJobs = {};
@@ -259,7 +260,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           },
         );
 
-        if (!ReturnCode.isSuccess(session.getReturnCode())) return;
+        if (!ReturnCode.isSuccess(session.getReturnCode())) {
+          final output = (session.getOutput() ?? '').trim();
+          final details = output.length > 900
+              ? output.substring(output.length - 900)
+              : output;
+          throw StateError(
+            'FFmpeg batch decoder returned ${session.getReturnCode()}. '
+            '${details.isEmpty ? 'No FFmpeg diagnostic was returned.' : details}',
+          );
+        }
 
         final frames = await chunkDirectory
             .list(followLinks: false)
@@ -301,6 +311,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         debugPrint(
           'DepthVibe preview chunk generation failed: $error\\n$stackTrace',
         );
+        rethrow;
       } finally {
         try {
           if (await chunkDirectory.exists()) {
@@ -329,7 +340,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     required bool prefetch,
   }) async {
     try {
-      if (!await File(path).exists()) return null;
+      if (!await File(path).exists()) {
+        if (!prefetch) {
+          _previewFrameErrors[laneId] = 'Source video file was not found: $path';
+        }
+        return null;
+      }
       final stat = await _sourceStatFor(path);
       final cacheDirectory = await _previewCacheDirectory();
       final fingerprint =
@@ -356,16 +372,22 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             return frame;
           }
 
-          await _ensurePreviewFrameChunk(
-            path: path,
-            cacheDirectory: cacheDirectory,
-            fingerprint: fingerprint,
-            chunkStartFrame: chunkStartFrame,
-            chunkFrameCount: chunkFrameCount,
-            frameRate: previewFrameRate,
-            width: width,
-            decodeThreads: decodeThreads,
-          );
+          try {
+            await _ensurePreviewFrameChunk(
+              path: path,
+              cacheDirectory: cacheDirectory,
+              fingerprint: fingerprint,
+              chunkStartFrame: chunkStartFrame,
+              chunkFrameCount: chunkFrameCount,
+              frameRate: previewFrameRate,
+              width: width,
+              decodeThreads: decodeThreads,
+            );
+          } catch (error) {
+            // The chunk path is an optimisation. If a codec/container cannot
+            // generate a full second of frames, fall back to an exact frame.
+            debugPrint('DepthVibe preview batch fallback: $error');
+          }
 
           if (await frame.exists() && await frame.length() > 0) {
             return frame;
@@ -387,7 +409,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               '-q:v 5 ${_quoteFfmpeg(partialFrame.path)}';
 
           final session = await FFmpegKit.executeAsync(command).timeout(
-            const Duration(seconds: 10),
+            const Duration(seconds: 12),
             onTimeout: () {
               final activeSessions = FFmpegKit.getFFmpegSessions()
                   .where((running) =>
@@ -407,14 +429,24 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           if (!ReturnCode.isSuccess(session.getReturnCode()) ||
               !await partialFrame.exists() ||
               await partialFrame.length() == 0) {
+            final output = (session.getOutput() ?? '').trim();
+            final details = output.length > 900
+                ? output.substring(output.length - 900)
+                : output;
             try {
               if (await partialFrame.exists()) await partialFrame.delete();
             } catch (_) {}
-            return null;
+            throw StateError(
+              'FFmpeg could not decode a preview frame '
+              '(exit code ${session.getReturnCode()}). '
+              '${details.isEmpty ? 'No FFmpeg diagnostic was returned.' : details}',
+            );
           }
           try {
             if (await frame.exists()) await frame.delete();
-            return await partialFrame.rename(frame.path);
+            final completedFrame = await partialFrame.rename(frame.path);
+            if (!prefetch) _previewFrameErrors.remove(laneId);
+            return completedFrame;
           } catch (_) {
             try {
               if (await partialFrame.exists()) await partialFrame.delete();
@@ -424,6 +456,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         },
       );
     } catch (error, stackTrace) {
+      if (!prefetch) _previewFrameErrors[laneId] = error.toString();
       debugPrint(
         'DepthVibe preview frame decode failed'
         '${prefetch ? ' (prefetch)' : ''}: $error\\n$stackTrace',
@@ -473,7 +506,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       return existing;
     }
 
-    final job = _decodePreviewFrame(
+    late final Future<File?> job;
+    job = _decodePreviewFrame(
       path: path,
       frameIndex: frameIndex,
       previewFrameRate: previewFps,
@@ -483,9 +517,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       decodeThreads: profile.previewDecodeConcurrency,
       prefetch: prefetch,
     ).then((frame) {
+      if (frame == null) {
+        // A completed failed Future must never pin a layer to a blank preview.
+        // A later rebuild or explicit Retry can start a clean decoder request.
+        if (!prefetch &&
+            identical(_videoFrameJobs[requestKey], job)) {
+          _videoFrameJobs.remove(requestKey);
+        }
+        return null;
+      }
+
+      if (!prefetch) {
+        _previewFrameErrors.remove(layer.id);
+      }
       final chunkFrameCount = math.max(1, previewFps.round());
-      if (frame != null &&
-          !prefetch &&
+      if (!prefetch &&
           frameIndex % chunkFrameCount == 0 &&
           _latestRequestedFrameKey[layer.id] == requestKey) {
         _lastVideoFrames[layer.id] = frame;
@@ -513,6 +559,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       _sourceStatJobs.remove(_sourceStatJobs.keys.first);
     }
     return job;
+  }
+
+  void _retryVideoPreview(CompositionLayer layer) {
+    _previewFrameErrors.remove(layer.id);
+    _latestRequestedFrameKey.remove(layer.id);
+    final marker = '_${layer.id}_';
+    _videoFrameJobs.removeWhere((key, _) => key.contains(marker));
+    if (mounted) {
+      setState(() => _notice = 'Retrying video preview for ${layer.name}…');
+    }
   }
 
   Future<img.Image?> _scopeImageFor(
@@ -1560,6 +1616,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _previewChunkJobs.clear();
     _lastVideoFrames.clear();
     _latestRequestedFrameKey.clear();
+    _previewFrameErrors.clear();
     _sourceStatJobs.clear();
     _controller.dispose();
     super.dispose();
@@ -2050,14 +2107,62 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 ),
               );
             }
-            return Center(
-              child: snapshot.connectionState == ConnectionState.waiting
-                  ? const CircularProgressIndicator(strokeWidth: 2)
-                  : const Icon(
-                      Icons.movie_outlined,
-                      color: Color(0xFFB3BEFF),
-                      size: 36,
-                    ),
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              );
+            }
+            final error = _previewFrameErrors[layer.id];
+            if (error != null) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.broken_image_outlined,
+                        color: Color(0xFFFFA7A7),
+                        size: 30,
+                      ),
+                      const SizedBox(height: 7),
+                      const Text(
+                        'VIDEO PREVIEW DECODE FAILED',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Color(0xFFFFB4B4),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        error,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFFB8C3D5),
+                          fontSize: 8,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      TextButton.icon(
+                        onPressed: () => _retryVideoPreview(layer),
+                        icon: const Icon(Icons.refresh, size: 13),
+                        label: const Text('RETRY', style: TextStyle(fontSize: 9)),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+            return const Center(
+              child: Icon(
+                Icons.movie_outlined,
+                color: Color(0xFFB3BEFF),
+                size: 36,
+              ),
             );
           },
         );
