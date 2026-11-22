@@ -187,6 +187,7 @@ class PreviewFrameService {
           _slowUiFrameStreak = 0;
           _fastUiFrameStreak = 0;
         }
+        break;
       case _PreviewAdaptiveSignal.decode:
         if (isSlow) {
           _slowDecodeStreak++;
@@ -198,6 +199,7 @@ class PreviewFrameService {
           _slowDecodeStreak = 0;
           _fastDecodeStreak = 0;
         }
+        break;
       case _PreviewAdaptiveSignal.queueWait:
         if (isSlow) {
           _slowQueueStreak++;
@@ -209,6 +211,7 @@ class PreviewFrameService {
           _slowQueueStreak = 0;
           _fastQueueStreak = 0;
         }
+        break;
     }
 
     // Either bottleneck can lower preview load. Require each active signal to
