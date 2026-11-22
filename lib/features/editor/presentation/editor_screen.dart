@@ -91,6 +91,7 @@ class _EditorScreenState extends State<EditorScreen> {
       configuration: VideoControllerConfiguration(
         enableHardwareAcceleration: DepthVibeSettingsService
             .instance.performanceMode.enableVideoHardwareAcceleration,
+        hwdec: DepthVibeSettingsService.instance.performanceMode.videoHardwareDecoder,
         scale: DepthVibeSettingsService.instance.performanceMode.videoOutputScale,
       ),
     );
