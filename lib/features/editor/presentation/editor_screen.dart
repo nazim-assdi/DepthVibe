@@ -608,11 +608,13 @@ class _EditorScreenState extends State<EditorScreen> {
           onPressed: !canPlay
               ? null
               : () async {
+                  final activePlayer = _player;
+                  if (activePlayer == null) return;
                   try {
-                    if (player.state.playing) {
-                      await player.pause();
+                    if (activePlayer.state.playing) {
+                      await activePlayer.pause();
                     } else {
-                      await player.play();
+                      await activePlayer.play();
                     }
                     if (mounted) setState(() {});
                   } catch (error) {
