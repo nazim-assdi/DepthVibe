@@ -797,6 +797,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   int? _previewMotionKeyTimeMs;
   Offset _previewMotionLastGlobal = Offset.zero;
   bool _previewMotionHistoryRecorded = false;
+  String? _previewShapeLayerId;
+  int? _previewShapeVertexIndex;
+  String _previewShapeComponent = 'anchor';
+  Offset _previewShapeLastGlobal = Offset.zero;
+  bool _previewShapeHistoryRecorded = false;
   String? _previewMaskLayerId;
   String? _previewMaskId;
   int? _previewMaskVertexIndex;
@@ -3293,6 +3298,42 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _previewMotionHistoryRecorded = false;
   }
 
+  ShapeStyle _shapeStyleAt(
+    CompositionLayer layer,
+    int timeMs,
+  ) {
+    final style = layer.shapeStyle ?? const ShapeStyle();
+    if (style.pathVertices.isEmpty) return style;
+    double sample(int index, String property, double fallback) {
+      final trackName = 'shape.vertex.$index.$property';
+      final tracks = layer.keyframeTracks.where(
+        (track) => track.property == trackName,
+      );
+      return tracks.isEmpty
+          ? fallback
+          : tracks.first.sample(timeMs, fallback: fallback);
+    }
+
+    final vertices = [
+      for (var index = 0; index < style.pathVertices.length; index++)
+        style.pathVertices[index].copyWith(
+          anchor: Vector2(
+            sample(index, 'anchor.x', style.pathVertices[index].anchor.x),
+            sample(index, 'anchor.y', style.pathVertices[index].anchor.y),
+          ),
+          inHandle: Vector2(
+            sample(index, 'inHandle.x', style.pathVertices[index].inHandle.x),
+            sample(index, 'inHandle.y', style.pathVertices[index].inHandle.y),
+          ),
+          outHandle: Vector2(
+            sample(index, 'outHandle.x', style.pathVertices[index].outHandle.x),
+            sample(index, 'outHandle.y', style.pathVertices[index].outHandle.y),
+          ),
+        ),
+    ];
+    return style.copyWith(pathVertices: vertices);
+  }
+
   void _beginPreviewPenPath(CompositionLayer layer) {
     if (layer.locked) return;
     _pausePreviewPlayback();
@@ -3544,6 +3585,205 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     return anchor + Offset(
       handleX / spanX * mask.valueAt('width', timeMs) * size.width,
       handleY / spanY * mask.valueAt('height', timeMs) * size.height,
+    );
+  }
+
+  Offset _shapePathPointPosition(
+    MaskVertex vertex,
+    String component,
+    Size size,
+  ) {
+    final anchor = Offset(
+      vertex.anchor.x * size.width,
+      vertex.anchor.y * size.height,
+    );
+    if (component == 'anchor') return anchor;
+    final handle = component == 'inHandle' ? vertex.inHandle : vertex.outHandle;
+    return anchor + Offset(
+      handle.x * size.width,
+      handle.y * size.height,
+    );
+  }
+
+  void _beginPreviewShapeVertex(
+    CompositionLayer layer,
+    int vertexIndex,
+    String component,
+    Offset globalPosition,
+  ) {
+    if (layer.locked || _activePreviewTool != 'Shape') return;
+    _pausePreviewPlayback();
+    _controller.selectLayer(layer.id);
+    _previewShapeLayerId = layer.id;
+    _previewShapeVertexIndex = vertexIndex;
+    _previewShapeComponent = component;
+    _previewShapeLastGlobal = globalPosition;
+    _previewShapeHistoryRecorded = false;
+  }
+
+  void _updatePreviewShapeVertex(
+    CompositionLayer layer,
+    Offset globalPosition,
+    Size size,
+    double rotationRadians,
+  ) {
+    final index = _previewShapeVertexIndex;
+    if (_previewShapeLayerId != layer.id || index == null) return;
+    final delta = globalPosition - _previewShapeLastGlobal;
+    _previewShapeLastGlobal = globalPosition;
+    final cosine = math.cos(rotationRadians);
+    final sine = math.sin(rotationRadians);
+    final localDelta = Offset(
+      (delta.dx * cosine + delta.dy * sine) / _previewZoom,
+      (-delta.dx * sine + delta.dy * cosine) / _previewZoom,
+    );
+    final currentLayer = _controller.selectedLayer;
+    if (currentLayer == null || currentLayer.id != layer.id) return;
+    final baseStyle = currentLayer.shapeStyle ?? const ShapeStyle();
+    if (index < 0 || index >= baseStyle.pathVertices.length) return;
+    final evaluatedStyle = _shapeStyleAt(
+      currentLayer,
+      _controller.document.playheadMs,
+    );
+    final vertex = evaluatedStyle.pathVertices[index];
+    final component = _previewShapeComponent;
+    final value = component == 'anchor'
+        ? vertex.anchor
+        : component == 'inHandle'
+            ? vertex.inHandle
+            : vertex.outHandle;
+    final x = (value.x + localDelta.dx / math.max(1, size.width))
+        .clamp(-2.0, 3.0)
+        .toDouble();
+    final y = (value.y + localDelta.dy / math.max(1, size.height))
+        .clamp(-2.0, 3.0)
+        .toDouble();
+    final propertyX = 'shape.vertex.$index.$component.x';
+    final propertyY = 'shape.vertex.$index.$component.y';
+    final existingKeyframes = currentLayer.keyframeTracks.any(
+      (track) => track.property == propertyX || track.property == propertyY,
+    );
+
+    if (_autoKeyEnabled || existingKeyframes) {
+      _controller.updateTransformValues(
+        {propertyX: x, propertyY: y},
+        autoKey: _autoKeyEnabled,
+        recordHistory: !_previewShapeHistoryRecorded,
+      );
+    } else {
+      final vertices = [...baseStyle.pathVertices];
+      final updated = switch (component) {
+        'anchor' => vertex.copyWith(anchor: Vector2(x, y)),
+        'inHandle' => vertex.copyWith(inHandle: Vector2(x, y)),
+        _ => vertex.copyWith(outHandle: Vector2(x, y)),
+      };
+      vertices[index] = updated;
+      _controller.setShapeStyle(
+        baseStyle.copyWith(pathVertices: vertices),
+        recordHistory: !_previewShapeHistoryRecorded,
+      );
+    }
+    _previewShapeHistoryRecorded = true;
+  }
+
+  void _endPreviewShapeVertex() {
+    _previewShapeLayerId = null;
+    _previewShapeVertexIndex = null;
+    _previewShapeComponent = 'anchor';
+    _previewShapeHistoryRecorded = false;
+  }
+
+  Widget _buildPreviewShapePathOverlay(
+    CompositionLayer layer,
+    Size size, {
+    required double rotationRadians,
+  }) {
+    final style = _shapeStyleAt(layer, _controller.document.playheadMs);
+    if (style.primitive != ShapePrimitive.path || style.pathVertices.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final vertices = style.pathVertices;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(
+              painter: _PreviewShapePathPainter(
+                vertices: vertices,
+                pathClosed: style.pathClosed,
+                color: Theme.of(context).extension<DepthVibePalette>()!.accent,
+              ),
+            ),
+          ),
+        ),
+        if (_activePreviewTool == 'Shape')
+          for (var index = 0; index < vertices.length; index++) ...[
+            Positioned(
+              left: _shapePathPointPosition(vertices[index], 'anchor', size).dx - 7,
+              top: _shapePathPointPosition(vertices[index], 'anchor', size).dy - 7,
+              width: 14,
+              height: 14,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanStart: (details) => _beginPreviewShapeVertex(
+                  layer,
+                  index,
+                  'anchor',
+                  details.globalPosition,
+                ),
+                onPanUpdate: (details) => _updatePreviewShapeVertex(
+                  layer,
+                  details.globalPosition,
+                  size,
+                  rotationRadians,
+                ),
+                onPanEnd: (_) => _endPreviewShapeVertex(),
+                onPanCancel: _endPreviewShapeVertex,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: const Color(0xFF536DFF), width: 2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
+            for (final component in const ['inHandle', 'outHandle'])
+              if (_shapePathPointPosition(vertices[index], component, size) !=
+                  _shapePathPointPosition(vertices[index], 'anchor', size))
+                Positioned(
+                  left: _shapePathPointPosition(vertices[index], component, size).dx - 5,
+                  top: _shapePathPointPosition(vertices[index], component, size).dy - 5,
+                  width: 10,
+                  height: 10,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onPanStart: (details) => _beginPreviewShapeVertex(
+                      layer,
+                      index,
+                      component,
+                      details.globalPosition,
+                    ),
+                    onPanUpdate: (details) => _updatePreviewShapeVertex(
+                      layer,
+                      details.globalPosition,
+                      size,
+                      rotationRadians,
+                    ),
+                    onPanEnd: (_) => _endPreviewShapeVertex(),
+                    onPanCancel: _endPreviewShapeVertex,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF55D7C4),
+                        border: Border.all(color: Colors.white, width: 1),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
+          ],
+      ],
     );
   }
 
@@ -4022,6 +4262,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 },
               ),
               _toolChip(
+                'Path',
+                Icons.edit,
+                _activePreviewTool == 'Shape',
+                onTap: () {
+                  if (_controller.selectedLayer?.kind == LayerKind.shape &&
+                      _controller.selectedLayer?.shapeStyle?.primitive ==
+                          ShapePrimitive.path) {
+                    setState(() => _activePreviewTool = 'Shape');
+                  } else {
+                    setState(() => _notice = 'Select a shape layer with a Bezier path first.');
+                  }
+                },
+              ),
+              _toolChip(
                 'Pen',
                 Icons.gesture,
                 _activePreviewTool == 'Pen',
@@ -4254,7 +4508,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         break;
       case LayerKind.shape:
         visual = CustomPaint(
-          painter: _ShapeLayerPainter(layer.shapeStyle ?? const ShapeStyle()),
+          painter: _ShapeLayerPainter(_shapeStyleAt(layer, timeMs)),
         );
         break;
       case LayerKind.text:
@@ -4529,6 +4783,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ),
             ),
           ),
+          if (isSelected &&
+              _showLayerControls &&
+              layer.kind == LayerKind.shape &&
+              layer.shapeStyle?.primitive == ShapePrimitive.path)
+            Positioned.fill(
+              child: Transform.rotate(
+                angle: rotationRadians,
+                child: _buildPreviewShapePathOverlay(
+                  layer,
+                  Size(visualWidth, visualHeight),
+                  rotationRadians: rotationRadians,
+                ),
+              ),
+            ),
           if (isSelected && _showLayerControls && layer.masks.isNotEmpty)
             Positioned.fill(
               child: Transform.rotate(
@@ -10863,6 +11131,93 @@ class _KeyframeGraphPainter extends CustomPainter {
       oldDelegate.keyframeColor != keyframeColor ||
       oldDelegate.playheadColor != playheadColor ||
       oldDelegate.textColor != textColor;
+}
+
+class _PreviewShapePathPainter extends CustomPainter {
+  const _PreviewShapePathPainter({
+    required this.vertices,
+    required this.pathClosed,
+    required this.color,
+  });
+
+  final List<MaskVertex> vertices;
+  final bool pathClosed;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (vertices.length < 2) return;
+    final path = Path()
+      ..moveTo(
+        vertices.first.anchor.x * size.width,
+        vertices.first.anchor.y * size.height,
+      );
+    final segments = pathClosed ? vertices.length : vertices.length - 1;
+    for (var index = 0; index < segments; index++) {
+      final next = (index + 1) % vertices.length;
+      final start = vertices[index];
+      final end = vertices[next];
+      final p1 = Offset(
+        (start.anchor.x + start.outHandle.x) * size.width,
+        (start.anchor.y + start.outHandle.y) * size.height,
+      );
+      final p2 = Offset(
+        (end.anchor.x + end.inHandle.x) * size.width,
+        (end.anchor.y + end.inHandle.y) * size.height,
+      );
+      path.cubicTo(
+        p1.dx,
+        p1.dy,
+        p2.dx,
+        p2.dy,
+        end.anchor.x * size.width,
+        end.anchor.y * size.height,
+      );
+    }
+    if (pathClosed) path.close();
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color.withValues(alpha: 0.9)
+        ..strokeWidth = 1.5
+        ..style = PaintingStyle.stroke,
+    );
+    for (final vertex in vertices) {
+      final point = Offset(
+        vertex.anchor.x * size.width,
+        vertex.anchor.y * size.height,
+      );
+      for (final handle in [vertex.inHandle, vertex.outHandle]) {
+        if (handle.x.abs() + handle.y.abs() < 0.001) continue;
+        final endpoint = Offset(
+          point.dx + handle.x * size.width,
+          point.dy + handle.y * size.height,
+        );
+        canvas.drawLine(
+          point,
+          endpoint,
+          Paint()
+            ..color = const Color(0xFF55D7C4)
+            ..strokeWidth = 1,
+        );
+        canvas.drawCircle(
+          endpoint,
+          3.5,
+          Paint()..color = const Color(0xFF55D7C4),
+        );
+      }
+      canvas.drawRect(
+        Rect.fromCenter(center: point, width: 8, height: 8),
+        Paint()..color = Colors.white,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PreviewShapePathPainter oldDelegate) =>
+      oldDelegate.vertices != vertices ||
+      oldDelegate.pathClosed != pathClosed ||
+      oldDelegate.color != color;
 }
 
 class _PreviewPenDraftPainter extends CustomPainter {

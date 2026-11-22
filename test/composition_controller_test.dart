@@ -1414,4 +1414,49 @@ void main() {
     controller.dispose();
   });
 
+
+  test('shape vector path anchor and handles can be auto-keyed', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 5000,
+        playheadMs: 1000,
+        layers: [
+          CompositionLayer(
+            id: 'shape',
+            name: 'Shape',
+            kind: LayerKind.shape,
+            shapeStyle: ShapeStyle(
+              primitive: ShapePrimitive.path,
+              pathVertices: [
+                MaskVertex(anchor: Vector2(0.2, 0.3)),
+                MaskVertex(anchor: Vector2(0.8, 0.7)),
+              ],
+            ),
+          ),
+        ],
+        selectedLayerId: 'shape',
+      ),
+    );
+    controller.updateTransformValues({
+      'shape.vertex.0.anchor.x': 0.45,
+      'shape.vertex.0.anchor.y': 0.55,
+      'shape.vertex.0.outHandle.x': 0.12,
+    }, autoKey: true);
+    final layer = controller.selectedLayer!;
+    expect(layer.keyframeTracks.map((track) => track.property), containsAll([
+      'shape.vertex.0.anchor.x',
+      'shape.vertex.0.anchor.y',
+      'shape.vertex.0.outHandle.x',
+    ]));
+    expect(
+      layer.keyframeTracks
+          .firstWhere((track) => track.property == 'shape.vertex.0.anchor.x')
+          .sample(1000),
+      0.45,
+    );
+    controller.undo();
+    expect(controller.selectedLayer!.keyframeTracks, isEmpty);
+    controller.dispose();
+  });
+
 }
