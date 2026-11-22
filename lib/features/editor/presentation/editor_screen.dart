@@ -252,6 +252,77 @@ class _EditorScreenState extends State<EditorScreen> {
     }
   }
 
+  Future<void> _primePausedVideoPreview() async {
+    if (!mounted || !_playbackAvailable || _player == null) return;
+
+    // Build the Video widget and its native output surface before requesting
+    // the first rendered frame. Keep audio muted while warming the surface.
+    await WidgetsBinding.instance.endOfFrame;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if (!mounted || !_playbackAvailable) return;
+      final player = _player;
+      final controller = _videoControllerForPreview();
+      if (player == null || controller == null) return;
+
+      try {
+        await player.setVolume(0).timeout(const Duration(seconds: 3));
+        await player.play().timeout(const Duration(seconds: 5));
+        await _verifyFirstVideoFrame(controller);
+      } catch (error, stackTrace) {
+        debugPrint(
+          'DepthVibe initial paused-preview warm-up failed: '
+          '$error\\n$stackTrace',
+        );
+        if (mounted &&
+            identical(_player, player) &&
+            _videoRendererFallbackStep == 0) {
+          final profile = DepthVibeSettingsService.instance.performanceMode;
+          _videoRendererFallbackStep =
+              profile.enableVideoHardwareAcceleration ? 1 : 2;
+          await _reconfigureVideoPreview();
+        } else {
+          _previewError = error.toString();
+          if (mounted) setState(() => _playbackAvailable = false);
+          return;
+        }
+      }
+
+      if (!mounted || !_playbackAvailable) return;
+      // A failed first renderer may have been replaced by the automatic
+      // fallback. Prime the replacement on the next pass.
+      if (!identical(_player, player) ||
+          !identical(_videoController, controller)) {
+        await WidgetsBinding.instance.endOfFrame;
+        continue;
+      }
+
+      try {
+        await player.pause().timeout(const Duration(seconds: 5));
+        await player.seek(Duration.zero).timeout(const Duration(seconds: 5));
+        await player
+            .setVolume(_editor.project.muted ? 0 : 100)
+            .timeout(const Duration(seconds: 3));
+        if (mounted) {
+          setState(() {
+            _position = Duration.zero;
+            _status = 'Video preview ready';
+          });
+        }
+      } catch (error, stackTrace) {
+        debugPrint(
+          'DepthVibe paused-preview restore failed: $error\\n$stackTrace',
+        );
+        if (mounted) {
+          _previewError = error.toString();
+          setState(() {
+            _status = 'Preview frame rendered; playback controls need a retry';
+          });
+        }
+      }
+      return;
+    }
+  }
+
   VideoController? _videoControllerForPreview() {
     final player = _player;
     if (player == null || !_playbackAvailable || _reconfiguringPreview) {
@@ -382,6 +453,8 @@ class _EditorScreenState extends State<EditorScreen> {
     if (_profileChangedDuringOpen) {
       _profileChangedDuringOpen = false;
       unawaited(_reconfigureVideoPreview());
+    } else if (playbackReady) {
+      unawaited(_primePausedVideoPreview());
     }
   }
 
