@@ -2451,7 +2451,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 5),
               child: Text(
-                _previewZoom == 1 ? 'FIT' : '\${(_previewZoom * 100).round()}%',
+                _previewZoom == 1 ? 'FIT' : '${(_previewZoom * 100).round()}%',
                 style: TextStyle(
                   fontSize: 8,
                   fontWeight: FontWeight.w800,
@@ -2481,13 +2481,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               PopupMenuItem(
                 value: 'controls',
                 child: Text(
-                  '\${_showLayerControls ? '✓' : '　'} Show Layer Controls',
+                  '${_showLayerControls ? '✓' : '　'} Show Layer Controls',
                 ),
               ),
               PopupMenuItem(
                 value: 'motion',
                 child: Text(
-                  '\${_showMotionPaths ? '✓' : '　'} Show Motion Paths',
+                  '${_showMotionPaths ? '✓' : '　'} Show Motion Paths',
                 ),
               ),
               const PopupMenuDivider(),
@@ -9122,7 +9122,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     return [
       for (final track in layer.keyframeTracks)
         (
-          label: 'Transform · \${track.property}',
+          label: 'Transform · ${track.property}',
           track: track,
           effectId: null,
           maskId: null,
@@ -9130,7 +9130,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       for (final effect in layer.effects)
         for (final track in effect.keyframeTracks)
           (
-            label: '\${effect.name} · \${track.property}',
+            label: '${effect.name} · ${track.property}',
             track: track,
             effectId: effect.id,
             maskId: null,
@@ -9138,7 +9138,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       for (final mask in layer.masks)
         for (final track in mask.keyframeTracks)
           (
-            label: 'Mask · \${mask.name} · \${track.property}',
+            label: 'Mask · ${mask.name} · ${track.property}',
             track: track,
             effectId: null,
             maskId: mask.id,
@@ -9355,7 +9355,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 icon: const Icon(Icons.tune, size: 15),
               ),
               Text(
-                '\${active.track.keyframes.length} KEYS',
+                '${active.track.keyframes.length} KEYS',
                 style: TextStyle(fontSize: 8, color: palette.secondaryText),
               ),
             ],
