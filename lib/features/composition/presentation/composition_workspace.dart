@@ -155,8 +155,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         cacheKey: diskKey,
         cacheFile: frame,
         decode: () async {
+          // FFmpeg must never write directly to the visible cache path. A
+          // duplicate request could otherwise mistake a partial JPEG as ready.
+          final partialFrame = File(frame.path + '.part.jpg');
+          try {
+            if (await partialFrame.exists()) await partialFrame.delete();
+          } catch (_) {}
           final quotedPath = _quoteFfmpeg(path);
-          final quotedFrame = _quoteFfmpeg(frame.path);
+          final quotedFrame = _quoteFfmpeg(partialFrame.path);
           final command = '-hide_banner -loglevel error -y '
               '-filter_threads 1 -threads $decodeThreads '
               '-ss ${(seekMs / 1000).toStringAsFixed(3)} '
@@ -180,11 +186,22 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             },
           );
           if (!ReturnCode.isSuccess(session.getReturnCode()) ||
-              !await frame.exists() ||
-              await frame.length() == 0) {
+              !await partialFrame.exists() ||
+              await partialFrame.length() == 0) {
+            try {
+              if (await partialFrame.exists()) await partialFrame.delete();
+            } catch (_) {}
             return null;
           }
-          return frame;
+          try {
+            if (await frame.exists()) await frame.delete();
+            return await partialFrame.rename(frame.path);
+          } catch (_) {
+            try {
+              if (await partialFrame.exists()) await partialFrame.delete();
+            } catch (_) {}
+            return null;
+          }
         },
       );
     } catch (error, stackTrace) {
