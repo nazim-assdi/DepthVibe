@@ -586,6 +586,7 @@ class CompositionController extends ChangeNotifier {
     String component,
     double value, {
     bool keyframe = false,
+    bool recordHistory = true,
   }) {
     const components = {
       'anchor.x',
@@ -657,7 +658,7 @@ class CompositionController extends ChangeNotifier {
         }
         return mask.copyWith(keyframeTracks: tracks);
       }).toList(),
-    ));
+    ), recordHistory: recordHistory);
   }
 
   void setMaskAnimatedValue(
@@ -2111,12 +2112,18 @@ class CompositionController extends ChangeNotifier {
     return null;
   }
 
-  void _replace(CompositionLayer updated) {
-    _set(_document.copyWith(
-      layers: _document.layers
-          .map((layer) => layer.id == updated.id ? updated : layer)
-          .toList(),
-    ));
+  void _replace(
+    CompositionLayer updated, {
+    bool recordHistory = true,
+  }) {
+    _set(
+      _document.copyWith(
+        layers: _document.layers
+            .map((layer) => layer.id == updated.id ? updated : layer)
+            .toList(),
+      ),
+      recordHistory: recordHistory,
+    );
   }
 }
 

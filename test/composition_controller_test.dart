@@ -1245,4 +1245,61 @@ void main() {
     controller.dispose();
   });
 
+
+  test('mask vertex drags can keyframe and undo as one operation', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 5000,
+        playheadMs: 1200,
+        layers: [
+          CompositionLayer(
+            id: 'shape',
+            name: 'Shape',
+            kind: LayerKind.shape,
+            masks: [
+              MaskModel(
+                id: 'mask',
+                name: 'Bezier Mask',
+                shape: MaskShape.bezier,
+                vertices: [
+                  MaskVertex(anchor: Vector2(0.2, 0.2)),
+                  MaskVertex(anchor: Vector2(0.8, 0.2)),
+                  MaskVertex(anchor: Vector2(0.8, 0.8)),
+                  MaskVertex(anchor: Vector2(0.2, 0.8)),
+                ],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'shape',
+      ),
+    );
+
+    controller.setMaskVertexAnimatedValue(
+      'mask',
+      0,
+      'anchor.x',
+      0.3,
+      keyframe: true,
+    );
+    controller.setMaskVertexAnimatedValue(
+      'mask',
+      0,
+      'anchor.y',
+      0.35,
+      keyframe: true,
+      recordHistory: false,
+    );
+    final mask = controller.selectedLayer!.masks.single;
+    expect(mask.vertexValueAt(0, 'anchor.x', 1200), 0.3);
+    expect(mask.vertexValueAt(0, 'anchor.y', 1200), 0.35);
+    expect(mask.keyframeTracks, hasLength(2));
+
+    controller.undo();
+    final restored = controller.selectedLayer!.masks.single;
+    expect(restored.keyframeTracks, isEmpty);
+    expect(restored.vertices.first.anchor.x, 0.2);
+    controller.dispose();
+  });
+
 }

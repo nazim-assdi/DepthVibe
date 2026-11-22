@@ -797,6 +797,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   int? _previewMotionKeyTimeMs;
   Offset _previewMotionLastGlobal = Offset.zero;
   bool _previewMotionHistoryRecorded = false;
+  String? _previewMaskLayerId;
+  String? _previewMaskId;
+  int? _previewMaskVertexIndex;
+  Offset _previewMaskLastGlobal = Offset.zero;
+  bool _previewMaskHistoryRecorded = false;
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
   final Set<String> _expandedTimelineLayers = {};
@@ -3282,6 +3287,228 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _previewMotionHistoryRecorded = false;
   }
 
+  List<Offset> _previewMaskBaseOutline(MaskModel mask) {
+    if (mask.shape != MaskShape.bezier) {
+      return [
+        for (final vertex in mask.vertices)
+          Offset(vertex.anchor.x, vertex.anchor.y),
+      ];
+    }
+    const subdivisions = 8;
+    final points = <Offset>[];
+    for (var index = 0; index < mask.vertices.length; index++) {
+      final next = (index + 1) % mask.vertices.length;
+      final start = mask.vertices[index];
+      final end = mask.vertices[next];
+      final p0 = start.anchor;
+      final p1 = Offset(p0.x + start.outHandle.x, p0.y + start.outHandle.y);
+      final p3 = end.anchor;
+      final p2 = Offset(p3.x + end.inHandle.x, p3.y + end.inHandle.y);
+      for (var step = 0; step < subdivisions; step++) {
+        final t = step / subdivisions;
+        final inverse = 1 - t;
+        final a = inverse * inverse * inverse;
+        final b = 3 * inverse * inverse * t;
+        final c = 3 * inverse * t * t;
+        final d = t * t * t;
+        points.add(Offset(
+          a * p0.x + b * p1.dx + c * p2.dx + d * p3.x,
+          a * p0.y + b * p1.dy + c * p2.dy + d * p3.y,
+        ));
+      }
+    }
+    return points;
+  }
+
+  Offset _previewMaskVertexPosition(
+    MaskModel mask,
+    int vertexIndex,
+    Size size,
+    int timeMs,
+  ) {
+    if (vertexIndex < 0 || vertexIndex >= mask.vertices.length) {
+      return Offset.zero;
+    }
+    final outline = _previewMaskBaseOutline(mask);
+    if (outline.isEmpty) return Offset.zero;
+    final xs = outline.map((point) => point.dx);
+    final ys = outline.map((point) => point.dy);
+    final minX = xs.reduce((a, b) => a < b ? a : b);
+    final maxX = xs.reduce((a, b) => a > b ? a : b);
+    final minY = ys.reduce((a, b) => a < b ? a : b);
+    final maxY = ys.reduce((a, b) => a > b ? a : b);
+    final spanX = (maxX - minX).abs() < 0.0001 ? 1.0 : maxX - minX;
+    final spanY = (maxY - minY).abs() < 0.0001 ? 1.0 : maxY - minY;
+    final left = mask.valueAt('left', timeMs) * size.width;
+    final top = mask.valueAt('top', timeMs) * size.height;
+    final width = mask.valueAt('width', timeMs) * size.width;
+    final height = mask.valueAt('height', timeMs) * size.height;
+    final x = mask.vertexValueAt(vertexIndex, 'anchor.x', timeMs);
+    final y = mask.vertexValueAt(vertexIndex, 'anchor.y', timeMs);
+    return Offset(
+      left + (x - minX) / spanX * width,
+      top + (y - minY) / spanY * height,
+    );
+  }
+
+  void _beginPreviewMaskVertex(
+    CompositionLayer layer,
+    MaskModel mask,
+    int vertexIndex,
+    Offset globalPosition,
+  ) {
+    if (layer.locked || _activePreviewTool != 'Mask') return;
+    _pausePreviewPlayback();
+    _controller.selectLayer(layer.id);
+    _previewMaskLayerId = layer.id;
+    _previewMaskId = mask.id;
+    _previewMaskVertexIndex = vertexIndex;
+    _previewMaskLastGlobal = globalPosition;
+    _previewMaskHistoryRecorded = false;
+  }
+
+  void _updatePreviewMaskVertex(
+    CompositionLayer layer,
+    MaskModel originalMask,
+    int vertexIndex,
+    Offset globalPosition, {
+    required Size size,
+    required double rotationRadians,
+  }) {
+    if (_previewMaskLayerId != layer.id ||
+        _previewMaskId != originalMask.id ||
+        _previewMaskVertexIndex != vertexIndex) {
+      return;
+    }
+    final screenDelta = globalPosition - _previewMaskLastGlobal;
+    _previewMaskLastGlobal = globalPosition;
+    final cosine = math.cos(rotationRadians);
+    final sine = math.sin(rotationRadians);
+    final delta = Offset(
+      (screenDelta.dx * cosine + screenDelta.dy * sine) / _previewZoom,
+      (-screenDelta.dx * sine + screenDelta.dy * cosine) / _previewZoom,
+    );
+    final currentLayer = _controller.selectedLayer;
+    if (currentLayer == null || currentLayer.id != layer.id) return;
+    final matches =
+        currentLayer.masks.where((item) => item.id == originalMask.id);
+    if (matches.isEmpty) return;
+    final mask = matches.first;
+    final outline = _previewMaskBaseOutline(mask);
+    if (outline.isEmpty) return;
+    final xs = outline.map((point) => point.dx);
+    final ys = outline.map((point) => point.dy);
+    final minX = xs.reduce((a, b) => a < b ? a : b);
+    final maxX = xs.reduce((a, b) => a > b ? a : b);
+    final minY = ys.reduce((a, b) => a < b ? a : b);
+    final maxY = ys.reduce((a, b) => a > b ? a : b);
+    final spanX = math.max(0.0001, maxX - minX);
+    final spanY = math.max(0.0001, maxY - minY);
+    final timeMs = _controller.document.playheadMs;
+    final widthRatio = math.max(0.0001, mask.valueAt('width', timeMs));
+    final heightRatio = math.max(0.0001, mask.valueAt('height', timeMs));
+    final x = mask.vertexValueAt(vertexIndex, 'anchor.x', timeMs) +
+        delta.dx / math.max(1, size.width) * spanX / widthRatio;
+    final y = mask.vertexValueAt(vertexIndex, 'anchor.y', timeMs) +
+        delta.dy / math.max(1, size.height) * spanY / heightRatio;
+    final animatedPath = _autoKeyEnabled ||
+        mask.keyframeTracks.any((track) =>
+            track.property == 'vertex.$vertexIndex.anchor.x' ||
+            track.property == 'vertex.$vertexIndex.anchor.y');
+
+    _controller.setMaskVertexAnimatedValue(
+      mask.id,
+      vertexIndex,
+      'anchor.x',
+      x,
+      keyframe: animatedPath,
+      recordHistory: !_previewMaskHistoryRecorded,
+    );
+    _controller.setMaskVertexAnimatedValue(
+      mask.id,
+      vertexIndex,
+      'anchor.y',
+      y,
+      keyframe: animatedPath,
+      recordHistory: false,
+    );
+    _previewMaskHistoryRecorded = true;
+  }
+
+  void _endPreviewMaskVertex() {
+    _previewMaskLayerId = null;
+    _previewMaskId = null;
+    _previewMaskVertexIndex = null;
+    _previewMaskHistoryRecorded = false;
+  }
+
+  Widget _buildPreviewMaskPathOverlay(
+    CompositionLayer layer,
+    Size size, {
+    required double rotationRadians,
+  }) {
+    final masks = layer.masks.where((mask) => mask.enabled).toList();
+    if (masks.isEmpty) return const SizedBox.shrink();
+    final timeMs = _controller.document.playheadMs;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(
+              painter: _PreviewMaskPathPainter(
+                masks: masks,
+                timeMs: timeMs,
+                color: Theme.of(context).extension<DepthVibePalette>()!.accent,
+              ),
+            ),
+          ),
+        ),
+        if (_activePreviewTool == 'Mask')
+          for (final mask in masks)
+            for (var index = 0; index < mask.vertices.length; index++)
+              Positioned(
+                left: _previewMaskVertexPosition(mask, index, size, timeMs).dx - 7,
+                top: _previewMaskVertexPosition(mask, index, size, timeMs).dy - 7,
+                width: 14,
+                height: 14,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onPanStart: (details) => _beginPreviewMaskVertex(
+                    layer,
+                    mask,
+                    index,
+                    details.globalPosition,
+                  ),
+                  onPanUpdate: (details) => _updatePreviewMaskVertex(
+                    layer,
+                    mask,
+                    index,
+                    details.globalPosition,
+                    size: size,
+                    rotationRadians: rotationRadians,
+                  ),
+                  onPanEnd: (_) => _endPreviewMaskVertex(),
+                  onPanCancel: _endPreviewMaskVertex,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF6F8FF),
+                      border: Border.all(
+                        color: const Color(0xFF55D7C4),
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(2),
+                      boxShadow: const [
+                        BoxShadow(color: Color(0xAA000000), blurRadius: 4),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+      ],
+    );
+  }
+
   Widget _buildMotionPathOverlay(
     CompositionLayer? layer,
     CompositionDocument document,
@@ -3515,10 +3742,34 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 Icons.crop_free,
                 _activePreviewTool == 'Mask',
                 onTap: () {
-                  _controller.addMask();
+                  final layer = _controller.selectedLayer;
+                  if (layer == null || layer.locked) {
+                    setState(() => _notice = 'Select an unlocked layer before editing masks.');
+                    return;
+                  }
+                  if (layer.masks.isEmpty) {
+                    _controller.addMask(shape: MaskShape.rectangle);
+                  }
                   setState(() {
                     _panel = 'Masks';
-                    _activePreviewTool = 'Select';
+                    _activePreviewTool = 'Mask';
+                  });
+                },
+              ),
+              _toolChip(
+                'Pen',
+                Icons.gesture,
+                false,
+                onTap: () {
+                  final layer = _controller.selectedLayer;
+                  if (layer == null || layer.locked) {
+                    setState(() => _notice = 'Select an unlocked layer before drawing a Bezier mask.');
+                    return;
+                  }
+                  _controller.addMask(shape: MaskShape.bezier);
+                  setState(() {
+                    _panel = 'Masks';
+                    _activePreviewTool = 'Mask';
                   });
                 },
               ),
@@ -3940,13 +4191,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => _controller.selectLayer(layer.id),
-                  onPanStart: layer.locked || _activePreviewTool == 'Hand'
+                  onPanStart: layer.locked || _activePreviewTool != 'Select'
                       ? null
                       : (details) => _beginPreviewMove(
                             layer,
                             details.globalPosition,
                           ),
-                  onPanUpdate: layer.locked || _activePreviewTool == 'Hand'
+                  onPanUpdate: layer.locked || _activePreviewTool != 'Select'
                       ? null
                       : (details) => _updatePreviewMove(
                             layer,
@@ -3954,10 +4205,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             canvasSize,
                             doc,
                           ),
-                  onPanEnd: layer.locked || _activePreviewTool == 'Hand'
+                  onPanEnd: layer.locked || _activePreviewTool != 'Select'
                       ? null
                       : (_) => _endPreviewMove(),
-                  onPanCancel: layer.locked || _activePreviewTool == 'Hand'
+                  onPanCancel: layer.locked || _activePreviewTool != 'Select'
                       ? null
                       : _endPreviewMove,
                   child: RepaintBoundary(
@@ -3967,6 +4218,17 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ),
             ),
           ),
+          if (isSelected && _showLayerControls && layer.masks.isNotEmpty)
+            Positioned.fill(
+              child: Transform.rotate(
+                angle: rotationRadians,
+                child: _buildPreviewMaskPathOverlay(
+                  layer,
+                  Size(visualWidth, visualHeight),
+                  rotationRadians: rotationRadians,
+                ),
+              ),
+            ),
           if (isSelected && _showLayerControls)
             Positioned.fill(
               child: Transform.rotate(
@@ -10273,6 +10535,41 @@ class _KeyframeGraphPainter extends CustomPainter {
       oldDelegate.keyframeColor != keyframeColor ||
       oldDelegate.playheadColor != playheadColor ||
       oldDelegate.textColor != textColor;
+}
+
+class _PreviewMaskPathPainter extends CustomPainter {
+  const _PreviewMaskPathPainter({
+    required this.masks,
+    required this.timeMs,
+    required this.color,
+  });
+
+  final List<MaskModel> masks;
+  final int timeMs;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (var index = 0; index < masks.length; index++) {
+      final path = _AnimatedMaskClipper(
+        masks: [masks[index]],
+        timeMs: timeMs,
+      ).getClip(size);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = index.isEven ? color : const Color(0xFFFFC66D)
+          ..strokeWidth = 1.4
+          ..style = PaintingStyle.stroke,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PreviewMaskPathPainter oldDelegate) =>
+      oldDelegate.masks != masks ||
+      oldDelegate.timeMs != timeMs ||
+      oldDelegate.color != color;
 }
 
 class _PreviewSelectionOutlinePainter extends CustomPainter {
