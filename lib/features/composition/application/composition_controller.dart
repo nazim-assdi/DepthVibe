@@ -18,11 +18,14 @@ class CompositionController extends ChangeNotifier {
 
   CompositionDocument _document;
   int _nextId = 1;
+  late final ValueNotifier<int> playheadListenable =
+      ValueNotifier<int>(_document.playheadMs);
   static const maxUndoHistory = 80;
   final List<CompositionDocument> _undoHistory = [];
   final List<CompositionDocument> _redoHistory = [];
 
   CompositionDocument get document => _document;
+  ValueListenable<int> get playhead => playheadListenable;
   CompositionLayer? get selectedLayer => _document.selectedLayer;
   bool get canUndo => _undoHistory.isNotEmpty;
   bool get canRedo => _redoHistory.isNotEmpty;
@@ -32,6 +35,7 @@ class CompositionController extends ChangeNotifier {
     if (_undoHistory.isEmpty) return;
     _redoHistory.add(_document);
     _document = _undoHistory.removeLast();
+    playheadListenable.value = _document.playheadMs;
     notifyListeners();
   }
 
@@ -42,6 +46,7 @@ class CompositionController extends ChangeNotifier {
       _undoHistory.removeAt(0);
     }
     _document = _redoHistory.removeLast();
+    playheadListenable.value = _document.playheadMs;
     notifyListeners();
   }
 
@@ -77,6 +82,9 @@ class CompositionController extends ChangeNotifier {
       _redoHistory.clear();
     }
     _document = next;
+    if (playheadListenable.value != next.playheadMs) {
+      playheadListenable.value = next.playheadMs;
+    }
     notifyListeners();
   }
 
@@ -107,6 +115,7 @@ class CompositionController extends ChangeNotifier {
     _undoHistory.clear();
     _redoHistory.clear();
     _document = document;
+    playheadListenable.value = document.playheadMs;
     var next = 1;
     final identifiers = <String>[
       for (final layer in document.layers) layer.id,
@@ -1476,12 +1485,19 @@ class CompositionController extends ChangeNotifier {
   }
 
   void setPlayhead(int timeMs) {
-    _set(
-      _document.copyWith(
-        playheadMs: timeMs.clamp(0, _document.durationMs).toInt(),
-      ),
-      recordHistory: false,
-    );
+    final nextTime = timeMs.clamp(0, _document.durationMs).toInt();
+    if (nextTime == _document.playheadMs) return;
+    // Playhead movement is high-frequency transport state, not a document
+    // edit. Notify only the canvas/timeline listeners so panels and inspectors
+    // do not rebuild on every preview frame.
+    _document = _document.copyWith(playheadMs: nextTime);
+    playheadListenable.value = nextTime;
+  }
+
+  @override
+  void dispose() {
+    playheadListenable.dispose();
+    super.dispose();
   }
 
   void setLayerTiming(
