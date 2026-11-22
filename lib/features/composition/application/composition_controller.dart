@@ -421,6 +421,11 @@ class CompositionController extends ChangeNotifier {
   void addMask({
     MaskShape shape = MaskShape.rectangle,
     MaskOperation operation = MaskOperation.add,
+    List<MaskVertex>? vertices,
+    double? left,
+    double? top,
+    double? width,
+    double? height,
   }) {
     final layer = selectedLayer;
     if (layer == null) return;
@@ -429,18 +434,23 @@ class CompositionController extends ChangeNotifier {
       name: '${shape.name} mask',
       shape: shape,
       operation: operation,
-      left: shape == MaskShape.bezier || shape == MaskShape.polygon ? 0.2 : 0.05,
-      top: shape == MaskShape.bezier || shape == MaskShape.polygon ? 0.2 : 0.05,
-      width: shape == MaskShape.bezier || shape == MaskShape.polygon ? 0.6 : 0.9,
-      height: shape == MaskShape.bezier || shape == MaskShape.polygon ? 0.6 : 0.9,
-      vertices: shape == MaskShape.bezier || shape == MaskShape.polygon
-          ? const [
-              MaskVertex(anchor: Vector2(0.2, 0.2)),
-              MaskVertex(anchor: Vector2(0.8, 0.2)),
-              MaskVertex(anchor: Vector2(0.8, 0.8)),
-              MaskVertex(anchor: Vector2(0.2, 0.8)),
-            ]
-          : const [],
+      left: left ??
+          (shape == MaskShape.bezier || shape == MaskShape.polygon ? 0.2 : 0.05),
+      top: top ??
+          (shape == MaskShape.bezier || shape == MaskShape.polygon ? 0.2 : 0.05),
+      width: width ??
+          (shape == MaskShape.bezier || shape == MaskShape.polygon ? 0.6 : 0.9),
+      height: height ??
+          (shape == MaskShape.bezier || shape == MaskShape.polygon ? 0.6 : 0.9),
+      vertices: vertices ??
+          (shape == MaskShape.bezier || shape == MaskShape.polygon
+              ? const [
+                  MaskVertex(anchor: Vector2(0.2, 0.2)),
+                  MaskVertex(anchor: Vector2(0.8, 0.2)),
+                  MaskVertex(anchor: Vector2(0.8, 0.8)),
+                  MaskVertex(anchor: Vector2(0.2, 0.8)),
+                ]
+              : const []),
     );
     _replace(layer.copyWith(masks: [...layer.masks, mask]));
   }

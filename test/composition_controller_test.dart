@@ -1302,4 +1302,31 @@ void main() {
     controller.dispose();
   });
 
+
+  test('addMask accepts a drawn path and its composition-relative bounds', () {
+    final controller = CompositionController();
+    final id = controller.addLayer(LayerKind.image);
+    controller.addMask(
+      shape: MaskShape.bezier,
+      vertices: const [
+        MaskVertex(anchor: Vector2(0, 0)),
+        MaskVertex(anchor: Vector2(1, 0)),
+        MaskVertex(anchor: Vector2(0.5, 1)),
+      ],
+      left: 0.15,
+      top: 0.2,
+      width: 0.4,
+      height: 0.5,
+    );
+    final layer = controller.document.layers.firstWhere((item) => item.id == id);
+    final mask = layer.masks.single;
+    expect(mask.shape, MaskShape.bezier);
+    expect(mask.vertices, hasLength(3));
+    expect(mask.left, 0.15);
+    expect(mask.top, 0.2);
+    expect(mask.width, 0.4);
+    expect(mask.height, 0.5);
+    controller.dispose();
+  });
+
 }

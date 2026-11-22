@@ -802,6 +802,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   int? _previewMaskVertexIndex;
   Offset _previewMaskLastGlobal = Offset.zero;
   bool _previewMaskHistoryRecorded = false;
+  String? _previewPenLayerId;
+  final List<Offset> _previewPenPoints = [];
+  Size _previewPenLayerSize = Size.zero;
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
   final Set<String> _expandedTimelineLayers = {};
@@ -3287,6 +3290,103 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _previewMotionHistoryRecorded = false;
   }
 
+  void _beginPreviewPenPath(CompositionLayer layer) {
+    if (layer.locked) return;
+    _pausePreviewPlayback();
+    _controller.selectLayer(layer.id);
+    setState(() {
+      _activePreviewTool = 'Pen';
+      _panel = 'Masks';
+      _previewPenLayerId = layer.id;
+      _previewPenPoints.clear();
+      _previewPenLayerSize = Size.zero;
+    });
+  }
+
+  void _addPreviewPenPoint(
+    CompositionLayer layer,
+    Offset localPosition,
+    Size layerSize,
+  ) {
+    if (_activePreviewTool != 'Pen' ||
+        _previewPenLayerId != layer.id ||
+        layerSize.width <= 0 ||
+        layerSize.height <= 0) {
+      return;
+    }
+    final point = Offset(
+      localPosition.dx.clamp(0.0, layerSize.width).toDouble(),
+      localPosition.dy.clamp(0.0, layerSize.height).toDouble(),
+    );
+    setState(() {
+      _previewPenLayerSize = layerSize;
+      _previewPenPoints.add(point);
+    });
+  }
+
+  void _finishPreviewPenPath() {
+    final layer = _controller.selectedLayer;
+    final points = List<Offset>.of(_previewPenPoints);
+    final size = _previewPenLayerSize;
+    if (layer == null ||
+        layer.id != _previewPenLayerId ||
+        size.width <= 0 ||
+        size.height <= 0 ||
+        points.length < 3) {
+      setState(() => _notice = 'A closed mask path needs at least three points.');
+      return;
+    }
+
+    final minX = points.map((point) => point.dx).reduce((a, b) => a < b ? a : b);
+    final maxX = points.map((point) => point.dx).reduce((a, b) => a > b ? a : b);
+    final minY = points.map((point) => point.dy).reduce((a, b) => a < b ? a : b);
+    final maxY = points.map((point) => point.dy).reduce((a, b) => a > b ? a : b);
+    final left = (minX / size.width).clamp(0.0, 0.99).toDouble();
+    final top = (minY / size.height).clamp(0.0, 0.99).toDouble();
+    final width = ((maxX - minX) / size.width)
+        .clamp(0.01, 1 - left)
+        .toDouble();
+    final height = ((maxY - minY) / size.height)
+        .clamp(0.01, 1 - top)
+        .toDouble();
+    final spanX = math.max(0.0001, maxX - minX);
+    final spanY = math.max(0.0001, maxY - minY);
+    final vertices = [
+      for (final point in points)
+        MaskVertex(
+          anchor: Vector2(
+            ((point.dx - minX) / spanX).clamp(0.0, 1.0).toDouble(),
+            ((point.dy - minY) / spanY).clamp(0.0, 1.0).toDouble(),
+          ),
+        ),
+    ];
+
+    _controller.addMask(
+      shape: MaskShape.bezier,
+      vertices: vertices,
+      left: left,
+      top: top,
+      width: width,
+      height: height,
+    );
+    setState(() {
+      _activePreviewTool = 'Mask';
+      _previewPenLayerId = null;
+      _previewPenPoints.clear();
+      _previewPenLayerSize = Size.zero;
+      _notice = 'Bezier mask created. Drag its vertices in the Composition panel.';
+    });
+  }
+
+  void _cancelPreviewPenPath() {
+    setState(() {
+      _activePreviewTool = 'Select';
+      _previewPenLayerId = null;
+      _previewPenPoints.clear();
+      _previewPenLayerSize = Size.zero;
+    });
+  }
+
   List<Offset> _previewMaskBaseOutline(MaskModel mask) {
     if (mask.shape != MaskShape.bezier) {
       return [
@@ -3759,20 +3859,30 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               _toolChip(
                 'Pen',
                 Icons.gesture,
-                false,
+                _activePreviewTool == 'Pen',
                 onTap: () {
                   final layer = _controller.selectedLayer;
                   if (layer == null || layer.locked) {
                     setState(() => _notice = 'Select an unlocked layer before drawing a Bezier mask.');
                     return;
                   }
-                  _controller.addMask(shape: MaskShape.bezier);
-                  setState(() {
-                    _panel = 'Masks';
-                    _activePreviewTool = 'Mask';
-                  });
+                  _beginPreviewPenPath(layer);
                 },
               ),
+              if (_activePreviewTool == 'Pen') ...[
+                _toolChip(
+                  'Finish Path',
+                  Icons.check,
+                  false,
+                  onTap: _finishPreviewPenPath,
+                ),
+                _toolChip(
+                  'Cancel',
+                  Icons.close,
+                  false,
+                  onTap: _cancelPreviewPenPath,
+                ),
+              ],
               _toolChip(
                 'Keyframe',
                 Icons.key,
@@ -4191,6 +4301,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => _controller.selectLayer(layer.id),
+                  onTapUp: _activePreviewTool == 'Pen'
+                      ? (details) => _addPreviewPenPoint(
+                            layer,
+                            details.localPosition,
+                            Size(visualWidth, visualHeight),
+                          )
+                      : null,
                   onPanStart: layer.locked || _activePreviewTool != 'Select'
                       ? null
                       : (details) => _beginPreviewMove(
@@ -4226,6 +4343,22 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   layer,
                   Size(visualWidth, visualHeight),
                   rotationRadians: rotationRadians,
+                ),
+              ),
+            ),
+          if (isSelected &&
+              _activePreviewTool == 'Pen' &&
+              _previewPenLayerId == layer.id)
+            Positioned.fill(
+              child: Transform.rotate(
+                angle: rotationRadians,
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _PreviewPenDraftPainter(
+                      points: _previewPenPoints,
+                      color: Theme.of(context).extension<DepthVibePalette>()!.accent,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -10535,6 +10668,48 @@ class _KeyframeGraphPainter extends CustomPainter {
       oldDelegate.keyframeColor != keyframeColor ||
       oldDelegate.playheadColor != playheadColor ||
       oldDelegate.textColor != textColor;
+}
+
+class _PreviewPenDraftPainter extends CustomPainter {
+  const _PreviewPenDraftPainter({
+    required this.points,
+    required this.color,
+  });
+
+  final List<Offset> points;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (final point in points.skip(1)) {
+      path.lineTo(point.dx, point.dy);
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round,
+    );
+    for (final point in points) {
+      canvas.drawCircle(point, 4, Paint()..color = color);
+      canvas.drawCircle(
+        point,
+        6,
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PreviewPenDraftPainter oldDelegate) =>
+      oldDelegate.points != points || oldDelegate.color != color;
 }
 
 class _PreviewMaskPathPainter extends CustomPainter {
