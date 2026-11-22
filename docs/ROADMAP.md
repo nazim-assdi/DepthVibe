@@ -37,6 +37,9 @@ Status describes working source paths, not release-ready feature parity. A model
 - [ ] Shape/text rasterization and Photoshop adjustment layer rendering.
 - [ ] Bezier mask curve editor, animated masks, tracking masks and rotoscoping.
 - [ ] Render queue, proxy media, cache manager, waveform cache and deterministic realtime preview.
+- [x] Bounded compositor preview decode queue with latest-frame-wins scheduling, shared in-flight requests, memory/disk frame cache, atomic frame writes and per-layer one-frame lookahead.
+- [x] Adaptive preview resolution/FPS driven by native frame-decode and Flutter build/raster timings; isolate high-frequency playhead updates from inspector/panel rebuilds.
+- [x] Realtime Compositor Play/Pause transport with stale-frame dropping, visible-last-frame fallback, bounded decoder concurrency and preview cache cleanup.
 - [x] Active composition export cancellation, staged progress and incomplete-output cleanup; persistent multi-job scheduling, durable logs and retry remain open.
 - [x] Low-spec live 3D preview presets for Compatibility, Balanced and Quality; final render quality is not reduced by the preview setting.
 
