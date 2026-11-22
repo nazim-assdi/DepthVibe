@@ -86,7 +86,10 @@ class PreviewFrameService {
 
   final LinkedHashMap<String, _PreviewFrameCacheEntry> _cache =
       LinkedHashMap<String, _PreviewFrameCacheEntry>();
+  // Foreground frame requests must never sit behind speculative look-ahead.
   final LinkedHashMap<String, _PendingPreviewFrame> _pending =
+      LinkedHashMap<String, _PendingPreviewFrame>();
+  final LinkedHashMap<String, _PendingPreviewFrame> _backgroundPending =
       LinkedHashMap<String, _PendingPreviewFrame>();
   final Map<String, _PendingPreviewFrame> _pendingByLane = {};
   final Map<String, _PendingPreviewFrame> _pendingByKey = {};
@@ -265,7 +268,7 @@ class PreviewFrameService {
         cachedFrames: _cache.length,
         cachedBytes: _cachedBytes,
         activeDecodes: _activeCount,
-        pendingDecodes: _pending.length,
+        pendingDecodes: _pending.length + _backgroundPending.length,
         cacheHits: _cacheHits,
         droppedRequests: _droppedRequests,
         averageDecodeMs: _averageDecodeMs,
@@ -284,6 +287,7 @@ class PreviewFrameService {
     required File cacheFile,
     required PreviewFrameDecoder decode,
     int decodedFrameCount = 1,
+    bool isPrefetch = false,
   }) async {
     if (_disposed) return null;
     final requestToken =
@@ -310,7 +314,10 @@ class PreviewFrameService {
     if (active != null) return active;
 
     final queued = _pendingByKey[cacheKey];
-    if (queued != null) return queued.completer.future;
+    if (queued != null) {
+      if (!isPrefetch) _promoteToVisible(queued);
+      return queued.completer.future;
+    }
 
     // The disk cache survives a widget rebuild and can be reused after the
     // in-memory LRU entry has been evicted.
@@ -345,6 +352,7 @@ class PreviewFrameService {
     if (activeAfterDiskCheck != null) return activeAfterDiskCheck;
     final queuedAfterDiskCheck = _pendingByKey[cacheKey];
     if (queuedAfterDiskCheck != null) {
+      if (!isPrefetch) _promoteToVisible(queuedAfterDiskCheck);
       return queuedAfterDiskCheck.completer.future;
     }
 
@@ -353,13 +361,15 @@ class PreviewFrameService {
       key: cacheKey,
       decode: decode,
       decodedFrameCount: decodedFrameCount,
+      isPrefetch: isPrefetch,
     );
 
     // Keep only the newest requested frame for each video layer. This is the
     // key to avoiding a queue of obsolete frames when the user scrubs quickly.
     final previous = _pendingByLane.remove(laneId);
     if (previous != null) {
-      _pending.remove(previous.key);
+      (previous.isPrefetch ? _backgroundPending : _pending)
+          .remove(previous.key);
       _pendingByKey.remove(previous.key);
       if (!previous.completer.isCompleted) {
         previous.completer.complete(null);
@@ -367,18 +377,28 @@ class PreviewFrameService {
       _droppedRequests++;
     }
 
-    _pending[cacheKey] = task;
+    (isPrefetch ? _backgroundPending : _pending)[cacheKey] = task;
     _pendingByKey[cacheKey] = task;
     _pendingByLane[laneId] = task;
     _pump();
     return task.completer.future;
   }
 
+  void _promoteToVisible(_PendingPreviewFrame task) {
+    if (!task.isPrefetch) return;
+    _backgroundPending.remove(task.key);
+    task.isPrefetch = false;
+    _pending[task.key] = task;
+    _pump();
+  }
+
   void _pump() {
     if (_disposed) return;
-    while (_activeCount < _maxConcurrentDecodes && _pending.isNotEmpty) {
-      final entry = _pending.entries.first;
-      _pending.remove(entry.key);
+    while (_activeCount < _maxConcurrentDecodes &&
+        (_pending.isNotEmpty || _backgroundPending.isNotEmpty)) {
+      final queue = _pending.isNotEmpty ? _pending : _backgroundPending;
+      final entry = queue.entries.first;
+      queue.remove(entry.key);
       final task = entry.value;
       _pendingByKey.remove(task.key);
       if (identical(_pendingByLane[task.laneId], task)) {
@@ -453,10 +473,14 @@ class PreviewFrameService {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    for (final task in _pending.values) {
+    for (final task in <_PendingPreviewFrame>[
+      ..._pending.values,
+      ..._backgroundPending.values,
+    ]) {
       if (!task.completer.isCompleted) task.completer.complete(null);
     }
     _pending.clear();
+    _backgroundPending.clear();
     _pendingByLane.clear();
     _pendingByKey.clear();
     _latestRequestTokenByLane.clear();
@@ -478,12 +502,14 @@ class _PendingPreviewFrame {
     required this.key,
     required this.decode,
     required this.decodedFrameCount,
+    required this.isPrefetch,
   }) : enqueuedAt = Stopwatch()..start();
 
   final String laneId;
   final String key;
   final PreviewFrameDecoder decode;
   final int decodedFrameCount;
+  bool isPrefetch;
   final Stopwatch enqueuedAt;
   final Completer<File?> completer = Completer<File?>();
 }
