@@ -15,6 +15,8 @@ class PreviewFrameCacheStats {
     required this.droppedRequests,
     required this.averageDecodeMs,
     required this.lastDecodeMs,
+    required this.averageUiFrameMs,
+    required this.lastUiFrameMs,
     required this.effectivePreviewWidth,
     required this.effectivePreviewFrameRate,
   });
@@ -27,6 +29,8 @@ class PreviewFrameCacheStats {
   final int droppedRequests;
   final double averageDecodeMs;
   final int lastDecodeMs;
+  final double averageUiFrameMs;
+  final int lastUiFrameMs;
   final int effectivePreviewWidth;
   final int effectivePreviewFrameRate;
 }
@@ -61,6 +65,12 @@ class PreviewFrameService {
   int _completedDecodes = 0;
   int _lastDecodeMs = 0;
   double _averageDecodeMs = 0;
+  bool _hasUiFrameSamples = false;
+  int _slowUiFrameStreak = 0;
+  int _fastUiFrameStreak = 0;
+  int _completedUiFrames = 0;
+  int _lastUiFrameMs = 0;
+  double _averageUiFrameMs = 0;
 
   final LinkedHashMap<String, _PreviewFrameCacheEntry> _cache =
       LinkedHashMap<String, _PreviewFrameCacheEntry>();
@@ -93,47 +103,74 @@ class PreviewFrameService {
     _fastDecodeStreak = 0;
   }
 
-  /// Feed Flutter build+raster time into the same adaptive quality governor.
+  /// Feed Flutter build+raster time into the adaptive quality governor.
+  /// This signal is kept separate from native decoder throughput so quick UI
+  /// frames cannot hide a slow video decoder (or vice versa).
   void recordUiFrameDuration(Duration duration) {
-    _recordPerformanceSample(duration);
+    final milliseconds =
+        (duration.inMicroseconds / 1000).clamp(0, 60000).toDouble();
+    _hasUiFrameSamples = true;
+    _completedUiFrames++;
+    _lastUiFrameMs = milliseconds.round();
+    _averageUiFrameMs = _completedUiFrames == 1
+        ? milliseconds
+        : (_averageUiFrameMs * 0.8) + (milliseconds * 0.2);
+    _recordAdaptiveSignal(milliseconds, uiFrame: true);
   }
 
   /// Feed measured native decode time back into the adaptive preview profile.
-  /// Five slow frames lower quality; forty fast frames restore it gradually.
+  /// Batch durations are normalized to the average time per decoded frame.
   void recordDecodeDuration(
     Duration duration, {
     int framesDecoded = 1,
   }) {
-    _recordPerformanceSample(
-      Duration(
-        microseconds:
-            (duration.inMicroseconds / framesDecoded.clamp(1, 1000000)).round(),
-      ),
-    );
-  }
-
-  void _recordPerformanceSample(Duration duration) {
-    final milliseconds =
-        (duration.inMicroseconds / 1000).clamp(0, 60000).toDouble();
-    _lastDecodeMs = milliseconds.round();
+    final milliseconds = (duration.inMicroseconds /
+            framesDecoded.clamp(1, 1000000))
+        .clamp(0, 60000)
+        .toDouble();
     _completedDecodes++;
+    _lastDecodeMs = milliseconds.round();
     _averageDecodeMs = _completedDecodes == 1
         ? milliseconds
         : (_averageDecodeMs * 0.8) + (milliseconds * 0.2);
+    _recordAdaptiveSignal(milliseconds, uiFrame: false);
+  }
 
+  void _recordAdaptiveSignal(
+    double milliseconds, {
+    required bool uiFrame,
+  }) {
     final frameBudgetMs = 1000 / _effectivePreviewFrameRate;
-    if (milliseconds > frameBudgetMs * 1.25) {
-      _slowDecodeStreak++;
-      _fastDecodeStreak = 0;
-    } else if (milliseconds < frameBudgetMs * 0.55) {
-      _fastDecodeStreak++;
-      _slowDecodeStreak = 0;
+    final isSlow = milliseconds > frameBudgetMs * 1.25;
+    final isFast = milliseconds < frameBudgetMs * 0.55;
+
+    if (uiFrame) {
+      if (isSlow) {
+        _slowUiFrameStreak++;
+        _fastUiFrameStreak = 0;
+      } else if (isFast) {
+        _fastUiFrameStreak++;
+        _slowUiFrameStreak = 0;
+      } else {
+        _slowUiFrameStreak = 0;
+        _fastUiFrameStreak = 0;
+      }
     } else {
-      _slowDecodeStreak = 0;
-      _fastDecodeStreak = 0;
+      if (isSlow) {
+        _slowDecodeStreak++;
+        _fastDecodeStreak = 0;
+      } else if (isFast) {
+        _fastDecodeStreak++;
+        _slowDecodeStreak = 0;
+      } else {
+        _slowDecodeStreak = 0;
+        _fastDecodeStreak = 0;
+      }
     }
 
-    if (_slowDecodeStreak >= 5) {
+    // Either bottleneck can lower preview load. Require each active signal to
+    // be fast before restoring quality, avoiding oscillation on mixed loads.
+    if (_slowDecodeStreak >= 5 || _slowUiFrameStreak >= 5) {
       _effectivePreviewWidth = (_effectivePreviewWidth * 0.8)
           .round()
           .clamp(320, _preferredPreviewWidth)
@@ -143,7 +180,17 @@ class PreviewFrameService {
           .toInt();
       _slowDecodeStreak = 0;
       _fastDecodeStreak = 0;
-    } else if (_fastDecodeStreak >= 40) {
+      _slowUiFrameStreak = 0;
+      _fastUiFrameStreak = 0;
+      return;
+    }
+
+    final decoderFast = _completedDecodes == 0 || _fastDecodeStreak >= 40;
+    final uiFast = !_hasUiFrameSamples || _fastUiFrameStreak >= 40;
+    final decoderHasSamples = _completedDecodes > 0;
+    if ((decoderHasSamples || _hasUiFrameSamples) &&
+        decoderFast &&
+        uiFast) {
       _effectivePreviewWidth = math.min(
         _preferredPreviewWidth,
         (_effectivePreviewWidth * 1.2).round(),
@@ -153,6 +200,7 @@ class PreviewFrameService {
         _effectivePreviewFrameRate + 2,
       ).toInt();
       _fastDecodeStreak = 0;
+      _fastUiFrameStreak = 0;
     }
   }
 
@@ -170,6 +218,8 @@ class PreviewFrameService {
         droppedRequests: _droppedRequests,
         averageDecodeMs: _averageDecodeMs,
         lastDecodeMs: _lastDecodeMs,
+        averageUiFrameMs: _averageUiFrameMs,
+        lastUiFrameMs: _lastUiFrameMs,
         effectivePreviewWidth: _effectivePreviewWidth,
         effectivePreviewFrameRate: _effectivePreviewFrameRate,
       );
