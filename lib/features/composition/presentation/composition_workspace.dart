@@ -81,7 +81,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   final LinkedHashMap<String, Future<File?>> _videoFrameJobs =
       LinkedHashMap<String, Future<File?>>();
   final Map<String, File> _lastVideoFrames = {};
-  final Map<String, Future<FileStat>> _sourceStatJobs = {};
+  final Map<String, String> _latestRequestedFrameKey = {};
+  final LinkedHashMap<String, Future<FileStat>> _sourceStatJobs =
+      LinkedHashMap<String, Future<FileStat>>();
   final Map<String, Future<img.Image?>> _scopeImageJobs = {};
   final Map<String, Future<ObjMesh>> _meshJobs = {};
   final PreviewFrameService _previewFrameService = PreviewFrameService(
@@ -148,7 +150,6 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         cacheDirectory.path + Platform.pathSeparator +
             'dvpreview_${diskKey.hashCode.toUnsigned(32).toRadixString(16)}.jpg',
       );
-      final profile = DepthVibeSettingsService.instance.performanceMode;
       return _previewFrameService.requestFrame(
         laneId: laneId,
         cacheKey: diskKey,
@@ -223,6 +224,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         '${path.hashCode.toUnsigned(32)}_${layer.id}_'
         '${frameIndex}_${width}_${previewFps.toStringAsFixed(1)}';
 
+    if (!prefetch) {
+      _latestRequestedFrameKey[layer.id] = requestKey;
+    }
     final existing = _videoFrameJobs.remove(requestKey);
     if (existing != null) {
       _videoFrameJobs[requestKey] = existing;
@@ -239,7 +243,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       decodeThreads: profile.previewDecodeConcurrency,
       prefetch: prefetch,
     ).then((frame) {
-      if (frame != null && !prefetch) {
+      if (frame != null &&
+          !prefetch &&
+          _latestRequestedFrameKey[layer.id] == requestKey) {
         _lastVideoFrames[layer.id] = frame;
         // Warm one frame ahead. If the playhead moves elsewhere, the
         // scheduler replaces this pending request with the newest frame.
@@ -260,6 +266,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _videoFrameJobs[requestKey] = job;
     while (_videoFrameJobs.length > 96) {
       _videoFrameJobs.remove(_videoFrameJobs.keys.first);
+    }
+    while (_sourceStatJobs.length > 32) {
+      _sourceStatJobs.remove(_sourceStatJobs.keys.first);
     }
     return job;
   }
@@ -1281,6 +1290,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _previewFrameService.dispose();
     _videoFrameJobs.clear();
     _lastVideoFrames.clear();
+    _latestRequestedFrameKey.clear();
     _sourceStatJobs.clear();
     _controller.dispose();
     super.dispose();
