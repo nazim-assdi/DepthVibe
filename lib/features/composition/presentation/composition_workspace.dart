@@ -3471,6 +3471,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           primitive: ShapePrimitive.path,
           pathVertices: shapeVertices,
           pathClosed: _previewPenPathClosed,
+          fillColor: _previewPenPathClosed
+              ? currentStyle.fillColor
+              : 'transparent',
+          strokeWidth: !_previewPenPathClosed &&
+                  currentStyle.strokeWidth <= 0
+              ? 2
+              : currentStyle.strokeWidth,
         ),
       );
     } else {
