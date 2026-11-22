@@ -201,6 +201,10 @@ class _EditorScreenState extends State<EditorScreen> {
               DepthVibeSettingsService.instance.performanceMode) {
         _profileChangedDuringOpen = false;
         unawaited(_reconfigureVideoPreview());
+      } else if (mounted && !resumePlaying && _playbackAvailable) {
+        // A paused video also needs its first output frame after the texture
+        // and render backend have been recreated.
+        unawaited(_primePausedVideoPreview());
       }
     }
   }
