@@ -2,9 +2,7 @@ import 'dart:async';
 
 import 'package:ffmpeg_kit_extended_flutter/ffmpeg_kit_extended_flutter.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:media_kit/media_kit.dart';
-
-import '../features/editor/presentation/editor_screen.dart';
+import '../features/composition/presentation/composition_workspace.dart';
 import '../features/extensions/data/adobe_bridge_service.dart';
 import '../features/extensions/data/extension_manager_service.dart';
 import '../features/extensions/data/extension_marketplace_service.dart';
@@ -22,7 +20,6 @@ class DepthVibeApp extends StatefulWidget {
 class _DepthVibeAppState extends State<DepthVibeApp> {
   bool _initializing = false;
   bool _ready = false;
-  bool _mediaKitAvailable = false;
   bool _ffmpegAvailable = false;
   String _startupStage = 'Preparing your creative workspace…';
   String? _startupError;
@@ -49,7 +46,6 @@ class _DepthVibeAppState extends State<DepthVibeApp> {
       _startupError = null;
       _startupStage = 'Loading optional services in the background…';
       _startupWarnings = const [];
-      _mediaKitAvailable = false;
       _ffmpegAvailable = false;
     });
 
@@ -71,13 +67,8 @@ class _DepthVibeAppState extends State<DepthVibeApp> {
       }
     }
 
-    // Media engines are enhancements only. The editor is already visible and
-    // remains usable even if either native runtime is missing or slow.
-    await optionalStep('media playback engine', () async {
-      MediaKit.ensureInitialized();
-    }, onSuccess: () {
-      if (mounted) setState(() => _mediaKitAvailable = true);
-    });
+    // The full composition and NLE workspace is already visible. FFmpeg
+    // enables preview decoding and final MP4 rendering when it is available.
     await optionalStep('video processing engine', () async {
       await FFmpegKitExtended.initialize();
     }, onSuccess: () {
@@ -218,12 +209,11 @@ class _DepthVibeAppState extends State<DepthVibeApp> {
         fontFallback: fontManager.fallbackFamilies,
       ),
       home: _ready
-          ? EditorScreen(
+          ? CompositionWorkspace(
               startupWarning: _startupWarnings.isEmpty
                   ? null
                   : 'Some optional services did not start: ' +
                       _startupWarnings.join(', '),
-              mediaPlaybackAvailable: _mediaKitAvailable,
               mediaProcessingAvailable: _ffmpegAvailable,
             )
           : Builder(builder: _buildStartupScreen),
