@@ -749,6 +749,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   String _workspacePreset = 'Standard';
   String? _graphTrackLabel;
   bool _graphEditorVisible = false;
+  bool _graphSpeedMode = false;
+  int? _selectedGraphKeyframeMs;
+  int? _draggingGraphKeyframeMs;
+  _KeyframeGraphGeometry? _graphDragGeometry;
+  bool _graphDragHistoryRecorded = false;
+  bool _graphScrubbing = false;
   bool _showCanvasGrid = true;
   double _leftPanelWidth = 260;
   double _rightPanelWidth = 410;
@@ -8346,19 +8352,37 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _controller.setPlayhead(target);
   }
 
-  List<({String label, KeyframeTrack track})> _graphTracksFor(
-    CompositionLayer? layer,
-  ) {
+  List<({
+    String label,
+    KeyframeTrack track,
+    String? effectId,
+    String? maskId,
+  })> _graphTracksFor(CompositionLayer? layer) {
     if (layer == null) return const [];
     return [
       for (final track in layer.keyframeTracks)
-        (label: 'Transform · ${track.property}', track: track),
+        (
+          label: 'Transform · \${track.property}',
+          track: track,
+          effectId: null,
+          maskId: null,
+        ),
       for (final effect in layer.effects)
         for (final track in effect.keyframeTracks)
-          (label: '${effect.name} · ${track.property}', track: track),
+          (
+            label: '\${effect.name} · \${track.property}',
+            track: track,
+            effectId: effect.id,
+            maskId: null,
+          ),
       for (final mask in layer.masks)
         for (final track in mask.keyframeTracks)
-          (label: 'Mask · ${mask.name} · ${track.property}', track: track),
+          (
+            label: 'Mask · \${mask.name} · \${track.property}',
+            track: track,
+            effectId: null,
+            maskId: mask.id,
+          ),
     ];
   }
 
@@ -8368,6 +8392,103 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _controller.setPlayhead(
       (x / width * duration).round().clamp(0, duration),
     );
+  }
+
+  void _beginGraphGesture(
+    Offset position,
+    Size size,
+    KeyframeTrack track,
+    int duration,
+  ) {
+    final geometry = _KeyframeGraphGeometry(
+      track: track,
+      durationMs: duration,
+      size: size,
+      speedMode: _graphSpeedMode,
+    );
+    _graphDragGeometry = geometry;
+    _graphDragHistoryRecorded = false;
+    _graphScrubbing = true;
+    _draggingGraphKeyframeMs = null;
+
+    if (!_graphSpeedMode) {
+      final keyframe = geometry.nearestKeyframe(position, track.keyframes);
+      if (keyframe != null) {
+        _draggingGraphKeyframeMs = keyframe.timeMs;
+        _graphScrubbing = false;
+        setState(() => _selectedGraphKeyframeMs = keyframe.timeMs);
+      }
+    }
+  }
+
+  void _updateGraphGesture(
+    Offset position,
+    KeyframeTrack track,
+    int duration, {
+    String? effectId,
+    String? maskId,
+  }) {
+    final geometry = _graphDragGeometry;
+    if (geometry == null) return;
+
+    final draggingTime = _draggingGraphKeyframeMs;
+    if (draggingTime != null && !_graphSpeedMode) {
+      final fps = _controller.document.frameRate <= 0
+          ? 24.0
+          : _controller.document.frameRate;
+      final frame = (geometry.timeAt(position) * fps / 1000).round();
+      final snappedTime = (frame * 1000 / fps).round().clamp(0, duration);
+      final value = geometry.valueAt(position);
+      _controller.updateKeyframe(
+        track.property,
+        draggingTime,
+        snappedTime,
+        value,
+        effectId: effectId,
+        maskId: maskId,
+        recordHistory: !_graphDragHistoryRecorded,
+      );
+      _graphDragHistoryRecorded = true;
+      _draggingGraphKeyframeMs = snappedTime;
+      _selectedGraphKeyframeMs = snappedTime;
+      return;
+    }
+
+    if (_graphScrubbing) {
+      _pausePreviewPlayback();
+      _controller.setPlayhead(
+        geometry.timeAt(position).round().clamp(0, duration),
+      );
+    }
+  }
+
+  void _endGraphGesture() {
+    _graphDragGeometry = null;
+    _draggingGraphKeyframeMs = null;
+    _graphScrubbing = false;
+    _graphDragHistoryRecorded = false;
+  }
+
+  void _tapGraph(
+    Offset position,
+    Size size,
+    KeyframeTrack track,
+    int duration,
+  ) {
+    final geometry = _KeyframeGraphGeometry(
+      track: track,
+      durationMs: duration,
+      size: size,
+      speedMode: _graphSpeedMode,
+    );
+    final keyframe = geometry.nearestKeyframe(position, track.keyframes);
+    if (keyframe != null) {
+      setState(() => _selectedGraphKeyframeMs = keyframe.timeMs);
+      _pausePreviewPlayback();
+      _controller.setPlayhead(keyframe.timeMs);
+    } else {
+      _scrubGraph(position.dx, size.width, duration);
+    }
   }
 
   Widget _buildGraphEditor(int duration) {
@@ -8390,14 +8511,23 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     if (_graphTrackLabel != active.label) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _graphTrackLabel != active.label) {
-          setState(() => _graphTrackLabel = active.label);
+          setState(() {
+            _graphTrackLabel = active.label;
+            _selectedGraphKeyframeMs = null;
+          });
         }
       });
     }
+    final selectedFrames = active.track.keyframes
+        .where((item) => item.timeMs == _selectedGraphKeyframeMs)
+        .toList();
+    final selectedKeyframe =
+        selectedFrames.isEmpty ? null : selectedFrames.first;
+
     return Column(
       children: [
         SizedBox(
-          height: 30,
+          height: 34,
           child: Row(
             children: [
               const Icon(Icons.show_chart, size: 14),
@@ -8429,12 +8559,41 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             ),
                           ))
                       .toList(),
-                  onChanged: (value) => setState(() => _graphTrackLabel = value),
+                  onChanged: (value) => setState(() {
+                    _graphTrackLabel = value;
+                    _selectedGraphKeyframeMs = null;
+                  }),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
+              DropdownButton<bool>(
+                value: _graphSpeedMode,
+                underline: const SizedBox.shrink(),
+                style: TextStyle(fontSize: 9, color: palette.primaryText),
+                items: const [
+                  DropdownMenuItem(value: false, child: Text('VALUE')),
+                  DropdownMenuItem(value: true, child: Text('SPEED')),
+                ],
+                onChanged: (value) => setState(() => _graphSpeedMode = value ?? false),
+              ),
+              IconButton(
+                tooltip: selectedKeyframe == null
+                    ? 'Select a keyframe to edit its Bezier curve'
+                    : 'Edit selected keyframe Bezier handles',
+                visualDensity: VisualDensity.compact,
+                onPressed: selectedKeyframe == null
+                    ? null
+                    : () => _editBezierCurve(
+                          active.track.property,
+                          selectedKeyframe.bezier,
+                          effectId: active.effectId,
+                          maskId: active.maskId,
+                          timeMs: selectedKeyframe.timeMs,
+                        ),
+                icon: const Icon(Icons.tune, size: 15),
+              ),
               Text(
-                '${active.track.keyframes.length} KEYS',
+                '\${active.track.keyframes.length} KEYS',
                 style: TextStyle(fontSize: 8, color: palette.secondaryText),
               ),
             ],
@@ -8442,32 +8601,48 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ),
         Expanded(
           child: LayoutBuilder(
-            builder: (context, constraints) => GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (details) => _scrubGraph(
-                details.localPosition.dx,
-                constraints.maxWidth,
-                duration,
-              ),
-              onHorizontalDragUpdate: (details) => _scrubGraph(
-                details.localPosition.dx,
-                constraints.maxWidth,
-                duration,
-              ),
-              child: CustomPaint(
-                size: Size(constraints.maxWidth, constraints.maxHeight),
-                painter: _KeyframeGraphPainter(
-                  track: active.track,
-                  durationMs: duration,
-                  playheadMs: _controller.document.playheadMs,
-                  gridColor: palette.border,
-                  curveColor: palette.accent,
-                  keyframeColor: const Color(0xFFE7C46D),
-                  playheadColor: const Color(0xFFFFA65C),
-                  textColor: palette.secondaryText,
+            builder: (context, constraints) {
+              final size = Size(constraints.maxWidth, constraints.maxHeight);
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (details) => _tapGraph(
+                  details.localPosition,
+                  size,
+                  active.track,
+                  duration,
                 ),
-              ),
-            ),
+                onPanStart: (details) => _beginGraphGesture(
+                  details.localPosition,
+                  size,
+                  active.track,
+                  duration,
+                ),
+                onPanUpdate: (details) => _updateGraphGesture(
+                  details.localPosition,
+                  active.track,
+                  duration,
+                  effectId: active.effectId,
+                  maskId: active.maskId,
+                ),
+                onPanEnd: (_) => _endGraphGesture(),
+                onPanCancel: _endGraphGesture,
+                child: CustomPaint(
+                  size: size,
+                  painter: _KeyframeGraphPainter(
+                    track: active.track,
+                    durationMs: duration,
+                    playheadMs: _controller.document.playheadMs,
+                    selectedKeyframeTimeMs: _selectedGraphKeyframeMs,
+                    speedMode: _graphSpeedMode,
+                    gridColor: palette.border,
+                    curveColor: palette.accent,
+                    keyframeColor: const Color(0xFFE7C46D),
+                    playheadColor: const Color(0xFFFFA65C),
+                    textColor: palette.secondaryText,
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ],
@@ -9074,11 +9249,112 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 }
 
 /// A lightweight, CPU-painted value graph for the selected animated property.
+class _KeyframeGraphGeometry {
+  _KeyframeGraphGeometry({
+    required this.track,
+    required this.durationMs,
+    required Size size,
+    required this.speedMode,
+  })  : plot = Rect.fromLTWH(
+          42,
+          8,
+          math.max(1, size.width - 54),
+          math.max(1, size.height - 28),
+        ) {
+    final safeDuration = math.max(1, durationMs);
+    final samples = <double>[
+      for (var index = 0; index <= 160; index++)
+        graphValueAtTime((safeDuration * index / 160).round()),
+      for (final frame in track.keyframes)
+        graphValueAtTime(frame.timeMs),
+    ].where((value) => value.isFinite).toList();
+    var low = samples.isEmpty ? 0.0 : samples.reduce(math.min);
+    var high = samples.isEmpty ? 1.0 : samples.reduce(math.max);
+    if ((high - low).abs() < 0.000001) {
+      final padding = math.max(1.0, high.abs() * 0.15);
+      low -= padding;
+      high += padding;
+    } else {
+      final padding = (high - low) * 0.18;
+      low -= padding;
+      high += padding;
+    }
+    minimum = low;
+    maximum = high;
+  }
+
+  final KeyframeTrack track;
+  final int durationMs;
+  final bool speedMode;
+  final Rect plot;
+  late final double minimum;
+  late final double maximum;
+
+  double graphValueAtTime(int timeMs) {
+    if (!speedMode) {
+      return track.sample(timeMs, fallback: track.keyframes.first.value);
+    }
+    const halfWindowMs = 8;
+    final before = (timeMs - halfWindowMs).clamp(0, durationMs);
+    final after = (timeMs + halfWindowMs).clamp(0, durationMs);
+    if (after <= before) return 0;
+    final deltaSeconds = (after - before) / 1000;
+    final deltaValue = track.sample(
+          after,
+          fallback: track.keyframes.first.value,
+        ) -
+        track.sample(
+          before,
+          fallback: track.keyframes.first.value,
+        );
+    return deltaValue / deltaSeconds;
+  }
+
+  double xAt(int timeMs) =>
+      plot.left +
+      timeMs.clamp(0, math.max(1, durationMs)) /
+          math.max(1, durationMs) *
+          plot.width;
+
+  double yAt(double value) =>
+      plot.bottom - (value - minimum) / (maximum - minimum) * plot.height;
+
+  Offset pointFor(int timeMs) =>
+      Offset(xAt(timeMs), yAt(graphValueAtTime(timeMs)));
+
+  double timeAt(Offset point) =>
+      ((point.dx - plot.left) / plot.width * math.max(1, durationMs))
+          .clamp(0, math.max(1, durationMs))
+          .toDouble();
+
+  double valueAt(Offset point) =>
+      maximum - (point.dy - plot.top) / plot.height * (maximum - minimum);
+
+  ScalarKeyframe? nearestKeyframe(
+    Offset position,
+    List<ScalarKeyframe> keyframes, {
+    double tolerance = 12,
+  }) {
+    ScalarKeyframe? nearest;
+    var distance = tolerance;
+    for (final keyframe in keyframes) {
+      final candidateDistance = (pointFor(keyframe.timeMs) - position).distance;
+      if (candidateDistance <= distance) {
+        nearest = keyframe;
+        distance = candidateDistance;
+      }
+    }
+    return nearest;
+  }
+}
+
 class _KeyframeGraphPainter extends CustomPainter {
   const _KeyframeGraphPainter({
     required this.track,
     required this.durationMs,
     required this.playheadMs,
+    required this.selectedKeyframeTimeMs,
+    required this.speedMode,
     required this.gridColor,
     required this.curveColor,
     required this.keyframeColor,
@@ -9089,6 +9365,8 @@ class _KeyframeGraphPainter extends CustomPainter {
   final KeyframeTrack track;
   final int durationMs;
   final int playheadMs;
+  final int? selectedKeyframeTimeMs;
+  final bool speedMode;
   final Color gridColor;
   final Color curveColor;
   final Color keyframeColor;
@@ -9114,31 +9392,15 @@ class _KeyframeGraphPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width < 40 || size.height < 30 || track.keyframes.isEmpty) return;
-    final plot = Rect.fromLTWH(
-      42,
-      8,
-      math.max(1, size.width - 54),
-      math.max(1, size.height - 28),
+    final geometry = _KeyframeGraphGeometry(
+      track: track,
+      durationMs: durationMs,
+      size: size,
+      speedMode: speedMode,
     );
+    final plot = geometry.plot;
     final frames = [...track.keyframes]
       ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
-    final values = frames.map((item) => item.value).toList();
-    var minimum = values.reduce((a, b) => a < b ? a : b);
-    var maximum = values.reduce((a, b) => a > b ? a : b);
-    if ((maximum - minimum).abs() < 0.000001) {
-      minimum -= 1;
-      maximum += 1;
-    } else {
-      final padding = (maximum - minimum) * 0.16;
-      minimum -= padding;
-      maximum += padding;
-    }
-    final valueRange = maximum - minimum;
-    final safeDuration = math.max(1, durationMs);
-    double xAt(int time) =>
-        plot.left + time.clamp(0, safeDuration) / safeDuration * plot.width;
-    double yAt(double value) =>
-        plot.bottom - (value - minimum) / valueRange * plot.height;
 
     final gridPaint = Paint()
       ..color = gridColor.withValues(alpha: 0.65)
@@ -9146,22 +9408,28 @@ class _KeyframeGraphPainter extends CustomPainter {
     for (var index = 0; index <= 4; index++) {
       final y = plot.top + plot.height * index / 4;
       canvas.drawLine(Offset(plot.left, y), Offset(plot.right, y), gridPaint);
-      final value = maximum - valueRange * index / 4;
-      _drawLabel(canvas, value.toStringAsFixed(2), Offset(2, y - 5), 36);
+      final value = geometry.maximum -
+          (geometry.maximum - geometry.minimum) * index / 4;
+      _drawLabel(
+        canvas,
+        speedMode ? value.toStringAsFixed(1) : value.toStringAsFixed(2),
+        Offset(2, y - 5),
+        36,
+      );
     }
     for (var index = 0; index <= 8; index++) {
       final x = plot.left + plot.width * index / 8;
       canvas.drawLine(Offset(x, plot.top), Offset(x, plot.bottom), gridPaint);
-      final seconds = (safeDuration * index / 8 / 1000).toStringAsFixed(1);
+      final seconds =
+          (math.max(1, durationMs) * index / 8 / 1000).toStringAsFixed(1);
       _drawLabel(canvas, seconds, Offset(x - 10, plot.bottom + 5), 24);
     }
 
     final curve = Path();
-    const segments = 120;
+    const segments = 180;
     for (var index = 0; index <= segments; index++) {
-      final time = (safeDuration * index / segments).round();
-      final value = track.sample(time, fallback: frames.first.value);
-      final point = Offset(xAt(time), yAt(value));
+      final time = (math.max(1, durationMs) * index / segments).round();
+      final point = geometry.pointFor(time);
       if (index == 0) {
         curve.moveTo(point.dx, point.dy);
       } else {
@@ -9177,26 +9445,27 @@ class _KeyframeGraphPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round,
     );
 
-    final diamondPaint = Paint()..color = keyframeColor;
     for (final frame in frames) {
-      final center = Offset(xAt(frame.timeMs), yAt(frame.value));
+      final center = geometry.pointFor(frame.timeMs);
+      final selected = frame.timeMs == selectedKeyframeTimeMs;
+      final radius = selected ? 6.0 : 4.2;
       final path = Path()
-        ..moveTo(center.dx, center.dy - 4)
-        ..lineTo(center.dx + 4, center.dy)
-        ..lineTo(center.dx, center.dy + 4)
-        ..lineTo(center.dx - 4, center.dy)
+        ..moveTo(center.dx, center.dy - radius)
+        ..lineTo(center.dx + radius, center.dy)
+        ..lineTo(center.dx, center.dy + radius)
+        ..lineTo(center.dx - radius, center.dy)
         ..close();
-      canvas.drawPath(path, diamondPaint);
+      canvas.drawPath(path, Paint()..color = keyframeColor);
       canvas.drawPath(
         path,
         Paint()
-          ..color = const Color(0xFF171D2A)
+          ..color = selected ? curveColor : const Color(0xFF171D2A)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 0.7,
+          ..strokeWidth = selected ? 1.6 : 0.7,
       );
     }
 
-    final playheadX = xAt(playheadMs);
+    final playheadX = geometry.xAt(playheadMs);
     canvas.drawLine(
       Offset(playheadX, plot.top),
       Offset(playheadX, plot.bottom),
@@ -9209,6 +9478,12 @@ class _KeyframeGraphPainter extends CustomPainter {
       3,
       Paint()..color = playheadColor,
     );
+    _drawLabel(
+      canvas,
+      speedMode ? 'VALUE / SEC' : 'VALUE',
+      const Offset(4, 1),
+      46,
+    );
   }
 
   @override
@@ -9216,6 +9491,8 @@ class _KeyframeGraphPainter extends CustomPainter {
       oldDelegate.track != track ||
       oldDelegate.durationMs != durationMs ||
       oldDelegate.playheadMs != playheadMs ||
+      oldDelegate.selectedKeyframeTimeMs != selectedKeyframeTimeMs ||
+      oldDelegate.speedMode != speedMode ||
       oldDelegate.gridColor != gridColor ||
       oldDelegate.curveColor != curveColor ||
       oldDelegate.keyframeColor != keyframeColor ||

@@ -980,4 +980,122 @@ void main() {
       controller.dispose();
     });
   });
+
+  test('graph keyframe updates preserve interpolation metadata and undo as one edit', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 5000,
+        frameRate: 25,
+        layers: [
+          CompositionLayer(
+            id: 'target',
+            name: 'Target',
+            kind: LayerKind.shape,
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'position.x',
+                keyframes: [
+                  ScalarKeyframe(
+                    timeMs: 400,
+                    value: 100,
+                    interpolation: Interpolation.cubicBezier,
+                    bezier: BezierCurve(x1: 0.2, y1: 0.3, x2: 0.8, y2: 0.9),
+                    metadata: {'host': 'after-effects', 'spatial': true},
+                  ),
+                  ScalarKeyframe(timeMs: 1600, value: 300),
+                ],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'target',
+      ),
+    );
+
+    controller.updateKeyframe('position.x', 400, 800, 220);
+    controller.updateKeyframe(
+      'position.x',
+      800,
+      900,
+      240,
+      recordHistory: false,
+    );
+
+    final keys = controller.selectedLayer!.keyframeTracks.single.keyframes;
+    expect(keys.first.timeMs, 900);
+    expect(keys.first.value, 240);
+    expect(keys.first.interpolation, Interpolation.cubicBezier);
+    expect(keys.first.bezier.x1, 0.2);
+    expect(keys.first.metadata['host'], 'after-effects');
+    expect(keys.last.timeMs, 1600);
+
+    controller.undo();
+    final restored = controller.selectedLayer!.keyframeTracks.single.keyframes;
+    expect(restored.first.timeMs, 400);
+    expect(restored.first.value, 100);
+  });
+
+  test('graph keyframe updates target effect and mask tracks independently', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 4000,
+        layers: [
+          CompositionLayer(
+            id: 'target',
+            name: 'Target',
+            kind: LayerKind.shape,
+            effects: [
+              EffectInstance(
+                id: 'blur',
+                effectId: 'gaussian_blur',
+                name: 'Blur',
+                keyframeTracks: [
+                  KeyframeTrack(
+                    property: 'sigma',
+                    keyframes: [
+                      ScalarKeyframe(timeMs: 500, value: 2),
+                      ScalarKeyframe(timeMs: 1500, value: 8),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+            masks: [
+              MaskModel(
+                id: 'mask-1',
+                name: 'Mask',
+                keyframeTracks: [
+                  KeyframeTrack(
+                    property: 'feather',
+                    keyframes: [
+                      ScalarKeyframe(timeMs: 500, value: 4),
+                      ScalarKeyframe(timeMs: 1500, value: 20),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'target',
+      ),
+    );
+
+    controller.updateKeyframe('sigma', 500, 700, 5, effectId: 'blur');
+    controller.updateKeyframe(
+      'feather',
+      500,
+      800,
+      9,
+      maskId: 'mask-1',
+    );
+
+    final layer = controller.selectedLayer!;
+    expect(layer.effects.single.keyframeTracks.single.keyframes.first.timeMs, 700);
+    expect(layer.effects.single.keyframeTracks.single.keyframes.first.value, 5);
+    expect(layer.masks.single.keyframeTracks.single.keyframes.first.timeMs, 800);
+    expect(layer.masks.single.keyframeTracks.single.keyframes.first.value, 9);
+    expect(layer.keyframeTracks, isEmpty);
+  });
+
 }

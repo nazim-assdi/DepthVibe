@@ -1381,6 +1381,114 @@ class CompositionController extends ChangeNotifier {
     }
   }
 
+  /// Moves one keyframe in time and value without changing its interpolation.
+  ///
+  /// The target time is constrained between neighbouring keys so a drag cannot
+  /// overwrite or reorder another keyframe. A complete drag can be recorded as
+  /// one undo step by setting [recordHistory] to false after its first update.
+  void updateKeyframe(
+    String property,
+    int fromTimeMs,
+    int toTimeMs,
+    double value, {
+    String? effectId,
+    String? maskId,
+    bool recordHistory = true,
+  }) {
+    final layer = selectedLayer;
+    if (layer == null || !value.isFinite) return;
+
+    final frameStepMs = math.max(
+      1,
+      (_document.frameRate <= 0
+          ? (1000 / 24).round()
+          : (1000 / _document.frameRate).round()),
+    );
+
+    KeyframeTrack update(KeyframeTrack track) {
+      if (track.property != property) return track;
+      final ordered = [...track.keyframes]
+        ..sort((a, b) => a.timeMs.compareTo(b.timeMs));
+      final orderedIndex = ordered.indexWhere(
+        (item) => item.timeMs == fromTimeMs,
+      );
+      if (orderedIndex < 0) return track;
+
+      final previous = orderedIndex > 0 ? ordered[orderedIndex - 1] : null;
+      final next = orderedIndex < ordered.length - 1
+          ? ordered[orderedIndex + 1]
+          : null;
+      final lowerBound = previous == null ? 0 : previous.timeMs + frameStepMs;
+      final upperBound = next == null
+          ? _document.durationMs
+          : next.timeMs - frameStepMs;
+      final targetTime = lowerBound > upperBound
+          ? fromTimeMs
+          : toTimeMs.clamp(lowerBound, upperBound).toInt();
+
+      final old = ordered[orderedIndex];
+      ordered[orderedIndex] = ScalarKeyframe(
+        timeMs: targetTime,
+        value: value,
+        interpolation: old.interpolation,
+        inTangent: old.inTangent,
+        outTangent: old.outTangent,
+        bezier: old.bezier,
+        metadata: old.metadata,
+      );
+      ordered.sort((a, b) => a.timeMs.compareTo(b.timeMs));
+      return KeyframeTrack(
+        property: track.property,
+        keyframes: ordered,
+        enabled: track.enabled,
+      );
+    }
+
+    if (effectId != null) {
+      final effects = layer.effects.map((effect) {
+        if (effect.id != effectId) return effect;
+        return effect.copyWith(
+          keyframeTracks: effect.keyframeTracks.map(update).toList(),
+        );
+      }).toList();
+      _replaceWithHistory(
+        layer.copyWith(effects: effects),
+        recordHistory: recordHistory,
+      );
+      return;
+    }
+
+    if (maskId != null) {
+      final masks = layer.masks.map((mask) {
+        if (mask.id != maskId) return mask;
+        return mask.copyWith(
+          keyframeTracks: mask.keyframeTracks.map(update).toList(),
+        );
+      }).toList();
+      _replaceWithHistory(
+        layer.copyWith(masks: masks),
+        recordHistory: recordHistory,
+      );
+      return;
+    }
+
+    _replaceWithHistory(
+      layer.copyWith(keyframeTracks: layer.keyframeTracks.map(update).toList()),
+      recordHistory: recordHistory,
+    );
+  }
+
+  void _replaceWithHistory(
+    CompositionLayer updated, {
+    required bool recordHistory,
+  }) {
+    _set(_document.copyWith(
+      layers: _document.layers
+          .map((layer) => layer.id == updated.id ? updated : layer)
+          .toList(),
+    ), recordHistory: recordHistory);
+  }
+
   void setInterpolation(
     String property,
     Interpolation interpolation, {
