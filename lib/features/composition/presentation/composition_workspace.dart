@@ -453,7 +453,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           // frame. Otherwise decode the exact requested frame immediately.
           if (pendingChunk != null) {
             try {
-              await pendingChunk;
+              // Reuse an almost-finished lookahead batch, but never let a
+              // background chunk hold the visible playhead for seconds.
+              await pendingChunk.timeout(
+                const Duration(milliseconds: 120),
+              );
+            } on TimeoutException {
+              // Keep the batch running in the background and decode only the
+              // requested visible frame below.
             } catch (error) {
               debugPrint('DepthVibe preview batch fallback: $error');
             }
