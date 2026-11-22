@@ -350,6 +350,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         laneId: laneId,
         cacheKey: diskKey,
         cacheFile: frame,
+        decodedFrameCount: chunkFrameCount,
         decode: () async {
           if (await frame.exists() && await frame.length() > 0) {
             return frame;
@@ -482,15 +483,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       decodeThreads: profile.previewDecodeConcurrency,
       prefetch: prefetch,
     ).then((frame) {
+      final chunkFrameCount = math.max(1, previewFps.round());
       if (frame != null &&
           !prefetch &&
+          frameIndex % chunkFrameCount == 0 &&
           _latestRequestedFrameKey[layer.id] == requestKey) {
         _lastVideoFrames[layer.id] = frame;
         unawaited(_trimPreviewCacheIfNeeded());
-        // Warm one frame ahead. If the playhead moves elsewhere, the
-        // scheduler replaces this pending request with the newest frame.
-        // Request the next one-second batch while the current batch is
-        // still being shown, giving the decoder real prefetch lead time.
+        // Prefetch one full batch ahead, but only once at the start of each
+        // chunk; otherwise every visible frame would replace the pending job.
         final nextTimeMs = timelineTimeMs + 1000;
         unawaited(
           _videoFrameFor(
@@ -1556,6 +1557,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     unawaited(_autosaveIfNeeded());
     _previewFrameService.dispose();
     _videoFrameJobs.clear();
+    _previewChunkJobs.clear();
     _lastVideoFrames.clear();
     _latestRequestedFrameKey.clear();
     _sourceStatJobs.clear();
