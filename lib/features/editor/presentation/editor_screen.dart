@@ -47,6 +47,7 @@ class _EditorScreenState extends State<EditorScreen> {
   bool _openingVideo = false;
   bool _profileChangedDuringOpen = false;
   bool _checkingFirstVideoFrame = false;
+  bool _primingPausedPreview = false;
   int _videoRendererFallbackStep = 0;
   final VideoExportService _exporter = const VideoExportService();
 
@@ -158,9 +159,9 @@ class _EditorScreenState extends State<EditorScreen> {
       await player.setRate(_editor.project.speed).timeout(
         const Duration(seconds: 5),
       );
-      await player.setVolume(_editor.project.muted ? 0 : 100).timeout(
-        const Duration(seconds: 5),
-      );
+      await player.setVolume(
+        _primingPausedPreview || _editor.project.muted ? 0 : 100,
+      ).timeout(const Duration(seconds: 5));
       if (resumePosition > Duration.zero) {
         await player.seek(resumePosition).timeout(
           const Duration(seconds: 8),
@@ -238,6 +239,18 @@ class _EditorScreenState extends State<EditorScreen> {
           });
         }
         await _reconfigureVideoPreview();
+        if (mounted && _playbackAvailable) {
+          await WidgetsBinding.instance.endOfFrame;
+          final nextController = _videoController;
+          if (nextController != null &&
+              !identical(nextController, controller)) {
+            // The first controller's post-frame callback can run while this
+            // verification still owns the guard. Recheck the replacement
+            // explicitly after it has mounted.
+            _checkingFirstVideoFrame = false;
+            await _verifyFirstVideoFrame(nextController);
+          }
+        }
       } else if (mounted) {
         _previewError =
             'The selected video renderer did not produce a frame. '
@@ -246,15 +259,40 @@ class _EditorScreenState extends State<EditorScreen> {
           _playbackAvailable = false;
           _status = 'Video preview could not render the first frame';
         });
+        await _stopFailedVideoPreview();
       }
     } finally {
       _checkingFirstVideoFrame = false;
     }
   }
 
+  Future<void> _stopFailedVideoPreview() async {
+    final player = _player;
+    if (player == null) return;
+    try {
+      await player.pause().timeout(const Duration(seconds: 5));
+      await player.setVolume(_editor.project.muted ? 0 : 100).timeout(
+        const Duration(seconds: 3),
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        'DepthVibe could not stop failed preview output: '
+        '$error\\n$stackTrace',
+      );
+    }
+  }
+
   Future<void> _primePausedVideoPreview() async {
     if (!mounted || !_playbackAvailable || _player == null) return;
+    _primingPausedPreview = true;
+    try {
+      await _primePausedVideoPreviewFrames();
+    } finally {
+      _primingPausedPreview = false;
+    }
+  }
 
+  Future<void> _primePausedVideoPreviewFrames() async {
     // Build the Video widget and its native output surface before requesting
     // the first rendered frame. Keep audio muted while warming the surface.
     await WidgetsBinding.instance.endOfFrame;
