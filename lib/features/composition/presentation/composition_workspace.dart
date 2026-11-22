@@ -56,6 +56,7 @@ import '../engine/cube_lut_validator.dart';
 import '../engine/motion_tracking_service.dart';
 import '../engine/transition_frame_validator.dart';
 import '../engine/preview_frame_service.dart';
+import '../engine/preview_proxy_service.dart';
 import 'text_layer_content_editor.dart';
 import 'color_wheel_control.dart';
 import 'color_curve_editor.dart';
@@ -89,6 +90,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   final Map<String, Future<ObjMesh>> _meshJobs = {};
   final Map<String, Future<void>> _previewChunkJobs = {};
   Future<void> _previewChunkTail = Future<void>.value();
+  final PreviewProxyService _previewProxyService = PreviewProxyService();
+  final Set<String> _previewProxyRequests = {};
   final PreviewFrameService _previewFrameService = PreviewFrameService(
     maxConcurrentDecodes: DepthVibeSettingsService
         .instance.performanceMode.previewDecodeConcurrency,
@@ -424,8 +427,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       final fingerprint =
           '${path.hashCode.toUnsigned(32)}_${stat.size}_'
           '${stat.modified.microsecondsSinceEpoch}';
+      final profile = DepthVibeSettingsService.instance.performanceMode;
+      final proxy = await _previewProxyService.findCachedProxy(
+        sourcePath: path,
+        width: profile.previewFrameWidth,
+        frameRate: profile.previewFrameRate,
+      );
+      final decodePath = proxy?.path ?? path;
+      final decodeFingerprint = '${fingerprint}_${proxy == null ? 'source' : 'proxy'}';
       final diskKey = _previewFrameDiskKey(
-        fingerprint: fingerprint,
+        fingerprint: decodeFingerprint,
         frameIndex: frameIndex,
         frameRate: previewFrameRate,
         width: width,
@@ -434,7 +445,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       final chunkFrameCount = math.max(1, previewFrameRate.round());
       final chunkStartFrame =
           (frameIndex ~/ chunkFrameCount) * chunkFrameCount;
-      final chunkKey = '${fingerprint}_${chunkStartFrame}_'
+      final chunkKey = '${decodeFingerprint}_${chunkStartFrame}_'
           '${previewFrameRate.toStringAsFixed(1)}_${width}';
       final pendingChunk = _previewChunkJobs[chunkKey];
       String? decodeFailure;
@@ -473,7 +484,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           final File? completedFrame;
           try {
             completedFrame = await _decodeSinglePreviewFrame(
-              path: path,
+              path: decodePath,
               seekMs: seekMs,
               frame: frame,
               width: width,
@@ -492,9 +503,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             unawaited(
               Future<void>.delayed(const Duration(milliseconds: 24))
                   .then((_) => _ensurePreviewFrameChunk(
-                        path: path,
+                        path: decodePath,
                         cacheDirectory: cacheDirectory,
-                        fingerprint: fingerprint,
+                        fingerprint: decodeFingerprint,
                         chunkStartFrame: chunkStartFrame,
                         chunkFrameCount: chunkFrameCount,
                         frameRate: previewFrameRate,
@@ -593,6 +604,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           !prefetch && _latestRequestedFrameKey[layer.id] == requestKey;
       if (isLatestVisibleFrame) {
         _previewFrameErrors.remove(layer.id);
+        if (_previewPlaying) _schedulePreviewProxy(path);
         // Keep every successfully decoded playhead frame as the visible
         // fallback while a later frame is loading or being retried.
         _lastVideoFrames[layer.id] = frame;
@@ -624,6 +636,31 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       _sourceStatJobs.remove(_sourceStatJobs.keys.first);
     }
     return job;
+  }
+
+  void _schedulePreviewProxy(String sourcePath) {
+    final profile = DepthVibeSettingsService.instance.performanceMode;
+    final requestKey =
+        '$sourcePath|${profile.previewFrameWidth}|${profile.previewFrameRate}';
+    if (!_previewProxyRequests.add(requestKey)) return;
+    unawaited(
+      Future<void>.delayed(const Duration(seconds: 2)).then((_) {
+        if (!mounted || !_previewPlaying) return null;
+        return _previewProxyService.queueProxy(
+          sourcePath: sourcePath,
+          width: profile.previewFrameWidth,
+          frameRate: profile.previewFrameRate,
+        );
+      }).then((proxy) {
+        if (proxy == null) {
+          debugPrint('DepthVibe preview proxy unavailable; original source remains active.');
+        } else {
+          debugPrint('DepthVibe preview proxy ready: ${proxy.path}');
+        }
+      }).catchError((Object error) {
+        debugPrint('DepthVibe preview proxy generation skipped: $error');
+      }),
+    );
   }
 
   void _retryVideoPreview(CompositionLayer layer) {
@@ -1680,6 +1717,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_autosaveIfNeeded());
     _previewFrameService.dispose();
+    _previewProxyService.dispose();
+    _previewProxyRequests.clear();
     _videoFrameJobs.clear();
     _previewChunkJobs.clear();
     _lastVideoFrames.clear();
