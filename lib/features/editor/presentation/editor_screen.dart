@@ -46,6 +46,8 @@ class _EditorScreenState extends State<EditorScreen> {
   bool _reconfiguringPreview = false;
   bool _openingVideo = false;
   bool _profileChangedDuringOpen = false;
+  bool _checkingFirstVideoFrame = false;
+  int _videoRendererFallbackStep = 0;
   final VideoExportService _exporter = const VideoExportService();
 
   StreamSubscription<Duration>? _durationSubscription;
@@ -96,6 +98,10 @@ class _EditorScreenState extends State<EditorScreen> {
   void _onPreviewSettingsChanged() {
     if (!mounted) return;
     final profile = DepthVibeSettingsService.instance.performanceMode;
+    if (_videoControllerProfile != null &&
+        _videoControllerProfile != profile) {
+      _videoRendererFallbackStep = 0;
+    }
     if (_openingVideo &&
         _videoControllerProfile != null &&
         _videoControllerProfile != profile) {
@@ -198,6 +204,54 @@ class _EditorScreenState extends State<EditorScreen> {
     }
   }
 
+  Future<void> _verifyFirstVideoFrame(VideoController controller) async {
+    if (_checkingFirstVideoFrame) return;
+    _checkingFirstVideoFrame = true;
+    try {
+      await controller.waitUntilFirstFrameRendered.timeout(
+        const Duration(seconds: 8),
+      );
+      if (!mounted || !identical(_videoController, controller)) return;
+      if (_videoRendererFallbackStep > 0) {
+        setState(() {
+          _status = 'Video preview recovered with alternate renderer';
+        });
+      }
+    } catch (error, stackTrace) {
+      if (!mounted ||
+          !identical(_videoController, controller) ||
+          _player?.state.playing != true) {
+        return;
+      }
+      debugPrint(
+        'DepthVibe first video frame was not rendered: $error\\n$stackTrace',
+      );
+      if (_videoRendererFallbackStep == 0) {
+        final profile = DepthVibeSettingsService.instance.performanceMode;
+        _videoRendererFallbackStep =
+            profile.enableVideoHardwareAcceleration ? 1 : 2;
+        if (mounted) {
+          setState(() {
+            _status = _videoRendererFallbackStep == 1
+                ? 'Video surface stalled; switching to CPU renderer…'
+                : 'CPU video surface stalled; switching to GPU renderer…';
+          });
+        }
+        await _reconfigureVideoPreview();
+      } else if (mounted) {
+        _previewError =
+            'The selected video renderer did not produce a frame. '
+            'Try another Performance mode or reload this video.';
+        setState(() {
+          _playbackAvailable = false;
+          _status = 'Video preview could not render the first frame';
+        });
+      }
+    } finally {
+      _checkingFirstVideoFrame = false;
+    }
+  }
+
   VideoController? _videoControllerForPreview() {
     final player = _player;
     if (player == null || !_playbackAvailable || _reconfiguringPreview) {
@@ -214,8 +268,16 @@ class _EditorScreenState extends State<EditorScreen> {
     _videoController = VideoController(
       player,
       configuration: VideoControllerConfiguration(
-        enableHardwareAcceleration: profile.enableVideoHardwareAcceleration,
-        hwdec: profile.videoHardwareDecoder,
+        enableHardwareAcceleration: switch (_videoRendererFallbackStep) {
+          1 => false,
+          2 => true,
+          _ => profile.enableVideoHardwareAcceleration,
+        },
+        hwdec: switch (_videoRendererFallbackStep) {
+          1 => 'no',
+          2 => 'auto-safe',
+          _ => profile.videoHardwareDecoder,
+        },
         scale: profile.videoOutputScale,
       ),
     );
@@ -253,6 +315,7 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Future<void> _openVideo(String path) async {
     _currentVideoPath = path;
+    _videoRendererFallbackStep = 0;
     _openingVideo = true;
     _profileChangedDuringOpen = false;
     _editor.loadVideo(path);
@@ -771,6 +834,10 @@ class _EditorScreenState extends State<EditorScreen> {
                       await activePlayer.pause();
                     } else {
                       await activePlayer.play();
+                      final controller = _videoController;
+                      if (controller != null) {
+                        unawaited(_verifyFirstVideoFrame(controller));
+                      }
                     }
                     if (mounted) setState(() {});
                   } catch (error) {
@@ -822,6 +889,36 @@ class _EditorScreenState extends State<EditorScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(color: palette.secondaryText, fontSize: 11),
             ),
+            if (_currentVideoPath != null) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _reconfiguringPreview
+                        ? null
+                        : () => _openVideo(_currentVideoPath!),
+                    icon: const Icon(Icons.refresh, size: 15),
+                    label: const Text('RETRY PREVIEW'),
+                  ),
+                  TextButton(
+                    onPressed: _reconfiguringPreview
+                        ? null
+                        : () {
+                            final profile =
+                                DepthVibeSettingsService.instance.performanceMode;
+                            _videoRendererFallbackStep =
+                                _videoRendererFallbackStep == 1 ? 2 : 1;
+                            _videoControllerProfile = profile;
+                            unawaited(_reconfigureVideoPreview());
+                          },
+                    child: const Text('SWITCH RENDERER'),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
