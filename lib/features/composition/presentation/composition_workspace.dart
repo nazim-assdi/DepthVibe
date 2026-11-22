@@ -749,6 +749,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   String _workspacePreset = 'Standard';
   String? _graphTrackLabel;
   bool _graphEditorVisible = false;
+  bool _showCanvasGrid = true;
   double _leftPanelWidth = 260;
   double _rightPanelWidth = 410;
   final Set<String> _expandedTimelineLayers = {};
@@ -2198,28 +2199,105 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
   Widget _buildLayerToolbar() {
-    return SizedBox(
-      height: 66,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return Container(
+      height: 38,
+      decoration: BoxDecoration(
+        color: palette.toolbar,
+        border: Border(bottom: BorderSide(color: palette.border)),
+      ),
+      child: Row(
         children: [
-          for (final entry in _layerButtons)
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: Tooltip(
-                message: 'Add ${entry.$2} layer',
-                child: OutlinedButton.icon(
-                  onPressed: _rendering ? null : () => _addLayer(entry.$1),
-                  icon: Icon(entry.$3, size: 16),
-                  label: Text(entry.$2),
-                ),
+          Expanded(
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              children: [
+                for (final entry in _layerButtons)
+                  Tooltip(
+                    message: 'Create ${entry.$2} layer',
+                    child: IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.all(6),
+                      constraints: const BoxConstraints(
+                        minWidth: 30,
+                        minHeight: 30,
+                      ),
+                      onPressed: _rendering ? null : () => _addLayer(entry.$1),
+                      icon: Icon(entry.$3, size: 16),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          VerticalDivider(width: 1, color: palette.border),
+          Tooltip(
+            message: 'Import Photoshop PSD / PSB layers',
+            child: IconButton(
+              visualDensity: VisualDensity.compact,
+              onPressed: _importPhotoshop,
+              icon: const Icon(Icons.photo_library_outlined, size: 16),
+            ),
+          ),
+          const SizedBox(width: 5),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompositionViewerBar(
+    CompositionDocument document,
+    bool hasCamera,
+  ) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return Container(
+      height: 31,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: palette.toolbar,
+        border: Border(bottom: BorderSide(color: palette.border)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.movie_creation_outlined, size: 14),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              'Composition: ${document.name}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: palette.primaryText,
               ),
             ),
-          OutlinedButton.icon(
-            onPressed: _importPhotoshop,
-            icon: const Icon(Icons.layers, size: 16),
-            label: const Text('Import PSD'),
+          ),
+          Text(
+            hasCamera ? 'ACTIVE CAMERA' : 'ACTIVE VIEW',
+            style: TextStyle(
+              fontSize: 8,
+              letterSpacing: 0.55,
+              color: palette.secondaryText,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            '${document.width} × ${document.height}',
+            style: TextStyle(fontSize: 8, color: palette.secondaryText),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+            tooltip: _showCanvasGrid ? 'Hide transparency grid' : 'Show transparency grid',
+            onPressed: () => setState(() => _showCanvasGrid = !_showCanvasGrid),
+            icon: Icon(
+              _showCanvasGrid ? Icons.grid_on : Icons.grid_off,
+              size: 14,
+              color: _showCanvasGrid ? palette.accent : palette.secondaryText,
+            ),
           ),
         ],
       ),
@@ -2674,6 +2752,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       padding: const EdgeInsets.all(18),
       child: Column(
         children: [
+          _buildCompositionViewerBar(
+            doc,
+            cameraLayer != null,
+          ),
           Expanded(
             child: Center(
               child: AspectRatio(
@@ -2693,7 +2775,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          const CustomPaint(painter: _CanvasGridPainter()),
+                          if (_showCanvasGrid)
+                            const CustomPaint(painter: _CanvasGridPainter()),
                           for (final layer in ordered)
                             _buildLayerVisual(
                               layer,
