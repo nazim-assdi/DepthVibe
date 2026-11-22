@@ -92,6 +92,11 @@ class PreviewFrameService {
     _fastDecodeStreak = 0;
   }
 
+  /// Feed Flutter build+raster time into the same adaptive quality governor.
+  void recordUiFrameDuration(Duration duration) {
+    recordDecodeDuration(duration);
+  }
+
   /// Feed measured native decode time back into the adaptive preview profile.
   /// Five slow frames lower quality; forty fast frames restore it gradually.
   void recordDecodeDuration(Duration duration) {
