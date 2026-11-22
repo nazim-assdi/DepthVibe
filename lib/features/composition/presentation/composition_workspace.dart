@@ -799,6 +799,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   bool _previewMotionHistoryRecorded = false;
   String? _previewShapeLayerId;
   int? _previewShapeVertexIndex;
+  int? _selectedShapeVertexIndex;
   String _previewShapeComponent = 'anchor';
   Offset _previewShapeLastGlobal = Offset.zero;
   bool _previewShapeHistoryRecorded = false;
@@ -3602,6 +3603,141 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  void _selectShapePathVertex(int index) {
+    setState(() => _selectedShapeVertexIndex = index);
+  }
+
+  bool _shapePathIsAnimated(CompositionLayer layer) =>
+      layer.keyframeTracks.any(
+        (track) => track.property.startsWith('shape.vertex.'),
+      );
+
+  void _deleteSelectedShapePathVertex(CompositionLayer layer) {
+    final index = _selectedShapeVertexIndex;
+    if (index == null) {
+      setState(() => _notice = 'Select a path vertex before deleting it.');
+      return;
+    }
+    if (_controller.removeShapePathVertex(index)) {
+      setState(() {
+        _selectedShapeVertexIndex = null;
+        _activePreviewTool = 'Shape';
+        _notice = 'Path vertex deleted.';
+      });
+    } else {
+      setState(() {
+        _notice = _shapePathIsAnimated(layer)
+            ? 'Vertex count is locked while this path has keyframes.'
+            : 'The path needs at least two open or three closed vertices.';
+      });
+    }
+  }
+
+  void _toggleSelectedShapePathVertex(CompositionLayer layer) {
+    final index = _selectedShapeVertexIndex;
+    if (index == null) {
+      setState(() => _notice = 'Select a path vertex before converting it.');
+      return;
+    }
+    if (_controller.toggleShapeVertexSmooth(index)) {
+      final selected = _controller.selectedLayer?.shapeStyle?.pathVertices;
+      final smooth = selected != null &&
+          index < selected.length &&
+          selected[index].smooth;
+      setState(() {
+        _activePreviewTool = 'Shape';
+        _notice = smooth
+            ? 'Vertex converted to Smooth.'
+            : 'Vertex converted to Corner.';
+      });
+    }
+  }
+
+  void _addShapePathVertexAt(
+    CompositionLayer layer,
+    Offset position,
+    Size size,
+  ) {
+    if (_activePreviewTool != 'AddVertex') return;
+    final style = layer.shapeStyle ?? const ShapeStyle();
+    if (style.primitive != ShapePrimitive.path || style.pathVertices.length < 2) {
+      return;
+    }
+    if (_shapePathIsAnimated(layer)) {
+      setState(() => _notice = 'Add/Delete is disabled while path keyframes exist.');
+      return;
+    }
+
+    final vertices = style.pathVertices;
+    final segmentCount =
+        style.pathClosed ? vertices.length : vertices.length - 1;
+    var nearestDistance = double.infinity;
+    var nearestSegment = -1;
+    var nearestTime = 0.5;
+    const samples = 80;
+
+    for (var segment = 0; segment < segmentCount; segment++) {
+      final next = (segment + 1) % vertices.length;
+      final start = vertices[segment];
+      final end = vertices[next];
+      final p0 = Offset(
+        start.anchor.x * size.width,
+        start.anchor.y * size.height,
+      );
+      final p1 = Offset(
+        (start.anchor.x + start.outHandle.x) * size.width,
+        (start.anchor.y + start.outHandle.y) * size.height,
+      );
+      final p2 = Offset(
+        (end.anchor.x + end.inHandle.x) * size.width,
+        (end.anchor.y + end.inHandle.y) * size.height,
+      );
+      final p3 = Offset(
+        end.anchor.x * size.width,
+        end.anchor.y * size.height,
+      );
+
+      for (var step = 1; step < samples; step++) {
+        final t = step / samples;
+        final inverse = 1 - t;
+        final point = Offset(
+          inverse * inverse * inverse * p0.dx +
+              3 * inverse * inverse * t * p1.dx +
+              3 * inverse * t * t * p2.dx +
+              t * t * t * p3.dx,
+          inverse * inverse * inverse * p0.dy +
+              3 * inverse * inverse * t * p1.dy +
+              3 * inverse * t * t * p2.dy +
+              t * t * t * p3.dy,
+        );
+        final distance = (point - position).distance;
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestSegment = segment;
+          nearestTime = t;
+        }
+      }
+    }
+
+    if (nearestSegment < 0 || nearestDistance > 18 / _previewZoom) {
+      setState(() => _notice = 'Click close to a path segment to add a vertex.');
+      return;
+    }
+    final inserted = _controller.insertShapePathVertex(
+      nearestSegment,
+      t: nearestTime,
+    );
+    if (inserted == null) {
+      setState(() => _notice = 'Could not insert this vertex.');
+      return;
+    }
+    setState(() {
+      _selectedShapeVertexIndex = inserted;
+      _activePreviewTool = 'Shape';
+      _notice = 'Vertex added to the Bezier path.';
+    });
+  }
+
   Offset _shapePathPointPosition(
     MaskVertex vertex,
     String component,
@@ -3674,13 +3810,42 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         .toDouble();
     final propertyX = 'shape.vertex.$index.$component.x';
     final propertyY = 'shape.vertex.$index.$component.y';
-    final existingKeyframes = currentLayer.keyframeTracks.any(
-      (track) => track.property == propertyX || track.property == propertyY,
-    );
+    final updates = <String, double>{
+      propertyX: x,
+      propertyY: y,
+    };
 
+    Vector2? alignedOpposite;
+    if (vertex.smooth && component != 'anchor') {
+      final moved = Vector2(x, y);
+      final opposite = component == 'inHandle'
+          ? vertex.outHandle
+          : vertex.inHandle;
+      final movedLength = math.sqrt(moved.x * moved.x + moved.y * moved.y);
+      final oppositeLength =
+          math.sqrt(opposite.x * opposite.x + opposite.y * opposite.y);
+      if (movedLength > 0.000001) {
+        final targetLength =
+            oppositeLength > 0.000001 ? oppositeLength : movedLength;
+        alignedOpposite = Vector2(
+          -moved.x / movedLength * targetLength,
+          -moved.y / movedLength * targetLength,
+        );
+        final oppositeComponent =
+            component == 'inHandle' ? 'outHandle' : 'inHandle';
+        updates['shape.vertex.$index.$oppositeComponent.x'] =
+            alignedOpposite.x;
+        updates['shape.vertex.$index.$oppositeComponent.y'] =
+            alignedOpposite.y;
+      }
+    }
+
+    final existingKeyframes = currentLayer.keyframeTracks.any(
+      (track) => updates.keys.contains(track.property),
+    );
     if (_autoKeyEnabled || existingKeyframes) {
       _controller.updateTransformValues(
-        {propertyX: x, propertyY: y},
+        updates,
         autoKey: _autoKeyEnabled || existingKeyframes,
         recordHistory: !_previewShapeHistoryRecorded,
       );
@@ -3688,8 +3853,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       final vertices = [...baseStyle.pathVertices];
       final updated = switch (component) {
         'anchor' => vertex.copyWith(anchor: Vector2(x, y)),
-        'inHandle' => vertex.copyWith(inHandle: Vector2(x, y)),
-        _ => vertex.copyWith(outHandle: Vector2(x, y)),
+        'inHandle' => vertex.copyWith(
+            inHandle: Vector2(x, y),
+            outHandle: alignedOpposite ?? vertex.outHandle,
+          ),
+        _ => vertex.copyWith(
+            outHandle: Vector2(x, y),
+            inHandle: alignedOpposite ?? vertex.inHandle,
+          ),
       };
       vertices[index] = updated;
       _controller.setShapeStyle(
@@ -3717,9 +3888,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       return const SizedBox.shrink();
     }
     final vertices = style.pathVertices;
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTapUp: _activePreviewTool == 'AddVertex'
+          ? (details) => _addShapePathVertexAt(
+                layer,
+                details.localPosition,
+                size,
+              )
+          : null,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
         Positioned.fill(
           child: IgnorePointer(
             child: CustomPaint(
@@ -3731,7 +3911,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ),
           ),
         ),
-        if (_activePreviewTool == 'Shape')
+        if (_activePreviewTool == 'Shape' ||
+            _activePreviewTool == 'DeleteVertex' ||
+            _activePreviewTool == 'ConvertVertex')
           for (var index = 0; index < vertices.length; index++) ...[
             Positioned(
               left: _shapePathPointPosition(vertices[index], 'anchor', size).dx - 7,
@@ -3740,6 +3922,17 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               height: 14,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  if (_activePreviewTool == 'DeleteVertex') {
+                    _selectShapePathVertex(index);
+                    _deleteSelectedShapePathVertex(layer);
+                  } else if (_activePreviewTool == 'ConvertVertex') {
+                    _selectShapePathVertex(index);
+                    _toggleSelectedShapePathVertex(layer);
+                  } else {
+                    _selectShapePathVertex(index);
+                  }
+                },
                 onPanStart: (details) => _beginPreviewShapeVertex(
                   layer,
                   index,
@@ -3756,7 +3949,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 onPanCancel: _endPreviewShapeVertex,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: _selectedShapeVertexIndex == index
+                        ? const Color(0xFF6E83FF)
+                        : Colors.white,
                     border: Border.all(color: const Color(0xFF536DFF), width: 2),
                     borderRadius: BorderRadius.circular(2),
                   ),
@@ -3797,7 +3992,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   ),
                 ),
           ],
-      ],
+        ],
+      ),
     );
   }
 
@@ -4325,6 +4521,45 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   }
                 },
               ),
+              if (_controller.selectedLayer?.kind == LayerKind.shape &&
+                  _controller.selectedLayer?.shapeStyle?.primitive ==
+                      ShapePrimitive.path) ...[
+                _toolChip(
+                  'Add Point',
+                  Icons.add_circle_outline,
+                  _activePreviewTool == 'AddVertex',
+                  onTap: () {
+                    final layer = _controller.selectedLayer!;
+                    if (_shapePathIsAnimated(layer)) {
+                      setState(() => _notice =
+                          'Add Point is disabled while path keyframes exist.');
+                    } else {
+                      setState(() {
+                        _activePreviewTool = 'AddVertex';
+                        _notice = 'Click a path segment to insert a vertex.';
+                      });
+                    }
+                  },
+                ),
+                _toolChip(
+                  'Delete',
+                  Icons.remove_circle_outline,
+                  _activePreviewTool == 'DeleteVertex',
+                  onTap: () => setState(() {
+                    _activePreviewTool = 'DeleteVertex';
+                    _notice = 'Click a path vertex to delete it.';
+                  }),
+                ),
+                _toolChip(
+                  'Corner / Smooth',
+                  Icons.account_tree_outlined,
+                  _activePreviewTool == 'ConvertVertex',
+                  onTap: () => setState(() {
+                    _activePreviewTool = 'ConvertVertex';
+                    _notice = 'Click a path vertex to toggle Corner / Smooth.';
+                  }),
+                ),
+              ],
               _toolChip(
                 'Pen',
                 Icons.gesture,
