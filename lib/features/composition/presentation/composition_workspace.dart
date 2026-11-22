@@ -533,13 +533,17 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final requestKey =
         '${path.hashCode.toUnsigned(32)}_${layer.id}_'
         '${frameIndex}_${width}_${previewFps.toStringAsFixed(1)}';
+    // A prefetch completion must not be reused as the visible job because the
+    // visible consumer also updates the layer's last-known-good frame state.
+    // The lower decode/cache layer still deduplicates the same source frame.
+    final jobMapKey = prefetch ? '${requestKey}_prefetch' : requestKey;
 
     if (!prefetch) {
       _latestRequestedFrameKey[layer.id] = requestKey;
     }
-    final existing = _videoFrameJobs.remove(requestKey);
+    final existing = _videoFrameJobs.remove(jobMapKey);
     if (existing != null) {
-      _videoFrameJobs[requestKey] = existing;
+      _videoFrameJobs[jobMapKey] = existing;
       return existing;
     }
 
@@ -591,7 +595,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       return frame;
     });
 
-    _videoFrameJobs[requestKey] = job;
+    _videoFrameJobs[jobMapKey] = job;
     while (_videoFrameJobs.length > 96) {
       _videoFrameJobs.remove(_videoFrameJobs.keys.first);
     }
