@@ -69,6 +69,7 @@ class PreviewFrameService {
   final Map<String, _PendingPreviewFrame> _pendingByLane = {};
   final Map<String, _PendingPreviewFrame> _pendingByKey = {};
   final Map<String, Future<File?>> _activeByKey = {};
+  final Map<String, int> _latestRequestTokenByLane = {};
 
   int get maxConcurrentDecodes => _maxConcurrentDecodes;
   int get effectivePreviewWidth => _effectivePreviewWidth;
@@ -181,10 +182,17 @@ class PreviewFrameService {
     int decodedFrameCount = 1,
   }) async {
     if (_disposed) return null;
+    final requestToken =
+        (_latestRequestTokenByLane[laneId] ?? 0) + 1;
+    _latestRequestTokenByLane[laneId] = requestToken;
 
     final inMemory = _cache.remove(cacheKey);
     if (inMemory != null) {
       if (await inMemory.file.exists()) {
+        if (_latestRequestTokenByLane[laneId] != requestToken) {
+          _droppedRequests++;
+          return null;
+        }
         _cache[cacheKey] = inMemory;
         _cacheHits++;
         return inMemory.file;
@@ -204,6 +212,10 @@ class PreviewFrameService {
     // in-memory LRU entry has been evicted.
     try {
       if (await cacheFile.exists() && await cacheFile.length() > 0) {
+        if (_latestRequestTokenByLane[laneId] != requestToken) {
+          _droppedRequests++;
+          return null;
+        }
         await _remember(cacheKey, cacheFile);
         _cacheHits++;
         return cacheFile;
@@ -213,6 +225,14 @@ class PreviewFrameService {
       try {
         if (await cacheFile.exists()) await cacheFile.delete();
       } catch (_) {}
+    }
+
+    // Drop requests whose disk lookup completed after a newer frame was
+    // requested for the same layer. Without this token check, a slow cache
+    // read could enqueue an old playhead frame after the newest frame.
+    if (_latestRequestTokenByLane[laneId] != requestToken) {
+      _droppedRequests++;
+      return null;
     }
 
     // Another caller may have scheduled this frame while the disk-cache
@@ -333,6 +353,7 @@ class PreviewFrameService {
     _pending.clear();
     _pendingByLane.clear();
     _pendingByKey.clear();
+    _latestRequestTokenByLane.clear();
     _cache.clear();
     _cachedBytes = 0;
   }
