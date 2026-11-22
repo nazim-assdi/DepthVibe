@@ -32,7 +32,7 @@ class PreviewFrameService {
     int maxConcurrentDecodes = 1,
     this.maxCachedFrames = 120,
     this.maxCacheBytes = 96 * 1024 * 1024,
-  }) : _maxConcurrentDecodes = maxConcurrentDecodes.clamp(1, 3);
+  }) : _maxConcurrentDecodes = maxConcurrentDecodes.clamp(1, 3).toInt();
 
   final int maxCachedFrames;
   final int maxCacheBytes;
@@ -55,7 +55,7 @@ class PreviewFrameService {
   int get maxConcurrentDecodes => _maxConcurrentDecodes;
 
   set maxConcurrentDecodes(int value) {
-    _maxConcurrentDecodes = value.clamp(1, 3);
+    _maxConcurrentDecodes = value.clamp(1, 3).toInt();
     _pump();
   }
 
@@ -83,7 +83,7 @@ class PreviewFrameService {
         _cacheHits++;
         return inMemory.file;
       }
-      _cachedBytes = (_cachedBytes - inMemory.bytes).clamp(0, 1 << 62);
+      _cachedBytes = (_cachedBytes - inMemory.bytes).clamp(0, 1 << 62).toInt();
     }
 
     // The disk cache survives a widget rebuild and can be reused after the
@@ -110,7 +110,6 @@ class PreviewFrameService {
     final task = _PendingPreviewFrame(
       laneId: laneId,
       key: cacheKey,
-      cacheFile: cacheFile,
       decode: decode,
     );
 
@@ -164,14 +163,13 @@ class PreviewFrameService {
         }
       }
       if (!task.completer.isCompleted) task.completer.complete(result);
-    } catch (error, stackTrace) {
+    } catch (_) {
       // Preview failures are recoverable: preserve the previous frame and keep
       // the editor responsive rather than failing the whole composition.
       if (!task.completer.isCompleted) task.completer.complete(null);
-      Zone.current.handleUncaughtError(error, stackTrace);
     } finally {
       _activeByKey.remove(task.key);
-      _activeCount = (_activeCount - 1).clamp(0, 1 << 30);
+      _activeCount = (_activeCount - 1).clamp(0, 1 << 30).toInt();
       _pump();
     }
   }
@@ -186,7 +184,7 @@ class PreviewFrameService {
     }
     final previous = _cache.remove(key);
     if (previous != null) {
-      _cachedBytes = (_cachedBytes - previous.bytes).clamp(0, 1 << 62);
+      _cachedBytes = (_cachedBytes - previous.bytes).clamp(0, 1 << 62).toInt();
     }
     _cache[key] = _PreviewFrameCacheEntry(file, bytes);
     _cachedBytes += bytes;
@@ -197,7 +195,7 @@ class PreviewFrameService {
       // A single oversized frame is still useful; keep it as the only entry.
       if (_cache.length == 1) break;
       final oldest = _cache.remove(oldestKey)!;
-      _cachedBytes = (_cachedBytes - oldest.bytes).clamp(0, 1 << 62);
+      _cachedBytes = (_cachedBytes - oldest.bytes).clamp(0, 1 << 62).toInt();
       try {
         if (oldest.file.path != file.path && await oldest.file.exists()) {
           await oldest.file.delete();
@@ -239,7 +237,6 @@ class _PendingPreviewFrame {
 
   final String laneId;
   final String key;
-  final File cacheFile;
   final PreviewFrameDecoder decode;
   final Completer<File?> completer = Completer<File?>();
 }
