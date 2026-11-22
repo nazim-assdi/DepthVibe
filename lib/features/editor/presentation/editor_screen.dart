@@ -281,7 +281,15 @@ class _EditorScreenState extends State<EditorScreen> {
         scale: profile.videoOutputScale,
       ),
     );
-    return _videoController;
+    final controller = _videoController!;
+    if (player.state.playing) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && identical(_videoController, controller)) {
+          unawaited(_verifyFirstVideoFrame(controller));
+        }
+      });
+    }
+    return controller;
   }
 
   Future<Duration?> _probeMediaDuration(String path) async {
