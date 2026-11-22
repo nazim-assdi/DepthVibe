@@ -301,6 +301,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   double _trackingThreshold = 0.30;
   bool _stabilizeTracking = true;
   bool _rendering = false;
+  bool _previewPlaying = false;
+  Timer? _previewPlaybackTimer;
   double _renderProgress = 0;
   CompositionExportCancellation? _renderCancellation;
   String _panel = 'Layers';
@@ -723,6 +725,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
+      _pausePreviewPlayback();
       unawaited(_autosaveIfNeeded());
     }
   }
@@ -1074,6 +1077,57 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     });
   }
 
+  void _pausePreviewPlayback() {
+    _previewPlaybackTimer?.cancel();
+    _previewPlaybackTimer = null;
+    if (_previewPlaying && mounted) {
+      setState(() => _previewPlaying = false);
+    } else {
+      _previewPlaying = false;
+    }
+  }
+
+  void _togglePreviewPlayback() {
+    if (_previewPlaybackTimer != null) {
+      _pausePreviewPlayback();
+      return;
+    }
+    final document = _controller.document;
+    if (document.durationMs <= 0) return;
+
+    final profile = DepthVibeSettingsService.instance.performanceMode;
+    final fps = math.min(document.frameRate, profile.previewFrameRate);
+    final interval = Duration(
+      microseconds: (1000000 / math.max(1, fps)).round(),
+    );
+    final startTime = document.playheadMs >= document.durationMs - 1
+        ? 0
+        : document.playheadMs;
+    final stopwatch = Stopwatch()..start();
+
+    setState(() {
+      _previewPlaying = true;
+      if (startTime == 0 && document.playheadMs >= document.durationMs - 1) {
+        _controller.setPlayhead(0);
+      }
+    });
+
+    _previewPlaybackTimer = Timer.periodic(interval, (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      final duration = _controller.document.durationMs;
+      final nextTime = startTime + stopwatch.elapsedMilliseconds;
+      if (duration <= 0 || nextTime >= duration) {
+        _controller.setPlayhead(math.max(0, duration - 1));
+        _pausePreviewPlayback();
+        return;
+      }
+      _controller.setPlayhead(nextTime);
+    });
+  }
+
   void _cancelCompositionRender() {
     final cancellation = _renderCancellation;
     if (cancellation == null || cancellation.isCancelled) return;
@@ -1085,6 +1139,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   Future<void> _exportComposition() async {
     if (_rendering) return;
+    _pausePreviewPlayback();
     final cancellation = CompositionExportCancellation();
     _renderCancellation = cancellation;
     setState(() {
@@ -1214,6 +1269,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   @override
   void dispose() {
     _recoveryTimer?.cancel();
+    _previewPlaybackTimer?.cancel();
     _renderCancellation?.cancel();
     _controller.removeListener(_onCompositionChanged);
     ExtensionManagerService.instance.removeListener(_onExtensionsChanged);
@@ -6914,14 +6970,36 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               const Text('NLE / ANIMATION TIMELINE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
               const Spacer(),
               Text(_time(playhead), style: const TextStyle(fontSize: 10, color: Color(0xFFB7C4DC))),
+              Text(
+                '${DepthVibeSettingsService.instance.performanceMode.previewFrameWidth}px · ${DepthVibeSettingsService.instance.performanceMode.previewFrameRate} FPS',
+                style: const TextStyle(fontSize: 8, color: Color(0xFF8D9CB3)),
+              ),
+              IconButton(
+                tooltip: _previewPlaying ? 'Pause realtime preview' : 'Play realtime preview',
+                onPressed: duration <= 0 ? null : _togglePreviewPlayback,
+                icon: Icon(
+                  _previewPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
+                  size: 21,
+                ),
+              ),
               IconButton(
                 tooltip: 'Previous frame',
-                onPressed: () => _controller.setPlayhead(playhead - (1000 / _controller.document.frameRate).round()),
+                onPressed: () {
+                  _pausePreviewPlayback();
+                  _controller.setPlayhead(
+                    playhead - (1000 / _controller.document.frameRate).round(),
+                  );
+                },
                 icon: const Icon(Icons.chevron_left, size: 18),
               ),
               IconButton(
                 tooltip: 'Next frame',
-                onPressed: () => _controller.setPlayhead(playhead + (1000 / _controller.document.frameRate).round()),
+                onPressed: () {
+                  _pausePreviewPlayback();
+                  _controller.setPlayhead(
+                    playhead + (1000 / _controller.document.frameRate).round(),
+                  );
+                },
                 icon: const Icon(Icons.chevron_right, size: 18),
               ),
               PopupMenuButton<TransitionKind>(
@@ -6941,7 +7019,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             value: playhead.toDouble().clamp(0, duration.toDouble()).toDouble(),
             min: 0,
             max: duration.toDouble(),
-            onChanged: (value) => _controller.setPlayhead(value.round()),
+            onChanged: (value) {
+              _pausePreviewPlayback();
+              _controller.setPlayhead(value.round());
+            },
           ),
           Expanded(
             child: ListView.builder(
@@ -6999,6 +7080,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           onTapDown: (details) {
             final position = (details.localPosition.dx / width * safeDuration)
                 .round().clamp(0, safeDuration);
+            _pausePreviewPlayback();
             _controller.setPlayhead(position);
           },
           child: Container(
