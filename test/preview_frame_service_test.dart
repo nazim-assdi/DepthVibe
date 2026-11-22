@@ -89,8 +89,10 @@ void main() {
       },
     );
 
-    expect(service.stats.droppedRequests, 1);
+    // The request token is checked after asynchronous cache-file lookup,
+    // so wait for the stale request to finish before asserting the counter.
     expect(await stale, isNull);
+    expect(service.stats.droppedRequests, 1);
 
     final firstFrame = await _writeFrame(directory, 'frame-0');
     activeGate.complete(firstFrame);
