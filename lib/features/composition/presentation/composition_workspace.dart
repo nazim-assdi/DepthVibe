@@ -775,6 +775,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   bool _graphScrubbing = false;
   bool _showCanvasGrid = true;
   bool _autoKeyEnabled = false;
+  bool _showLayerControls = true;
+  bool _showMotionPaths = true;
+  double _previewZoom = 1;
+  Offset _previewPanOffset = Offset.zero;
+  String _activePreviewTool = 'Select';
   String? _previewMoveLayerId;
   Offset _previewMoveLastGlobal = Offset.zero;
   bool _previewMoveHistoryRecorded = false;
@@ -2427,7 +2432,69 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               color: _autoKeyEnabled ? palette.accent : palette.secondaryText,
             ),
           ),
-          const SizedBox(width: 8),
+          PopupMenuButton<double>(
+            tooltip: 'Composition magnification',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 26),
+            initialValue: _previewZoom,
+            onSelected: (value) => setState(() {
+              _previewZoom = value;
+              _previewPanOffset = Offset.zero;
+            }),
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 0.5, child: Text('50%')),
+              PopupMenuItem(value: 0.75, child: Text('75%')),
+              PopupMenuItem(value: 1, child: Text('Fit / 100%')),
+              PopupMenuItem(value: 1.5, child: Text('150%')),
+              PopupMenuItem(value: 2, child: Text('200%')),
+            ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              child: Text(
+                _previewZoom == 1 ? 'FIT' : '\${(_previewZoom * 100).round()}%',
+                style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w800,
+                  color: palette.accent,
+                ),
+              ),
+            ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Composition view options',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 26),
+            icon: Icon(Icons.tune, size: 14, color: palette.secondaryText),
+            onSelected: (value) {
+              setState(() {
+                if (value == 'controls') {
+                  _showLayerControls = !_showLayerControls;
+                } else if (value == 'motion') {
+                  _showMotionPaths = !_showMotionPaths;
+                } else if (value == 'reset') {
+                  _previewZoom = 1;
+                  _previewPanOffset = Offset.zero;
+                }
+              });
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'controls',
+                child: Text(
+                  '\${_showLayerControls ? '✓' : '　'} Show Layer Controls',
+                ),
+              ),
+              PopupMenuItem(
+                value: 'motion',
+                child: Text(
+                  '\${_showMotionPaths ? '✓' : '　'} Show Motion Paths',
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'reset', child: Text('Reset View')),
+            ],
+          ),
+          const SizedBox(width: 5),
           IconButton(
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
@@ -2868,6 +2935,26 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  void _addPreviewTransformKeyframes() {
+    final layer = _controller.selectedLayer;
+    if (layer == null || layer.locked) return;
+    final timeMs = _controller.document.playheadMs;
+    _controller.updateTransformValues(
+      {
+        'position.x': layer.valueAt('position.x', timeMs),
+        'position.y': layer.valueAt('position.y', timeMs),
+        'scale.x': layer.valueAt('scale.x', timeMs),
+        'scale.y': layer.valueAt('scale.y', timeMs),
+        'rotation.z': layer.valueAt('rotation.z', timeMs),
+        'opacity': layer.valueAt('opacity', timeMs),
+      },
+      autoKey: true,
+    );
+    if (mounted) {
+      setState(() => _notice = 'Transform keyframes added at the current time.');
+    }
+  }
+
   void _beginPreviewMove(CompositionLayer layer, Offset globalPosition) {
     if (layer.locked) return;
     _pausePreviewPlayback();
@@ -2891,9 +2978,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final timeMs = _controller.document.playheadMs;
     _controller.updateTransformValues({
       'position.x': current.valueAt('position.x', timeMs) +
-          delta.dx / canvasSize.width * document.width,
+          delta.dx / _previewZoom / canvasSize.width * document.width,
       'position.y': current.valueAt('position.y', timeMs) +
-          delta.dy / canvasSize.height * document.height,
+          delta.dy / _previewZoom / canvasSize.height * document.height,
     },
       autoKey: _autoKeyEnabled,
       recordHistory: !_previewMoveHistoryRecorded,
@@ -2932,8 +3019,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final cosine = math.cos(rotationRadians);
     final sine = math.sin(rotationRadians);
     final localDelta = Offset(
-      screenDelta.dx * cosine + screenDelta.dy * sine,
-      -screenDelta.dx * sine + screenDelta.dy * cosine,
+      (screenDelta.dx * cosine + screenDelta.dy * sine) / _previewZoom,
+      (-screenDelta.dx * sine + screenDelta.dy * cosine) / _previewZoom,
     );
     final scaleX = _previewResizeStartScaleX *
         (1 + horizontalSign * localDelta.dx / math.max(1, width));
@@ -3065,7 +3152,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               painter: const _PreviewSelectionOutlinePainter(),
             ),
           ),
-          if (!layer.locked) ...[
+          if (!layer.locked && _activePreviewTool == 'Select') ...[
             _previewScaleHandle(
               layer,
               left: -6,
@@ -3178,9 +3265,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _controller.updateTransformValues(
       {
         'position.x': current.valueAt('position.x', timeMs) +
-            delta.dx / math.max(1, canvasSize.width) * document.width,
+            delta.dx / _previewZoom / math.max(1, canvasSize.width) * document.width,
         'position.y': current.valueAt('position.y', timeMs) +
-            delta.dy / math.max(1, canvasSize.height) * document.height,
+            delta.dy / _previewZoom / math.max(1, canvasSize.height) * document.height,
       },
       autoKey: true,
       timeMs: timeMs,
@@ -3338,10 +3425,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: const Color(0xFF36445F)),
                       ),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (_showCanvasGrid)
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onPanUpdate: _activePreviewTool == 'Hand'
+                            ? (details) => setState(() {
+                                  _previewPanOffset += details.delta;
+                                })
+                            : null,
+                        child: Transform.translate(
+                          offset: _previewPanOffset,
+                          child: Transform.scale(
+                            scale: _previewZoom,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                if (_showCanvasGrid)
                             const CustomPaint(painter: _CanvasGridPainter()),
                           for (final layer in ordered)
                             _buildLayerVisual(
@@ -3352,11 +3450,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                               cameraLayer: cameraLayer,
                               cameraTransform: cameraTransform,
                             ),
-                          _buildMotionPathOverlay(
-                            selected,
-                            doc,
-                            Size(canvasWidth, canvasHeight),
-                          ),
+                          if (_showMotionPaths)
+                            _buildMotionPathOverlay(
+                              selected,
+                              doc,
+                              Size(canvasWidth, canvasHeight),
+                            ),
                           if (selected != null)
                             Positioned(
                               right: 10,
@@ -3384,7 +3483,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                               style: const TextStyle(fontSize: 9, color: Color(0xFF8998AF)),
                             ),
                           ),
-                        ],
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     );
                   },
@@ -3396,13 +3498,36 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           Wrap(
             spacing: 8,
             children: [
-              _toolChip('Select', Icons.mouse, true),
-              _toolChip('Hand', Icons.pan_tool_alt, false),
-              _toolChip('Mask', Icons.crop_free, false, onTap: () {
-                _controller.addMask();
-                setState(() => _panel = 'Masks');
-              }),
-              _toolChip('Keyframe', Icons.key, false, onTap: () => _addKeyframe('position.x')),
+              _toolChip(
+                'Select',
+                Icons.mouse,
+                _activePreviewTool == 'Select',
+                onTap: () => setState(() => _activePreviewTool = 'Select'),
+              ),
+              _toolChip(
+                'Hand',
+                Icons.pan_tool_alt,
+                _activePreviewTool == 'Hand',
+                onTap: () => setState(() => _activePreviewTool = 'Hand'),
+              ),
+              _toolChip(
+                'Mask',
+                Icons.crop_free,
+                _activePreviewTool == 'Mask',
+                onTap: () {
+                  _controller.addMask();
+                  setState(() {
+                    _panel = 'Masks';
+                    _activePreviewTool = 'Select';
+                  });
+                },
+              ),
+              _toolChip(
+                'Keyframe',
+                Icons.key,
+                false,
+                onTap: _addPreviewTransformKeyframes,
+              ),
             ],
           ),
         ],
@@ -3815,13 +3940,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => _controller.selectLayer(layer.id),
-                  onPanStart: layer.locked
+                  onPanStart: layer.locked || _activePreviewTool == 'Hand'
                       ? null
                       : (details) => _beginPreviewMove(
                             layer,
                             details.globalPosition,
                           ),
-                  onPanUpdate: layer.locked
+                  onPanUpdate: layer.locked || _activePreviewTool == 'Hand'
                       ? null
                       : (details) => _updatePreviewMove(
                             layer,
@@ -3829,8 +3954,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             canvasSize,
                             doc,
                           ),
-                  onPanEnd: layer.locked ? null : (_) => _endPreviewMove(),
-                  onPanCancel: layer.locked ? null : _endPreviewMove,
+                  onPanEnd: layer.locked || _activePreviewTool == 'Hand'
+                      ? null
+                      : (_) => _endPreviewMove(),
+                  onPanCancel: layer.locked || _activePreviewTool == 'Hand'
+                      ? null
+                      : _endPreviewMove,
                   child: RepaintBoundary(
                     child: Opacity(opacity: opacity, child: gradedVisual),
                   ),
@@ -3838,7 +3967,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ),
             ),
           ),
-          if (isSelected)
+          if (isSelected && _showLayerControls)
             Positioned.fill(
               child: Transform.rotate(
                 angle: rotationRadians,
