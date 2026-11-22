@@ -22,7 +22,7 @@ class PreviewProxyService {
     PreviewProxyBuilder? builder,
     this.minimumSourceBytes = 24 * 1024 * 1024,
     this.maxCacheBytes = 2 * 1024 * 1024 * 1024,
-    Duration generationTimeout = const Duration(minutes: 20),
+    Duration generationTimeout = const Duration(minutes: 21),
   })  : _providedCacheDirectory = cacheDirectory,
         _builder = builder ?? _buildWithFfmpeg,
         _generationTimeout = generationTimeout;
@@ -36,6 +36,7 @@ class PreviewProxyService {
   final Map<String, Future<_PreviewProxyDescriptor>> _descriptorJobs = {};
   final Map<String, Future<File?>> _generationJobs = {};
   final Map<String, Future<File?>> _requestJobs = {};
+  final Map<String, DateTime> _recentlyUsed = {};
   Future<void> _generationTail = Future<void>.value();
   Directory? _resolvedCacheDirectory;
   bool _disposed = false;
@@ -111,6 +112,11 @@ class PreviewProxyService {
       );
       final file = descriptor.output;
       if (!await file.exists() || await file.length() <= 0) return null;
+      _recentlyUsed[file.path] = DateTime.now();
+      _recentlyUsed.removeWhere(
+        (_, lastUsed) => DateTime.now().difference(lastUsed) >
+            const Duration(minutes: 30),
+      );
       return file;
     } catch (_) {
       return null;
@@ -214,6 +220,11 @@ class PreviewProxyService {
       for (final entry in entries) {
         if (total <= targetBytes) break;
         if (entry.file.path == keep.path) continue;
+        final lastUsed = _recentlyUsed[entry.file.path];
+        if (lastUsed != null &&
+            DateTime.now().difference(lastUsed) < const Duration(minutes: 10)) {
+          continue;
+        }
         try {
           if (await entry.file.exists()) {
             await entry.file.delete();
@@ -284,6 +295,7 @@ class PreviewProxyService {
     _disposed = true;
     _descriptorJobs.clear();
     _requestJobs.clear();
+    _recentlyUsed.clear();
   }
 }
 
