@@ -106,7 +106,7 @@ class _DepthVibeSettingsDialogState extends State<DepthVibeSettingsDialog> {
                                 _section == 'View'
                                     ? 'Personalise the workspace appearance.'
                                     : _section == 'Performance'
-                                        ? 'Tune preview quality for your computer.'
+                                        ? 'Tune realtime video and 3D preview smoothness for your computer.'
                                         : 'General application preferences.',
                                 style: TextStyle(
                                   fontSize: 11,
@@ -241,7 +241,7 @@ class _DepthVibeSettingsDialogState extends State<DepthVibeSettingsDialog> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Choose how much detail the live 3D viewport renders. Compatibility is intended for older CPUs and integrated graphics.',
+                        'Choose how many preview pixels and frames to process. The final export keeps the full project resolution and frame rate.',
                         style: TextStyle(
                           fontSize: 11,
                           color: palette.secondaryText,
