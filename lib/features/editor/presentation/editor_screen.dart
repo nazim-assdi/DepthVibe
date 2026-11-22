@@ -16,7 +16,6 @@ import '../../../features/extensions/presentation/extension_manager_screen.dart'
 import '../../fonts/presentation/font_manager_dialog.dart';
 import '../../../features/media/data/media_picker_service.dart';
 import '../../../features/media/data/media_duration_parser.dart';
-import '../../../features/media/presentation/camera_capture_screen.dart';
 import '../application/editor_controller.dart';
 import '../data/video_export_service.dart';
 import '../domain/editor_project.dart';
@@ -614,15 +613,6 @@ class _EditorScreenState extends State<EditorScreen> {
     );
   }
 
-  Future<void> _recordVideo() async {
-    final result = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const CameraCaptureScreen()),
-    );
-    if (result != null && result.isNotEmpty) {
-      await _openVideo(result);
-    }
-  }
-
   Future<void> _seek(double value) async {
     final position = Duration(milliseconds: value.round());
     if (mounted) setState(() => _position = position);
@@ -865,12 +855,6 @@ class _EditorScreenState extends State<EditorScreen> {
             icon: Icons.folder_open,
             label: 'Import',
             onPressed: _exporting ? null : _importVideo,
-          ),
-          const SizedBox(width: 8),
-          _toolButton(
-            icon: Icons.videocam,
-            label: 'Record',
-            onPressed: _exporting ? null : _recordVideo,
           ),
           const SizedBox(width: 8),
           if (MediaQuery.sizeOf(context).width > 720)
