@@ -38,7 +38,7 @@ enum DepthVibePerformanceMode {
       };
 
   String get description => switch (this) {
-        DepthVibePerformanceMode.compatibility => '320 px 3D preview · lowest preview pixel load',
+        DepthVibePerformanceMode.compatibility => '320 px 3D · CPU video output · lowest hardware requirements',
         DepthVibePerformanceMode.balanced => '480 px 3D preview · recommended for most PCs',
         DepthVibePerformanceMode.quality => '640 px 3D preview · sharper detail, higher GPU load',
       };
@@ -114,7 +114,9 @@ class DepthVibeSettingsService extends ChangeNotifier {
   static final DepthVibeSettingsService instance = DepthVibeSettingsService._();
 
   DepthVibeAppearance _appearance = DepthVibeAppearance.dark;
-  DepthVibePerformanceMode _performanceMode = DepthVibePerformanceMode.balanced;
+  DepthVibePerformanceMode _performanceMode = Platform.isWindows
+      ? DepthVibePerformanceMode.compatibility
+      : DepthVibePerformanceMode.balanced;
   Directory? _settingsDirectory;
   bool _initialized = false;
 
@@ -144,7 +146,9 @@ class DepthVibeSettingsService extends ChangeNotifier {
           final performanceValue = decoded['performanceMode'];
           _performanceMode = DepthVibePerformanceMode.values.firstWhere(
             (item) => item.name == performanceValue,
-            orElse: () => DepthVibePerformanceMode.balanced,
+            orElse: () => Platform.isWindows
+                ? DepthVibePerformanceMode.compatibility
+                : DepthVibePerformanceMode.balanced,
           );
         }
       } catch (_) {
