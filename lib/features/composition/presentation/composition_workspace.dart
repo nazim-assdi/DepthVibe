@@ -8293,6 +8293,30 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  void _splitSelectedLayer() {
+    final selected = _selected;
+    if (selected == null) return;
+    final split = _controller.splitSelectedLayerAtPlayhead();
+    if (!mounted) return;
+    setState(() {
+      _notice = split
+          ? 'Split ${selected.name} at ${_time(_controller.document.playheadMs)}. The right segment is selected.'
+          : 'Place the playhead inside an unlocked clip to split it.';
+      if (split) {
+        _panel = 'Timing';
+        _graphEditorVisible = false;
+      }
+    });
+  }
+
+  void _deleteSelectedLayer() {
+    final selected = _selected;
+    if (selected == null) return;
+    _controller.removeSelectedLayer();
+    if (!mounted) return;
+    setState(() => _notice = 'Deleted layer "${selected.name}". Use Undo to restore it.');
+  }
+
   void _jumpToKeyframe({required bool forward}) {
     final layer = _selected;
     if (layer == null) return;
@@ -8556,6 +8580,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     ? null
                     : () => _addKeyframe('position.x'),
                 icon: const Icon(Icons.diamond_outlined, size: 17),
+              ),
+              IconButton(
+                tooltip: 'Split selected clip at playhead',
+                onPressed: _selected == null || _selected!.locked
+                    ? null
+                    : _splitSelectedLayer,
+                icon: const Icon(Icons.content_cut, size: 17),
+              ),
+              IconButton(
+                tooltip: 'Delete selected layer',
+                onPressed: _selected == null ? null : _deleteSelectedLayer,
+                icon: const Icon(Icons.delete_outline, size: 17),
               ),
               IconButton(
                 tooltip: _graphEditorVisible

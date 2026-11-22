@@ -885,6 +885,89 @@ void main() {
       controller.dispose();
     });
 
+    test('splits a selected clip at playhead with independent effects and masks', () {
+      final controller = CompositionController(
+        document: const CompositionDocument(
+          durationMs: 8000,
+          playheadMs: 3200,
+          layers: [
+            CompositionLayer(
+              id: 'video_a',
+              name: 'Interview',
+              kind: LayerKind.video,
+              startMs: 1000,
+              durationMs: 4000,
+              sourceInMs: 500,
+              sourceUri: '/media/interview.mp4',
+              effects: [
+                EffectInstance(
+                  id: 'effect_a',
+                  effectId: 'gaussian_blur',
+                  name: 'Gaussian Blur',
+                  parameters: {'sigma': 4},
+                ),
+              ],
+              masks: [
+                MaskModel(id: 'mask_a', name: 'Subject Mask'),
+              ],
+            ),
+          ],
+          selectedLayerId: 'video_a',
+        ),
+      );
+
+      expect(controller.splitSelectedLayerAtPlayhead(), isTrue);
+      expect(controller.document.layers, hasLength(2));
+
+      final left = controller.document.layers.first;
+      final right = controller.document.layers.last;
+      expect(left.id, 'video_a');
+      expect(left.startMs, 1000);
+      expect(left.durationMs, 2200);
+      expect(left.endMs, 3200);
+      expect(right.id, isNot(left.id));
+      expect(right.name, 'Interview (split)');
+      expect(right.startMs, 3200);
+      expect(right.durationMs, 1800);
+      expect(right.sourceInMs, 2700);
+      expect(right.sourceUri, left.sourceUri);
+      expect(right.effects.single.id, isNot(left.effects.single.id));
+      expect(right.masks.single.id, isNot(left.masks.single.id));
+      expect(right.effects.single.parameters['sigma'], 4);
+      expect(controller.document.selectedLayerId, right.id);
+
+      controller.undo();
+      expect(controller.document.layers, hasLength(1));
+      expect(controller.document.layers.single.durationMs, 4000);
+      expect(controller.document.selectedLayerId, 'video_a');
+      controller.dispose();
+    });
+
+    test('rejects a clip split outside its bounds or on a locked layer', () {
+      final controller = CompositionController(
+        document: const CompositionDocument(
+          durationMs: 5000,
+          playheadMs: 0,
+          layers: [
+            CompositionLayer(
+              id: 'clip',
+              name: 'Locked',
+              kind: LayerKind.video,
+              startMs: 500,
+              durationMs: 3000,
+              locked: true,
+            ),
+          ],
+          selectedLayerId: 'clip',
+        ),
+      );
+      expect(controller.splitSelectedLayerAtPlayhead(), isFalse);
+      controller.setPlayhead(1000);
+      expect(controller.splitSelectedLayerAtPlayhead(), isFalse);
+      expect(controller.document.layers, hasLength(1));
+      controller.dispose();
+    });
+
     test('masks and effects attach to the selected layer', () {
       final controller = CompositionController();
       final id = controller.addLayer(LayerKind.shape);

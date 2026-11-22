@@ -673,6 +673,7 @@ class MaskModel {
   }
 
   MaskModel copyWith({
+    String? id,
     MaskShape? shape,
     MaskOperation? operation,
     bool? enabled,
@@ -688,7 +689,7 @@ class MaskModel {
     List<KeyframeTrack>? keyframeTracks,
   }) =>
       MaskModel(
-        id: id,
+        id: id ?? this.id,
         name: name,
         shape: shape ?? this.shape,
         operation: operation ?? this.operation,
@@ -738,6 +739,7 @@ class EffectInstance {
   }
 
   EffectInstance copyWith({
+    String? id,
     bool? enabled,
     Map<String, double>? parameters,
     List<KeyframeTrack>? keyframeTracks,
@@ -747,7 +749,7 @@ class EffectInstance {
     Map<String, Object?>? nativeDescriptor,
   }) =>
       EffectInstance(
-        id: id,
+        id: id ?? this.id,
         effectId: effectId,
         name: name,
         enabled: enabled ?? this.enabled,
@@ -996,6 +998,7 @@ class CompositionLayer {
   }
 
   CompositionLayer copyWith({
+    String? id,
     String? name,
     int? startMs,
     int? durationMs,
@@ -1049,7 +1052,7 @@ class CompositionLayer {
     AudioSettings? audioSettings,
   }) =>
       CompositionLayer(
-        id: id,
+        id: id ?? this.id,
         name: name ?? this.name,
         kind: kind,
         startMs: startMs ?? this.startMs,

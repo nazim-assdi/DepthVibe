@@ -337,6 +337,50 @@ class CompositionController extends ChangeNotifier {
     ));
   }
 
+  /// Splits the selected clip at the composition playhead.
+  ///
+  /// The left segment keeps its original identity. The right segment receives
+  /// new layer/effect/mask IDs and an advanced source in-point, while preserving
+  /// its original effect stack, masks and keyframe data. The operation is one
+  /// undoable history entry.
+  bool splitSelectedLayerAtPlayhead() {
+    final selected = selectedLayer;
+    if (selected == null || selected.locked) return false;
+
+    final splitTimeMs = _document.playheadMs;
+    if (splitTimeMs <= selected.startMs || splitTimeMs >= selected.endMs) {
+      return false;
+    }
+
+    final leftDurationMs = splitTimeMs - selected.startMs;
+    final rightDurationMs = selected.endMs - splitTimeMs;
+    final rightSegment = selected.copyWith(
+      id: _id('clip'),
+      name: '${selected.name} (split)',
+      startMs: splitTimeMs,
+      durationMs: rightDurationMs,
+      sourceInMs: selected.sourceInMs + leftDurationMs,
+      effects: selected.effects
+          .map((effect) => effect.copyWith(id: _id('effect')))
+          .toList(growable: false),
+      masks: selected.masks
+          .map((mask) => mask.copyWith(id: _id('mask')))
+          .toList(growable: false),
+    );
+
+    final layers = [..._document.layers];
+    final selectedIndex = layers.indexWhere((layer) => layer.id == selected.id);
+    if (selectedIndex < 0) return false;
+    layers[selectedIndex] = selected.copyWith(durationMs: leftDurationMs);
+    layers.insert(selectedIndex + 1, rightSegment);
+
+    _set(_document.copyWith(
+      layers: layers,
+      selectedLayerId: rightSegment.id,
+    ));
+    return true;
+  }
+
   void reorderLayer(String id, int newIndex) {
     final layers = [..._document.layers];
     final oldIndex = layers.indexWhere((layer) => layer.id == id);
