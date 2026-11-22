@@ -7492,16 +7492,26 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
   Widget _buildPlayheadAwareTimeline() {
+    final doc = _controller.document;
     return AnimatedBuilder(
       animation: _controller.playhead,
-      builder: (context, _) {
-        final doc = _controller.document;
-        return _buildTimeline(doc.layers, doc.playheadMs, doc.durationMs);
+      child: _buildTimelineLayerRows(doc.layers, doc.durationMs),
+      builder: (context, layerRows) {
+        final currentDoc = _controller.document;
+        return _buildTimeline(
+          currentDoc.playheadMs,
+          currentDoc.durationMs,
+          layerRows: layerRows!,
+        );
       },
     );
   }
 
-  Widget _buildTimeline(List<CompositionLayer> layers, int playhead, int duration) {
+  Widget _buildTimeline(
+    int playhead,
+    int duration, {
+    required Widget layerRows,
+  }) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
       height: 212,
@@ -7593,8 +7603,29 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               _controller.setPlayhead(value.round());
             },
           ),
-          Expanded(
-            child: ListView.builder(
+          Expanded(child: layerRows),
+        ],
+      ),
+    );
+  }
+
+  /// Builds the layer list independently from the per-frame timeline header.
+  ///
+  /// The returned widget is passed as AnimatedBuilder.child, so playback ticks
+  /// update only the time display/slider and the single playhead overlay rather
+  /// than rebuilding every visible layer row and clip.
+  Widget _buildTimelineLayerRows(
+    List<CompositionLayer> layers,
+    int duration,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final labelWidth = math.min(130.0, constraints.maxWidth);
+        final trackWidth = math.max(0.0, constraints.maxWidth - labelWidth);
+        return Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            ListView.builder(
               itemCount: layers.length,
               itemBuilder: (context, index) {
                 final layer = layers[index];
@@ -7604,7 +7635,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
                       children: [
-                        SizedBox(width: 130, child: Text(layer.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10))),
+                        SizedBox(
+                          width: 130,
+                          child: Text(
+                            layer.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 10),
+                          ),
+                        ),
                         Expanded(child: _buildTimelineClip(layer, duration)),
                       ],
                     ),
@@ -7612,9 +7651,35 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 );
               },
             ),
-          ),
-        ],
-      ),
+            AnimatedBuilder(
+              animation: _controller.playhead,
+              builder: (context, _) {
+                final currentDuration =
+                    math.max(1, _controller.document.durationMs);
+                final progress = (_controller.document.playheadMs /
+                        currentDuration)
+                    .clamp(0.0, 1.0)
+                    .toDouble();
+                final x = (labelWidth + progress * trackWidth)
+                    .clamp(
+                      0.0,
+                      math.max(0.0, constraints.maxWidth - 1),
+                    )
+                    .toDouble();
+                return Positioned(
+                  left: x,
+                  top: 0,
+                  bottom: 0,
+                  width: 1,
+                  child: IgnorePointer(
+                    child: Container(color: const Color(0xFFFFC36A)),
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -7789,13 +7854,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       color: Color(0xFFD6C8FF),
                     ),
                   ),
-                Positioned(
-                  left: (_controller.document.playheadMs / safeDuration * width)
-                      .clamp(0.0, math.max(0.0, width - 1)).toDouble(),
-                  top: 0,
-                  bottom: 0,
-                  child: Container(width: 1, color: const Color(0xFFFFC36A)),
-                ),
+
               ],
             ),
           ),
