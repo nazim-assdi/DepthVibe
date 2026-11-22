@@ -437,8 +437,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       final chunkKey = '${fingerprint}_${chunkStartFrame}_'
           '${previewFrameRate.toStringAsFixed(1)}_${width}';
       final pendingChunk = _previewChunkJobs[chunkKey];
+      String? decodeFailure;
 
-      return await _previewFrameService.requestFrame(
+      final decodedFrame = await _previewFrameService.requestFrame(
         laneId: laneId,
         cacheKey: diskKey,
         cacheFile: frame,
@@ -461,13 +462,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             }
           }
 
-          final completedFrame = await _decodeSinglePreviewFrame(
-            path: path,
-            seekMs: seekMs,
-            frame: frame,
-            width: width,
-            decodeThreads: decodeThreads,
-          );
+          final File? completedFrame;
+          try {
+            completedFrame = await _decodeSinglePreviewFrame(
+              path: path,
+              seekMs: seekMs,
+              frame: frame,
+              width: width,
+              decodeThreads: decodeThreads,
+            );
+          } catch (error) {
+            // PreviewFrameService isolates native decoder exceptions and
+            // resolves the request with null; retain the reason for the UI.
+            decodeFailure = error.toString();
+            rethrow;
+          }
 
           // Never delay the first visible frame for an 18/24/30-frame batch.
           // Once it is on screen, predecode one second ahead in the background.
@@ -492,6 +501,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           return completedFrame;
         },
       );
+      if (decodedFrame == null && !prefetch && decodeFailure != null) {
+        _previewFrameErrors[laneId] = decodeFailure!;
+      }
+      return decodedFrame;
     } catch (error, stackTrace) {
       if (!prefetch) _previewFrameErrors[laneId] = error.toString();
       debugPrint(
