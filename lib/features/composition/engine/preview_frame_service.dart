@@ -173,6 +173,14 @@ class PreviewFrameService {
       _cachedBytes = (_cachedBytes - inMemory.bytes).clamp(0, 1 << 62).toInt();
     }
 
+    // Join active/queued work before reading disk: FFmpeg may have created
+    // the destination but not finished writing it yet.
+    final active = _activeByKey[cacheKey];
+    if (active != null) return active;
+
+    final queued = _pendingByKey[cacheKey];
+    if (queued != null) return queued.completer.future;
+
     // The disk cache survives a widget rebuild and can be reused after the
     // in-memory LRU entry has been evicted.
     try {
@@ -187,12 +195,6 @@ class PreviewFrameService {
         if (await cacheFile.exists()) await cacheFile.delete();
       } catch (_) {}
     }
-
-    final active = _activeByKey[cacheKey];
-    if (active != null) return active;
-
-    final queued = _pendingByKey[cacheKey];
-    if (queued != null) return queued.completer.future;
 
     final task = _PendingPreviewFrame(
       laneId: laneId,
