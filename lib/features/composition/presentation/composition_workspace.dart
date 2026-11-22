@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -54,6 +55,7 @@ import '../engine/color_grade_preview.dart';
 import '../engine/cube_lut_validator.dart';
 import '../engine/motion_tracking_service.dart';
 import '../engine/transition_frame_validator.dart';
+import '../engine/preview_frame_service.dart';
 import 'text_layer_content_editor.dart';
 import 'color_wheel_control.dart';
 import 'color_curve_editor.dart';
@@ -76,9 +78,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   final MotionTrackingService _tracker = const MotionTrackingService();
   final AudioWaveformService _waveformService = const AudioWaveformService();
   final Map<String, Future<File?>> _waveformJobs = {};
-  final Map<String, Future<File?>> _videoFrameJobs = {};
+  final LinkedHashMap<String, Future<File?>> _videoFrameJobs =
+      LinkedHashMap<String, Future<File?>>();
+  final Map<String, File> _lastVideoFrames = {};
+  final Map<String, Future<FileStat>> _sourceStatJobs = {};
   final Map<String, Future<img.Image?>> _scopeImageJobs = {};
   final Map<String, Future<ObjMesh>> _meshJobs = {};
+  final PreviewFrameService _previewFrameService = PreviewFrameService(
+    maxConcurrentDecodes: DepthVibeSettingsService
+        .instance.performanceMode.previewDecodeConcurrency,
+    maxCachedFrames: DepthVibeSettingsService
+        .instance.performanceMode.previewCacheFrameLimit,
+  );
+  Future<Directory>? _previewCacheDirectoryJob;
   String _curveChannel = 'master';
   final CreativeAssetPackService _creativeAssetPacks =
       CreativeAssetPackService.instance;
@@ -100,67 +112,154 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   String _quoteFfmpeg(String value) =>
       "'" + value.replaceAll("'", "'\\''") + "'";
 
+  Future<Directory> _previewCacheDirectory() {
+    return _previewCacheDirectoryJob ??= getTemporaryDirectory().then((root) async {
+      final directory = Directory(
+        root.path + Platform.pathSeparator +
+            'DepthVibe' + Platform.pathSeparator + 'PreviewFrames',
+      );
+      await directory.create(recursive: true);
+      return directory;
+    });
+  }
+
+  Future<FileStat> _sourceStatFor(String path) {
+    return _sourceStatJobs.putIfAbsent(path, () => File(path).stat());
+  }
+
+  Future<File?> _decodePreviewFrame({
+    required String path,
+    required int seekMs,
+    required String cacheKey,
+    required int width,
+    required int decodeThreads,
+    required bool prefetch,
+  }) async {
+    try {
+      if (!await File(path).exists()) return null;
+      final stat = await _sourceStatFor(path);
+      final cacheDirectory = await _previewCacheDirectory();
+      final fingerprint =
+          '${path.hashCode.toUnsigned(32)}_${stat.size}_'
+          '${stat.modified.microsecondsSinceEpoch}';
+      final diskKey = '${fingerprint}_${cacheKey}_${width}';
+      final frame = File(
+        cacheDirectory.path + Platform.pathSeparator +
+            'dvpreview_${diskKey.hashCode.toUnsigned(32).toRadixString(16)}.jpg',
+      );
+      final profile = DepthVibeSettingsService.instance.performanceMode;
+      return _previewFrameService.requestFrame(
+        laneId: cacheKey.split('_').first,
+        cacheKey: diskKey,
+        cacheFile: frame,
+        decode: () async {
+          final quotedPath = _quoteFfmpeg(path);
+          final quotedFrame = _quoteFfmpeg(frame.path);
+          final command = '-hide_banner -loglevel error -y '
+              '-filter_threads 1 -threads $decodeThreads '
+              '-ss ${(seekMs / 1000).toStringAsFixed(3)} '
+              '-i $quotedPath -map 0:v:0 -an -sn -dn '
+              '-frames:v 1 '
+              '-vf "scale=\'if(gte(iw,ih),$width,-2)\':'
+              '\'if(gte(iw,ih),-2,$width)\':flags=fast_bilinear" '
+              '-q:v 5 $quotedFrame';
+          final session = await FFmpegKit.executeAsync(command).timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              final activeSessions = FFmpegKit.getFFmpegSessions()
+                  .where((running) => running.getCommand().contains(frame.path))
+                  .toList();
+              for (final running in activeSessions) {
+                running.cancel();
+              }
+              throw TimeoutException(
+                'Realtime preview frame decode exceeded 10 seconds.',
+              );
+            },
+          );
+          if (!ReturnCode.isSuccess(session.getReturnCode()) ||
+              !await frame.exists() ||
+              await frame.length() == 0) {
+            return null;
+          }
+          return frame;
+        },
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        'DepthVibe preview frame decode failed'
+        '${prefetch ? ' (prefetch)' : ''}: $error\\n$stackTrace',
+      );
+      return null;
+    }
+  }
+
   Future<File?> _videoFrameFor(
     CompositionLayer layer,
     int timelineTimeMs,
-    double frameRate,
-  ) {
+    double frameRate, {
+    bool prefetch = false,
+  }) {
     final path = layer.sourceUri;
     if (path == null || path.isEmpty || frameRate <= 0) {
       return Future<File?>.value(null);
     }
+    final profile = DepthVibeSettingsService.instance.performanceMode;
+    _previewFrameService
+      ..maxConcurrentDecodes = profile.previewDecodeConcurrency;
+    final previewFps = math.min(
+      frameRate,
+      profile.previewFrameRate.toDouble(),
+    );
     final sourceTimeMs = math.max(
       0,
       layer.sourceInMs + timelineTimeMs - layer.startMs,
     );
-    final frameIndex = (sourceTimeMs * frameRate / 1000).floor();
-    final seekMs = (frameIndex * 1000 / frameRate).round();
-    final key = '${path}_${frameIndex}_${frameRate.toStringAsFixed(3)}';
-    final frameJob = _videoFrameJobs.putIfAbsent(key, () async {
-      if (!await File(path).exists()) return null;
-      final temporary = await getTemporaryDirectory();
-      final frame = File(
-        temporary.path + Platform.pathSeparator +
-            'depthvibe_preview_${key.hashCode.toUnsigned(32).toRadixString(16)}.png',
-      );
-      if (await frame.exists() && await frame.length() > 0) return frame;
-      final command = '-hide_banner -loglevel error -y -ss ' +
-          (seekMs / 1000).toStringAsFixed(3) +
-          ' -i ' + _quoteFfmpeg(path) +
-          ' -frames:v 1 -vf scale=960:540:force_original_aspect_ratio=decrease,'
-          'pad=960:540:(ow-iw)/2:(oh-ih)/2 -an ' +
-          _quoteFfmpeg(frame.path);
-      final session = await FFmpegKit.executeAsync(command).timeout(
-        const Duration(seconds: 12),
-        onTimeout: () {
-          final activeSessions = FFmpegKit.getFFmpegSessions()
-              .where((running) => running.getCommand().contains(frame.path))
-              .toList();
-          for (final running in activeSessions) {
-            running.cancel();
-          }
-          throw TimeoutException(
-            'Decoding the current color preview frame exceeded 12 seconds.',
-          );
-        },
-      );
-      if (!ReturnCode.isSuccess(session.getReturnCode()) ||
-          !await frame.exists() ||
-          await frame.length() == 0) {
-        return null;
+    final frameIndex = (sourceTimeMs * previewFps / 1000).floor();
+    final seekMs = (frameIndex * 1000 / previewFps).round();
+    final width = profile.previewFrameWidth;
+    final requestKey =
+        '${path.hashCode.toUnsigned(32)}_${layer.id}_'
+        '${frameIndex}_${width}_${previewFps.toStringAsFixed(1)}';
+
+    final existing = _videoFrameJobs.remove(requestKey);
+    if (existing != null) {
+      _videoFrameJobs[requestKey] = existing;
+      return existing;
+    }
+
+    final job = _decodePreviewFrame(
+      path: path,
+      seekMs: seekMs,
+      cacheKey: '${layer.id}_${frameIndex}_'
+          '${previewFps.toStringAsFixed(1)}',
+      width: width,
+      decodeThreads: profile.previewDecodeConcurrency,
+      prefetch: prefetch,
+    ).then((frame) {
+      if (frame != null && !prefetch) {
+        _lastVideoFrames[layer.id] = frame;
+        // Warm one frame ahead. If the playhead moves elsewhere, the
+        // scheduler replaces this pending request with the newest frame.
+        final nextTimeMs =
+            timelineTimeMs + (1000 / previewFps).round();
+        unawaited(
+          _videoFrameFor(
+            layer,
+            nextTimeMs,
+            frameRate,
+            prefetch: true,
+          ).catchError((_) => null),
+        );
       }
       return frame;
     });
-    return frameJob.then(
-      (frame) {
-        if (frame == null) _videoFrameJobs.remove(key);
-        return frame;
-      },
-      onError: (Object error, StackTrace stackTrace) {
-        _videoFrameJobs.remove(key);
-        Error.throwWithStackTrace(error, stackTrace);
-      },
-    );
+
+    _videoFrameJobs[requestKey] = job;
+    while (_videoFrameJobs.length > 96) {
+      _videoFrameJobs.remove(_videoFrameJobs.keys.first);
+    }
+    return job;
   }
 
   Future<img.Image?> _scopeImageFor(
@@ -1121,6 +1220,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     AdobeBridgeService.instance.detachController(_controller);
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_autosaveIfNeeded());
+    _previewFrameService.dispose();
+    _videoFrameJobs.clear();
+    _lastVideoFrames.clear();
+    _sourceStatJobs.clear();
     _controller.dispose();
     super.dispose();
   }
@@ -1585,12 +1688,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         baseHeight = doc.height.toDouble();
         visual = FutureBuilder<File?>(
           future: _videoFrameFor(layer, timeMs, doc.frameRate),
+          initialData: _lastVideoFrames[layer.id],
           builder: (context, snapshot) {
-            final frame = snapshot.data;
+            // Keep displaying the most recent decoded frame while the next
+            // one is being fetched; never flash a spinner on every playhead tick.
+            final frame = snapshot.data ?? _lastVideoFrames[layer.id];
             if (frame != null) {
               return Image.file(
                 frame,
                 fit: BoxFit.fill,
+                cacheWidth: DepthVibeSettingsService
+                    .instance.performanceMode.previewFrameWidth,
+                filterQuality: FilterQuality.low,
+                gaplessPlayback: true,
                 errorBuilder: (_, __, ___) => const Center(
                   child: Icon(Icons.broken_image_outlined),
                 ),
@@ -1816,14 +1926,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       top: top,
       width: width.clamp(1, canvasSize.width * 4).toDouble(),
       height: height.clamp(1, canvasSize.height * 4).toDouble(),
-      child: Opacity(
-        opacity: opacity,
-        child: Transform.rotate(
-          angle: isMeshLayer ? 0 : rotation,
-          child: Transform.scale(
-            scaleX: isMeshLayer ? 1 : (scaleX.isNegative ? -1 : 1),
-            scaleY: isMeshLayer ? 1 : (scaleY.isNegative ? -1 : 1),
-            child: gradedVisual,
+      child: RepaintBoundary(
+        child: Opacity(
+          opacity: opacity,
+          child: Transform.rotate(
+            angle: isMeshLayer ? 0 : rotation,
+            child: Transform.scale(
+              scaleX: isMeshLayer ? 1 : (scaleX.isNegative ? -1 : 1),
+              scaleY: isMeshLayer ? 1 : (scaleY.isNegative ? -1 : 1),
+              child: gradedVisual,
+            ),
           ),
         ),
       ),
