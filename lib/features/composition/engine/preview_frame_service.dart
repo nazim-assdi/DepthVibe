@@ -101,6 +101,8 @@ class PreviewFrameService {
     _effectivePreviewFrameRate = nextFrameRate;
     _slowDecodeStreak = 0;
     _fastDecodeStreak = 0;
+    _slowUiFrameStreak = 0;
+    _fastUiFrameStreak = 0;
   }
 
   /// Feed Flutter build+raster time into the adaptive quality governor.
