@@ -86,6 +86,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       LinkedHashMap<String, Future<FileStat>>();
   final Map<String, Future<img.Image?>> _scopeImageJobs = {};
   final Map<String, Future<ObjMesh>> _meshJobs = {};
+  final Map<String, Future<void>> _previewChunkJobs = {};
   final PreviewFrameService _previewFrameService = PreviewFrameService(
     maxConcurrentDecodes: DepthVibeSettingsService
         .instance.performanceMode.previewDecodeConcurrency,
@@ -188,11 +189,141 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     return _sourceStatJobs.putIfAbsent(path, () => File(path).stat());
   }
 
+
+  String _previewFrameDiskKey({
+    required String fingerprint,
+    required int frameIndex,
+    required double frameRate,
+    required int width,
+  }) =>
+      '${fingerprint}_${frameIndex}_${frameRate.toStringAsFixed(1)}_${width}';
+
+  File _previewFrameFile(Directory directory, String diskKey) => File(
+        directory.path + Platform.pathSeparator +
+            'dvpreview_${diskKey.hashCode.toUnsigned(32).toRadixString(16)}.jpg',
+      );
+
+  Future<void> _ensurePreviewFrameChunk({
+    required String path,
+    required Directory cacheDirectory,
+    required String fingerprint,
+    required int chunkStartFrame,
+    required int chunkFrameCount,
+    required double frameRate,
+    required int width,
+    required int decodeThreads,
+  }) {
+    final chunkKey = '${fingerprint}_${chunkStartFrame}_'
+        '${frameRate.toStringAsFixed(1)}_${width}';
+    final existing = _previewChunkJobs[chunkKey];
+    if (existing != null) return existing;
+
+    final job = () async {
+      final chunkDirectory = Directory(
+        cacheDirectory.path + Platform.pathSeparator +
+            'chunk_${chunkKey.hashCode.toUnsigned(32).toRadixString(16)}.part',
+      );
+      try {
+        if (await chunkDirectory.exists()) {
+          await chunkDirectory.delete(recursive: true);
+        }
+        await chunkDirectory.create(recursive: true);
+
+        final startMs = (chunkStartFrame * 1000 / frameRate).round();
+        final outputPattern = File(
+          chunkDirectory.path + Platform.pathSeparator + 'frame_%06d.jpg',
+        );
+        final command = '-hide_banner -loglevel error -y '
+            '-filter_threads 1 -threads $decodeThreads '
+            '-ss ${(startMs / 1000).toStringAsFixed(3)} '
+            '-i ${_quoteFfmpeg(path)} -map 0:v:0 -an -sn -dn '
+            '-frames:v $chunkFrameCount '
+            '-vf "fps=${frameRate.toStringAsFixed(3)},'
+            'scale=$width:$width:force_original_aspect_ratio=decrease:'
+            'flags=fast_bilinear" '
+            '-q:v 5 ${_quoteFfmpeg(outputPattern.path)}';
+
+        final session = await FFmpegKit.executeAsync(command).timeout(
+          const Duration(seconds: 45),
+          onTimeout: () {
+            final activeSessions = FFmpegKit.getFFmpegSessions()
+                .where((running) =>
+                    running.getCommand().contains(chunkDirectory.path))
+                .toList();
+            for (final running in activeSessions) {
+              running.cancel();
+            }
+            throw TimeoutException(
+              'Generating a realtime preview frame chunk exceeded 45 seconds.',
+            );
+          },
+        );
+
+        if (!ReturnCode.isSuccess(session.getReturnCode())) return;
+
+        final frames = await chunkDirectory
+            .list(followLinks: false)
+            .where((entity) => entity is File)
+            .cast<File>()
+            .toList();
+        frames.sort((a, b) => a.path.compareTo(b.path));
+
+        // One FFmpeg pass prepares every frame in this one-second window.
+        for (var index = 0; index < frames.length; index++) {
+          final frameIndex = chunkStartFrame + index;
+          final diskKey = _previewFrameDiskKey(
+            fingerprint: fingerprint,
+            frameIndex: frameIndex,
+            frameRate: frameRate,
+            width: width,
+          );
+          final destination = _previewFrameFile(cacheDirectory, diskKey);
+          try {
+            if (await destination.exists() &&
+                await destination.length() > 0) {
+              continue;
+            }
+            final partial = File(destination.path + '.part.jpg');
+            try {
+              if (await partial.exists()) await partial.delete();
+            } catch (_) {}
+            await frames[index].copy(partial.path);
+            if (await destination.exists()) await destination.delete();
+            await partial.rename(destination.path);
+          } catch (_) {
+            try {
+              final partial = File(destination.path + '.part.jpg');
+              if (await partial.exists()) await partial.delete();
+            } catch (_) {}
+          }
+        }
+      } catch (error, stackTrace) {
+        debugPrint(
+          'DepthVibe preview chunk generation failed: $error\\n$stackTrace',
+        );
+      } finally {
+        try {
+          if (await chunkDirectory.exists()) {
+            await chunkDirectory.delete(recursive: true);
+          }
+        } catch (_) {}
+      }
+    }();
+
+    _previewChunkJobs[chunkKey] = job;
+    return job.whenComplete(() {
+      if (identical(_previewChunkJobs[chunkKey], job)) {
+        _previewChunkJobs.remove(chunkKey);
+      }
+    });
+  }
+
   Future<File?> _decodePreviewFrame({
     required String path,
+    required int frameIndex,
+    required double previewFrameRate,
     required int seekMs,
     required String laneId,
-    required String cacheKey,
     required int width,
     required int decodeThreads,
     required bool prefetch,
@@ -204,32 +335,56 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       final fingerprint =
           '${path.hashCode.toUnsigned(32)}_${stat.size}_'
           '${stat.modified.microsecondsSinceEpoch}';
-      final diskKey = '${fingerprint}_${cacheKey}_${width}';
-      final frame = File(
-        cacheDirectory.path + Platform.pathSeparator +
-            'dvpreview_${diskKey.hashCode.toUnsigned(32).toRadixString(16)}.jpg',
+      final diskKey = _previewFrameDiskKey(
+        fingerprint: fingerprint,
+        frameIndex: frameIndex,
+        frameRate: previewFrameRate,
+        width: width,
       );
+      final frame = _previewFrameFile(cacheDirectory, diskKey);
+      final chunkFrameCount = math.max(1, previewFrameRate.round());
+      final chunkStartFrame =
+          (frameIndex ~/ chunkFrameCount) * chunkFrameCount;
+
       return _previewFrameService.requestFrame(
         laneId: laneId,
         cacheKey: diskKey,
         cacheFile: frame,
         decode: () async {
-          // FFmpeg must never write directly to the visible cache path. A
-          // duplicate request could otherwise mistake a partial JPEG as ready.
+          if (await frame.exists() && await frame.length() > 0) {
+            return frame;
+          }
+
+          await _ensurePreviewFrameChunk(
+            path: path,
+            cacheDirectory: cacheDirectory,
+            fingerprint: fingerprint,
+            chunkStartFrame: chunkStartFrame,
+            chunkFrameCount: chunkFrameCount,
+            frameRate: previewFrameRate,
+            width: width,
+            decodeThreads: decodeThreads,
+          );
+
+          if (await frame.exists() && await frame.length() > 0) {
+            return frame;
+          }
+
+          // If a short/variable-rate source has no frame at this index, keep
+          // a single-frame fallback so the rest of the composition still works.
           final partialFrame = File(frame.path + '.part.jpg');
           try {
             if (await partialFrame.exists()) await partialFrame.delete();
           } catch (_) {}
-          final quotedPath = _quoteFfmpeg(path);
-          final quotedFrame = _quoteFfmpeg(partialFrame.path);
           final command = '-hide_banner -loglevel error -y '
               '-filter_threads 1 -threads $decodeThreads '
               '-ss ${(seekMs / 1000).toStringAsFixed(3)} '
-              '-i $quotedPath -map 0:v:0 -an -sn -dn '
+              '-i ${_quoteFfmpeg(path)} -map 0:v:0 -an -sn -dn '
               '-frames:v 1 '
               '-vf "scale=$width:$width:force_original_aspect_ratio=decrease:'
               'flags=fast_bilinear" '
-              '-q:v 5 $quotedFrame';
+              '-q:v 5 ${_quoteFfmpeg(partialFrame.path)}';
+
           final session = await FFmpegKit.executeAsync(command).timeout(
             const Duration(seconds: 10),
             onTimeout: () {
@@ -240,6 +395,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               for (final running in activeSessions) {
                 running.cancel();
               }
+              unawaited(
+                partialFrame.delete().catchError((_) => partialFrame),
+              );
               throw TimeoutException(
                 'Realtime preview frame decode exceeded 10 seconds.',
               );
@@ -316,10 +474,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
     final job = _decodePreviewFrame(
       path: path,
+      frameIndex: frameIndex,
+      previewFrameRate: previewFps,
       seekMs: seekMs,
       laneId: layer.id,
-      cacheKey: '${layer.id}_${frameIndex}_'
-          '${previewFps.toStringAsFixed(1)}',
       width: width,
       decodeThreads: profile.previewDecodeConcurrency,
       prefetch: prefetch,
@@ -331,8 +489,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         unawaited(_trimPreviewCacheIfNeeded());
         // Warm one frame ahead. If the playhead moves elsewhere, the
         // scheduler replaces this pending request with the newest frame.
-        final nextTimeMs =
-            timelineTimeMs + (1000 / previewFps).round();
+        // Request the next one-second batch while the current batch is
+        // still being shown, giving the decoder real prefetch lead time.
+        final nextTimeMs = timelineTimeMs + 1000;
         unawaited(
           _videoFrameFor(
             layer,
