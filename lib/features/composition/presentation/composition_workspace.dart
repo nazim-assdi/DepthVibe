@@ -444,6 +444,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         cacheKey: diskKey,
         cacheFile: frame,
         decodedFrameCount: pendingChunk == null ? 1 : chunkFrameCount,
+        isPrefetch: prefetch,
         decode: () async {
           if (await frame.exists() && await frame.length() > 0) {
             return frame;
