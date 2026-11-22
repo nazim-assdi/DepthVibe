@@ -321,6 +321,7 @@ class _EditorScreenState extends State<EditorScreen> {
         } else {
           _previewError = error.toString();
           if (mounted) setState(() => _playbackAvailable = false);
+          await _stopFailedVideoPreview();
           return;
         }
       }
@@ -434,6 +435,28 @@ class _EditorScreenState extends State<EditorScreen> {
     _currentVideoPath = path;
     _videoRendererFallbackStep = 0;
     _openingVideo = true;
+    final previousPlayer = _player;
+    if (previousPlayer != null && _videoController != null) {
+      if (mounted) {
+        setState(() {
+          _playbackAvailable = false;
+          _videoController = null;
+          _videoControllerProfile = null;
+        });
+      }
+      // A Retry or source replacement must not reuse a stale native output
+      // texture or immutable hwdec/CPU/GPU configuration.
+      await WidgetsBinding.instance.endOfFrame;
+      await _durationSubscription?.cancel();
+      await _positionSubscription?.cancel();
+      _durationSubscription = null;
+      _positionSubscription = null;
+      await previousPlayer.dispose();
+      if (!mounted) return;
+      final player = Player();
+      _player = player;
+      _attachPlayerStreams(player);
+    }
     _profileChangedDuringOpen = false;
     _editor.loadVideo(path);
 
