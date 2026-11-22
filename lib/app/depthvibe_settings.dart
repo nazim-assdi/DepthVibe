@@ -24,10 +24,37 @@ enum DepthVibePerformanceMode {
   bool get enableVideoHardwareAcceleration =>
       this != DepthVibePerformanceMode.compatibility;
 
-  /// Disable GPU video decoding in Compatibility mode. MPV accepts "no" to
-  /// force software decoding and "auto" for the normal platform choice.
-  String get videoHardwareDecoder =>
-      this == DepthVibePerformanceMode.compatibility ? 'no' : 'auto';
+  /// Let MPV use a supported hardware decoder and fall back to software
+  /// decoding when the installed GPU/codec cannot handle the source.
+  String get videoHardwareDecoder => 'auto-safe';
+
+  /// Maximum width used by the compositor's realtime video-frame cache.
+  int get previewFrameWidth => switch (this) {
+        DepthVibePerformanceMode.compatibility => 480,
+        DepthVibePerformanceMode.balanced => 640,
+        DepthVibePerformanceMode.quality => 960,
+      };
+
+  /// Preview frame cadence. Final output keeps the project frame rate.
+  int get previewFrameRate => switch (this) {
+        DepthVibePerformanceMode.compatibility => 18,
+        DepthVibePerformanceMode.balanced => 24,
+        DepthVibePerformanceMode.quality => 30,
+      };
+
+  /// Limit native preview decoders so stacked layers cannot spawn an
+  /// unbounded number of concurrent FFmpeg sessions.
+  int get previewDecodeConcurrency => switch (this) {
+        DepthVibePerformanceMode.compatibility => 1,
+        DepthVibePerformanceMode.balanced => 1,
+        DepthVibePerformanceMode.quality => 2,
+      };
+
+  int get previewCacheFrameLimit => switch (this) {
+        DepthVibePerformanceMode.compatibility => 72,
+        DepthVibePerformanceMode.balanced => 120,
+        DepthVibePerformanceMode.quality => 160,
+      };
 
   /// Reduce CPU pixel-copy work in the software video output path.
   double get videoOutputScale => switch (this) {
@@ -43,9 +70,9 @@ enum DepthVibePerformanceMode {
       };
 
   String get description => switch (this) {
-        DepthVibePerformanceMode.compatibility => '320 px 3D · CPU video output · lowest hardware requirements',
-        DepthVibePerformanceMode.balanced => '480 px 3D preview · recommended for most PCs',
-        DepthVibePerformanceMode.quality => '640 px 3D preview · sharper detail, higher GPU load',
+        DepthVibePerformanceMode.compatibility => 'Smooth 480 px / 18 FPS preview · cached CPU-friendly frames',
+        DepthVibePerformanceMode.balanced => 'Balanced 640 px / 24 FPS preview · cached frames',
+        DepthVibePerformanceMode.quality => 'Sharp 960 px / 30 FPS preview · higher CPU/GPU load',
       };
 }
 
