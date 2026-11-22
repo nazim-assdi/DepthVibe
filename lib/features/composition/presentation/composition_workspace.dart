@@ -88,6 +88,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   final Map<String, Future<img.Image?>> _scopeImageJobs = {};
   final Map<String, Future<ObjMesh>> _meshJobs = {};
   final Map<String, Future<void>> _previewChunkJobs = {};
+  Future<void> _previewChunkTail = Future<void>.value();
   final PreviewFrameService _previewFrameService = PreviewFrameService(
     maxConcurrentDecodes: DepthVibeSettingsService
         .instance.performanceMode.previewDecodeConcurrency,
@@ -219,11 +220,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final existing = _previewChunkJobs[chunkKey];
     if (existing != null) return existing;
 
-    final job = () async {
-      final chunkDirectory = Directory(
-        cacheDirectory.path + Platform.pathSeparator +
-            'chunk_${chunkKey.hashCode.toUnsigned(32).toRadixString(16)}.part',
-      );
+    final chunkDirectory = Directory(
+      cacheDirectory.path + Platform.pathSeparator +
+          'chunk_${chunkKey.hashCode.toUnsigned(32).toRadixString(16)}.part',
+    );
+
+    // Serialize expensive lookahead jobs across layers. The exact requested
+    // frame is decoded first; these batches are only cache warmers.
+    final job = _previewChunkTail.then((_) async {
       try {
         if (await chunkDirectory.exists()) {
           await chunkDirectory.delete(recursive: true);
@@ -278,7 +282,6 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             .toList();
         frames.sort((a, b) => a.path.compareTo(b.path));
 
-        // One FFmpeg pass prepares every frame in this one-second window.
         for (var index = 0; index < frames.length; index++) {
           final frameIndex = chunkStartFrame + index;
           final diskKey = _previewFrameDiskKey(
@@ -319,14 +322,83 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           }
         } catch (_) {}
       }
-    }();
+    });
 
+    _previewChunkTail = job.catchError((_) {});
     _previewChunkJobs[chunkKey] = job;
     return job.whenComplete(() {
       if (identical(_previewChunkJobs[chunkKey], job)) {
         _previewChunkJobs.remove(chunkKey);
       }
     });
+  }
+
+  Future<File?> _decodeSinglePreviewFrame({
+    required String path,
+    required int seekMs,
+    required File frame,
+    required int width,
+    required int decodeThreads,
+  }) async {
+    final partialFrame = File(frame.path + '.single.part.jpg');
+    try {
+      if (await partialFrame.exists()) await partialFrame.delete();
+    } catch (_) {}
+
+    final command = '-hide_banner -loglevel error -y '
+        '-filter_threads 1 -threads $decodeThreads '
+        '-ss ${(seekMs / 1000).toStringAsFixed(3)} '
+        '-i ${_quoteFfmpeg(path)} -map 0:v:0 -an -sn -dn '
+        '-frames:v 1 '
+        '-vf "scale=$width:$width:force_original_aspect_ratio=decrease:'
+        'flags=fast_bilinear" '
+        '-q:v 5 ${_quoteFfmpeg(partialFrame.path)}';
+
+    final session = await FFmpegKit.executeAsync(command).timeout(
+      const Duration(seconds: 12),
+      onTimeout: () {
+        final activeSessions = FFmpegKit.getFFmpegSessions()
+            .where((running) =>
+                running.getCommand().contains(partialFrame.path))
+            .toList();
+        for (final running in activeSessions) {
+          running.cancel();
+        }
+        unawaited(
+          partialFrame.delete().catchError((_) => partialFrame),
+        );
+        throw TimeoutException(
+          'Realtime preview frame decode exceeded 12 seconds.',
+        );
+      },
+    );
+
+    if (!ReturnCode.isSuccess(session.getReturnCode()) ||
+        !await partialFrame.exists() ||
+        await partialFrame.length() == 0) {
+      final output = (session.getOutput() ?? '').trim();
+      final details = output.length > 900
+          ? output.substring(output.length - 900)
+          : output;
+      try {
+        if (await partialFrame.exists()) await partialFrame.delete();
+      } catch (_) {}
+      throw StateError(
+        'FFmpeg could not decode a preview frame '
+        '(exit code ${session.getReturnCode()}). '
+        '${details.isEmpty ? 'No FFmpeg diagnostic was returned.' : details}',
+      );
+    }
+
+    try {
+      if (await frame.exists()) await frame.delete();
+      return await partialFrame.rename(frame.path);
+    } catch (_) {
+      try {
+        if (await partialFrame.exists()) await partialFrame.delete();
+      } catch (_) {}
+      return null;
+    }
   }
 
   Future<File?> _decodePreviewFrame({
@@ -338,6 +410,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     required int width,
     required int decodeThreads,
     required bool prefetch,
+    required bool warmChunk,
   }) async {
     try {
       if (!await File(path).exists()) {
@@ -361,98 +434,62 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       final chunkFrameCount = math.max(1, previewFrameRate.round());
       final chunkStartFrame =
           (frameIndex ~/ chunkFrameCount) * chunkFrameCount;
+      final chunkKey = '${fingerprint}_${chunkStartFrame}_'
+          '${previewFrameRate.toStringAsFixed(1)}_${width}';
+      final pendingChunk = _previewChunkJobs[chunkKey];
 
       return await _previewFrameService.requestFrame(
         laneId: laneId,
         cacheKey: diskKey,
         cacheFile: frame,
-        decodedFrameCount: chunkFrameCount,
+        decodedFrameCount: pendingChunk == null ? 1 : chunkFrameCount,
         decode: () async {
           if (await frame.exists() && await frame.length() > 0) {
             return frame;
           }
 
-          try {
-            await _ensurePreviewFrameChunk(
-              path: path,
-              cacheDirectory: cacheDirectory,
-              fingerprint: fingerprint,
-              chunkStartFrame: chunkStartFrame,
-              chunkFrameCount: chunkFrameCount,
-              frameRate: previewFrameRate,
-              width: width,
-              decodeThreads: decodeThreads,
-            );
-          } catch (error) {
-            // The chunk path is an optimisation. If a codec/container cannot
-            // generate a full second of frames, fall back to an exact frame.
-            debugPrint('DepthVibe preview batch fallback: $error');
+          // If a batch is already warming this segment, join it and read its
+          // frame. Otherwise decode the exact requested frame immediately.
+          if (pendingChunk != null) {
+            try {
+              await pendingChunk;
+            } catch (error) {
+              debugPrint('DepthVibe preview batch fallback: $error');
+            }
+            if (await frame.exists() && await frame.length() > 0) {
+              return frame;
+            }
           }
 
-          if (await frame.exists() && await frame.length() > 0) {
-            return frame;
-          }
-
-          // If a short/variable-rate source has no frame at this index, keep
-          // a single-frame fallback so the rest of the composition still works.
-          final partialFrame = File(frame.path + '.part.jpg');
-          try {
-            if (await partialFrame.exists()) await partialFrame.delete();
-          } catch (_) {}
-          final command = '-hide_banner -loglevel error -y '
-              '-filter_threads 1 -threads $decodeThreads '
-              '-ss ${(seekMs / 1000).toStringAsFixed(3)} '
-              '-i ${_quoteFfmpeg(path)} -map 0:v:0 -an -sn -dn '
-              '-frames:v 1 '
-              '-vf "scale=$width:$width:force_original_aspect_ratio=decrease:'
-              'flags=fast_bilinear" '
-              '-q:v 5 ${_quoteFfmpeg(partialFrame.path)}';
-
-          final session = await FFmpegKit.executeAsync(command).timeout(
-            const Duration(seconds: 12),
-            onTimeout: () {
-              final activeSessions = FFmpegKit.getFFmpegSessions()
-                  .where((running) =>
-                      running.getCommand().contains(partialFrame.path))
-                  .toList();
-              for (final running in activeSessions) {
-                running.cancel();
-              }
-              unawaited(
-                partialFrame.delete().catchError((_) => partialFrame),
-              );
-              throw TimeoutException(
-                'Realtime preview frame decode exceeded 10 seconds.',
-              );
-            },
+          final completedFrame = await _decodeSinglePreviewFrame(
+            path: path,
+            seekMs: seekMs,
+            frame: frame,
+            width: width,
+            decodeThreads: decodeThreads,
           );
-          if (!ReturnCode.isSuccess(session.getReturnCode()) ||
-              !await partialFrame.exists() ||
-              await partialFrame.length() == 0) {
-            final output = (session.getOutput() ?? '').trim();
-            final details = output.length > 900
-                ? output.substring(output.length - 900)
-                : output;
-            try {
-              if (await partialFrame.exists()) await partialFrame.delete();
-            } catch (_) {}
-            throw StateError(
-              'FFmpeg could not decode a preview frame '
-              '(exit code ${session.getReturnCode()}). '
-              '${details.isEmpty ? 'No FFmpeg diagnostic was returned.' : details}',
+
+          // Never delay the first visible frame for an 18/24/30-frame batch.
+          // Once it is on screen, predecode one second ahead in the background.
+          if (completedFrame != null && warmChunk && _previewPlaying) {
+            unawaited(
+              Future<void>.delayed(const Duration(milliseconds: 24))
+                  .then((_) => _ensurePreviewFrameChunk(
+                        path: path,
+                        cacheDirectory: cacheDirectory,
+                        fingerprint: fingerprint,
+                        chunkStartFrame: chunkStartFrame,
+                        chunkFrameCount: chunkFrameCount,
+                        frameRate: previewFrameRate,
+                        width: width,
+                        decodeThreads: decodeThreads,
+                      ))
+                  .catchError((error) {
+                debugPrint('DepthVibe preview lookahead skipped: $error');
+              }),
             );
           }
-          try {
-            if (await frame.exists()) await frame.delete();
-            final completedFrame = await partialFrame.rename(frame.path);
-            if (!prefetch) _previewFrameErrors.remove(laneId);
-            return completedFrame;
-          } catch (_) {
-            try {
-              if (await partialFrame.exists()) await partialFrame.delete();
-            } catch (_) {}
-            return null;
-          }
+          return completedFrame;
         },
       );
     } catch (error, stackTrace) {
@@ -516,6 +553,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       width: width,
       decodeThreads: profile.previewDecodeConcurrency,
       prefetch: prefetch,
+      warmChunk: _previewPlaying || prefetch,
     ).then((frame) {
       if (frame == null) {
         // A completed failed Future must never pin a layer to a blank preview.
