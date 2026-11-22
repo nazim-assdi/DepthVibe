@@ -5,6 +5,8 @@ import 'dart:math' as math;
 
 typedef PreviewFrameDecoder = Future<File?> Function();
 
+enum _PreviewAdaptiveSignal { decode, uiFrame, queueWait }
+
 class PreviewFrameCacheStats {
   const PreviewFrameCacheStats({
     required this.cachedFrames,
@@ -15,6 +17,8 @@ class PreviewFrameCacheStats {
     required this.droppedRequests,
     required this.averageDecodeMs,
     required this.lastDecodeMs,
+    required this.averageQueueWaitMs,
+    required this.lastQueueWaitMs,
     required this.averageUiFrameMs,
     required this.lastUiFrameMs,
     required this.effectivePreviewWidth,
@@ -29,6 +33,8 @@ class PreviewFrameCacheStats {
   final int droppedRequests;
   final double averageDecodeMs;
   final int lastDecodeMs;
+  final double averageQueueWaitMs;
+  final int lastQueueWaitMs;
   final double averageUiFrameMs;
   final int lastUiFrameMs;
   final int effectivePreviewWidth;
@@ -68,6 +74,12 @@ class PreviewFrameService {
   bool _hasUiFrameSamples = false;
   int _slowUiFrameStreak = 0;
   int _fastUiFrameStreak = 0;
+  bool _hasQueueSamples = false;
+  int _slowQueueStreak = 0;
+  int _fastQueueStreak = 0;
+  int _completedQueueSamples = 0;
+  int _lastQueueWaitMs = 0;
+  double _averageQueueWaitMs = 0;
   int _completedUiFrames = 0;
   int _lastUiFrameMs = 0;
   double _averageUiFrameMs = 0;
@@ -103,6 +115,8 @@ class PreviewFrameService {
     _fastDecodeStreak = 0;
     _slowUiFrameStreak = 0;
     _fastUiFrameStreak = 0;
+    _slowQueueStreak = 0;
+    _fastQueueStreak = 0;
   }
 
   /// Feed Flutter build+raster time into the adaptive quality governor.
@@ -117,7 +131,22 @@ class PreviewFrameService {
     _averageUiFrameMs = _completedUiFrames == 1
         ? milliseconds
         : (_averageUiFrameMs * 0.8) + (milliseconds * 0.2);
-    _recordAdaptiveSignal(milliseconds, uiFrame: true);
+    _recordAdaptiveSignal(milliseconds, signal: _PreviewAdaptiveSignal.uiFrame);
+  }
+
+  /// Measure scheduler backlog separately from actual decoder execution.
+  /// Queue pressure is a real preview bottleneck, but must never be reported
+  /// as native decoder time in the performance HUD.
+  void recordQueueWaitDuration(Duration duration) {
+    final milliseconds =
+        (duration.inMicroseconds / 1000).clamp(0, 60000).toDouble();
+    _hasQueueSamples = true;
+    _completedQueueSamples++;
+    _lastQueueWaitMs = milliseconds.round();
+    _averageQueueWaitMs = _completedQueueSamples == 1
+        ? milliseconds
+        : (_averageQueueWaitMs * 0.8) + (milliseconds * 0.2);
+    _recordAdaptiveSignal(milliseconds, signal: _PreviewAdaptiveSignal.queueWait);
   }
 
   /// Feed measured native decode time back into the adaptive preview profile.
@@ -135,44 +164,58 @@ class PreviewFrameService {
     _averageDecodeMs = _completedDecodes == 1
         ? milliseconds
         : (_averageDecodeMs * 0.8) + (milliseconds * 0.2);
-    _recordAdaptiveSignal(milliseconds, uiFrame: false);
+    _recordAdaptiveSignal(milliseconds, signal: _PreviewAdaptiveSignal.decode);
   }
 
   void _recordAdaptiveSignal(
     double milliseconds, {
-    required bool uiFrame,
+    required _PreviewAdaptiveSignal signal,
   }) {
     final frameBudgetMs = 1000 / _effectivePreviewFrameRate;
     final isSlow = milliseconds > frameBudgetMs * 1.25;
     final isFast = milliseconds < frameBudgetMs * 0.55;
 
-    if (uiFrame) {
-      if (isSlow) {
-        _slowUiFrameStreak++;
-        _fastUiFrameStreak = 0;
-      } else if (isFast) {
-        _fastUiFrameStreak++;
-        _slowUiFrameStreak = 0;
-      } else {
-        _slowUiFrameStreak = 0;
-        _fastUiFrameStreak = 0;
-      }
-    } else {
-      if (isSlow) {
-        _slowDecodeStreak++;
-        _fastDecodeStreak = 0;
-      } else if (isFast) {
-        _fastDecodeStreak++;
-        _slowDecodeStreak = 0;
-      } else {
-        _slowDecodeStreak = 0;
-        _fastDecodeStreak = 0;
-      }
+    switch (signal) {
+      case _PreviewAdaptiveSignal.uiFrame:
+        if (isSlow) {
+          _slowUiFrameStreak++;
+          _fastUiFrameStreak = 0;
+        } else if (isFast) {
+          _fastUiFrameStreak++;
+          _slowUiFrameStreak = 0;
+        } else {
+          _slowUiFrameStreak = 0;
+          _fastUiFrameStreak = 0;
+        }
+      case _PreviewAdaptiveSignal.decode:
+        if (isSlow) {
+          _slowDecodeStreak++;
+          _fastDecodeStreak = 0;
+        } else if (isFast) {
+          _fastDecodeStreak++;
+          _slowDecodeStreak = 0;
+        } else {
+          _slowDecodeStreak = 0;
+          _fastDecodeStreak = 0;
+        }
+      case _PreviewAdaptiveSignal.queueWait:
+        if (isSlow) {
+          _slowQueueStreak++;
+          _fastQueueStreak = 0;
+        } else if (isFast) {
+          _fastQueueStreak++;
+          _slowQueueStreak = 0;
+        } else {
+          _slowQueueStreak = 0;
+          _fastQueueStreak = 0;
+        }
     }
 
     // Either bottleneck can lower preview load. Require each active signal to
     // be fast before restoring quality, avoiding oscillation on mixed loads.
-    if (_slowDecodeStreak >= 5 || _slowUiFrameStreak >= 5) {
+    if (_slowDecodeStreak >= 5 ||
+        _slowUiFrameStreak >= 5 ||
+        _slowQueueStreak >= 5) {
       _effectivePreviewWidth = (_effectivePreviewWidth * 0.8)
           .round()
           .clamp(320, _preferredPreviewWidth)
@@ -184,15 +227,19 @@ class PreviewFrameService {
       _fastDecodeStreak = 0;
       _slowUiFrameStreak = 0;
       _fastUiFrameStreak = 0;
+      _slowQueueStreak = 0;
+      _fastQueueStreak = 0;
       return;
     }
 
     final decoderFast = _completedDecodes == 0 || _fastDecodeStreak >= 40;
     final uiFast = !_hasUiFrameSamples || _fastUiFrameStreak >= 40;
+    final queueFast = !_hasQueueSamples || _fastQueueStreak >= 40;
     final decoderHasSamples = _completedDecodes > 0;
-    if ((decoderHasSamples || _hasUiFrameSamples) &&
+    if ((decoderHasSamples || _hasUiFrameSamples || _hasQueueSamples) &&
         decoderFast &&
-        uiFast) {
+        uiFast &&
+        queueFast) {
       _effectivePreviewWidth = math.min(
         _preferredPreviewWidth,
         (_effectivePreviewWidth * 1.2).round(),
@@ -220,6 +267,8 @@ class PreviewFrameService {
         droppedRequests: _droppedRequests,
         averageDecodeMs: _averageDecodeMs,
         lastDecodeMs: _lastDecodeMs,
+        averageQueueWaitMs: _averageQueueWaitMs,
+        lastQueueWaitMs: _lastQueueWaitMs,
         averageUiFrameMs: _averageUiFrameMs,
         lastUiFrameMs: _lastUiFrameMs,
         effectivePreviewWidth: _effectivePreviewWidth,
@@ -339,6 +388,8 @@ class PreviewFrameService {
   }
 
   Future<void> _run(_PendingPreviewFrame task) async {
+    recordQueueWaitDuration(task.enqueuedAt.elapsed);
+    final decodeStopwatch = Stopwatch()..start();
     try {
       final decoded = await task.decode();
       File? result;
@@ -359,7 +410,7 @@ class PreviewFrameService {
       if (!task.completer.isCompleted) task.completer.complete(null);
     } finally {
       recordDecodeDuration(
-        task.requestedAt.elapsed,
+        decodeStopwatch.elapsed,
         framesDecoded: task.decodedFrameCount,
       );
       _activeByKey.remove(task.key);
@@ -424,12 +475,12 @@ class _PendingPreviewFrame {
     required this.key,
     required this.decode,
     required this.decodedFrameCount,
-  }) : requestedAt = Stopwatch()..start();
+  }) : enqueuedAt = Stopwatch()..start();
 
   final String laneId;
   final String key;
   final PreviewFrameDecoder decode;
   final int decodedFrameCount;
-  final Stopwatch requestedAt;
+  final Stopwatch enqueuedAt;
   final Completer<File?> completer = Completer<File?>();
 }
