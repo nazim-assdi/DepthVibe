@@ -4195,6 +4195,42 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                               doc,
                               Size(canvasWidth, canvasHeight),
                             ),
+                          if (_activePreviewTool == 'Pen' &&
+                              selected?.kind == LayerKind.shape &&
+                              _previewPenLayerId == selected?.id)
+                            Positioned.fill(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTapUp: (details) => _addPreviewPenPoint(
+                                  selected!,
+                                  details.localPosition,
+                                  Size(canvasWidth, canvasHeight),
+                                ),
+                                onPanStart: (details) =>
+                                    _beginPreviewPenPointGesture(
+                                  selected!,
+                                  details.localPosition,
+                                  Size(canvasWidth, canvasHeight),
+                                ),
+                                onPanUpdate: (details) =>
+                                    _updatePreviewPenPointGesture(
+                                  details.localPosition,
+                                ),
+                                onPanEnd: (_) => _endPreviewPenPointGesture(),
+                                onPanCancel: _endPreviewPenPointGesture,
+                                child: IgnorePointer(
+                                  child: CustomPaint(
+                                    painter: _PreviewPenDraftPainter(
+                                      points: _previewPenPoints,
+                                      tangents: _previewPenTangents,
+                                      color: Theme.of(context)
+                                          .extension<DepthVibePalette>()!
+                                          .accent,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           if (selected != null)
                             Positioned(
                               right: 10,
@@ -4524,9 +4560,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         );
         break;
       case LayerKind.shape:
-        visual = CustomPaint(
-          painter: _ShapeLayerPainter(_shapeStyleAt(layer, timeMs)),
-        );
+        final isDrawingShapePath =
+            _previewPenLayerId == layer.id && _activePreviewTool == 'Pen';
+        final hasVectorPath =
+            layer.shapeStyle?.primitive == ShapePrimitive.path;
+        if (isDrawingShapePath || hasVectorPath) {
+          baseWidth = doc.width.toDouble();
+          baseHeight = doc.height.toDouble();
+        }
+        visual = isDrawingShapePath
+            ? const SizedBox.shrink()
+            : CustomPaint(
+                painter: _ShapeLayerPainter(_shapeStyleAt(layer, timeMs)),
+              );
         break;
       case LayerKind.text:
         baseWidth = layer.textBoxWidth;
@@ -4744,7 +4790,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => _controller.selectLayer(layer.id),
-                  onTapUp: _activePreviewTool == 'Pen'
+                  onTapUp: _activePreviewTool == 'Pen' &&
+                          layer.kind != LayerKind.shape
                       ? (details) => _addPreviewPenPoint(
                             layer,
                             details.localPosition,
@@ -4756,7 +4803,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       : (details) {
                           if (_activePreviewTool == 'Select') {
                             _beginPreviewMove(layer, details.globalPosition);
-                          } else if (_activePreviewTool == 'Pen') {
+                          } else if (_activePreviewTool == 'Pen' &&
+                              layer.kind != LayerKind.shape) {
                             _beginPreviewPenPointGesture(
                               layer,
                               details.localPosition,
@@ -4774,7 +4822,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                               canvasSize,
                               doc,
                             );
-                          } else if (_activePreviewTool == 'Pen') {
+                          } else if (_activePreviewTool == 'Pen' &&
+                              layer.kind != LayerKind.shape) {
                             _updatePreviewPenPointGesture(details.localPosition);
                           }
                         },
@@ -4783,7 +4832,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       : (_) {
                           if (_activePreviewTool == 'Select') {
                             _endPreviewMove();
-                          } else if (_activePreviewTool == 'Pen') {
+                          } else if (_activePreviewTool == 'Pen' &&
+                              layer.kind != LayerKind.shape) {
                             _endPreviewPenPointGesture();
                           }
                         },
@@ -4826,6 +4876,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ),
             ),
           if (isSelected &&
+              layer.kind != LayerKind.shape &&
               _activePreviewTool == 'Pen' &&
               _previewPenLayerId == layer.id)
             Positioned.fill(
