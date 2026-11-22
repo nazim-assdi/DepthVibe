@@ -781,13 +781,17 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   String? _previewResizeLayerId;
   double _previewResizeStartScaleX = 100;
   double _previewResizeStartScaleY = 100;
-  Offset _previewResizeLastGlobal = Offset.zero;
+  Offset _previewResizeStartGlobal = Offset.zero;
   bool _previewResizeHistoryRecorded = false;
   String? _previewRotateLayerId;
   double _previewRotateStartDegrees = 0;
   double _previewRotateStartPointerRadians = 0;
   Offset _previewRotateCenterGlobal = Offset.zero;
   bool _previewRotateHistoryRecorded = false;
+  String? _previewMotionLayerId;
+  int? _previewMotionKeyTimeMs;
+  Offset _previewMotionLastGlobal = Offset.zero;
+  bool _previewMotionHistoryRecorded = false;
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
   final Set<String> _expandedTimelineLayers = {};
@@ -2910,7 +2914,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _previewResizeLayerId = layer.id;
     _previewResizeStartScaleX = layer.valueAt('scale.x', timeMs);
     _previewResizeStartScaleY = layer.valueAt('scale.y', timeMs);
-    _previewResizeLastGlobal = globalPosition;
+    _previewResizeStartGlobal = globalPosition;
     _previewResizeHistoryRecorded = false;
   }
 
@@ -2924,8 +2928,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     required int verticalSign,
   }) {
     if (_previewResizeLayerId != layer.id) return;
-    final screenDelta = globalPosition - _previewResizeLastGlobal;
-    _previewResizeLastGlobal = globalPosition;
+    final screenDelta = globalPosition - _previewResizeStartGlobal;
     final cosine = math.cos(rotationRadians);
     final sine = math.sin(rotationRadians);
     final localDelta = Offset(
@@ -3142,6 +3145,56 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  void _beginPreviewMotionKeyframe(
+    CompositionLayer layer,
+    int timeMs,
+    Offset globalPosition,
+  ) {
+    if (layer.locked) return;
+    _pausePreviewPlayback();
+    _controller.selectLayer(layer.id);
+    _previewMotionLayerId = layer.id;
+    _previewMotionKeyTimeMs = timeMs;
+    _previewMotionLastGlobal = globalPosition;
+    _previewMotionHistoryRecorded = false;
+    _controller.setPlayhead(timeMs);
+  }
+
+  void _updatePreviewMotionKeyframe(
+    CompositionLayer layer,
+    Offset globalPosition,
+    Size canvasSize,
+    CompositionDocument document,
+  ) {
+    if (_previewMotionLayerId != layer.id ||
+        _previewMotionKeyTimeMs == null) {
+      return;
+    }
+    final delta = globalPosition - _previewMotionLastGlobal;
+    _previewMotionLastGlobal = globalPosition;
+    final timeMs = _previewMotionKeyTimeMs!;
+    final current = _controller.selectedLayer;
+    if (current == null || current.id != layer.id) return;
+    _controller.updateTransformValues(
+      {
+        'position.x': current.valueAt('position.x', timeMs) +
+            delta.dx / math.max(1, canvasSize.width) * document.width,
+        'position.y': current.valueAt('position.y', timeMs) +
+            delta.dy / math.max(1, canvasSize.height) * document.height,
+      },
+      autoKey: true,
+      timeMs: timeMs,
+      recordHistory: !_previewMotionHistoryRecorded,
+    );
+    _previewMotionHistoryRecorded = true;
+  }
+
+  void _endPreviewMotionKeyframe() {
+    _previewMotionLayerId = null;
+    _previewMotionKeyTimeMs = null;
+    _previewMotionHistoryRecorded = false;
+  }
+
   Widget _buildMotionPathOverlay(
     CompositionLayer? layer,
     CompositionDocument document,
@@ -3149,20 +3202,93 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   ) {
     if (layer == null) return const SizedBox.shrink();
     final xTrack = layer.keyframeTracks.where(
-      (track) => track.property == 'position.x' && track.keyframes.length > 1,
+      (track) => track.property == 'position.x',
     );
     final yTrack = layer.keyframeTracks.where(
-      (track) => track.property == 'position.y' && track.keyframes.length > 1,
+      (track) => track.property == 'position.y',
     );
-    if (xTrack.isEmpty || yTrack.isEmpty) return const SizedBox.shrink();
-    return IgnorePointer(
-      child: CustomPaint(
-        size: canvasSize,
-        painter: _PreviewMotionPathPainter(
-          layer: layer,
-          document: document,
-          color: Theme.of(context).extension<DepthVibePalette>()!.accent,
-        ),
+    final times = <int>{
+      if (xTrack.isNotEmpty)
+        for (final key in xTrack.first.keyframes) key.timeMs,
+      if (yTrack.isNotEmpty)
+        for (final key in yTrack.first.keyframes) key.timeMs,
+    }.toList()
+      ..sort();
+    if (times.length < 2) return const SizedBox.shrink();
+
+    Offset pointAt(int timeMs) => Offset(
+          layer.valueAt('position.x', timeMs) /
+              math.max(1, document.width) * canvasSize.width,
+          layer.valueAt('position.y', timeMs) /
+              math.max(1, document.height) * canvasSize.height,
+        );
+
+    return SizedBox(
+      width: canvasSize.width,
+      height: canvasSize.height,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _PreviewMotionPathPainter(
+                  layer: layer,
+                  document: document,
+                  color: Theme.of(context).extension<DepthVibePalette>()!.accent,
+                ),
+              ),
+            ),
+          ),
+          for (final timeMs in times)
+            Positioned(
+              left: pointAt(timeMs).dx - 8,
+              top: pointAt(timeMs).dy - 8,
+              width: 16,
+              height: 16,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _controller.setPlayhead(timeMs),
+                onPanStart: (details) => _beginPreviewMotionKeyframe(
+                  layer,
+                  timeMs,
+                  details.globalPosition,
+                ),
+                onPanUpdate: (details) => _updatePreviewMotionKeyframe(
+                  layer,
+                  details.globalPosition,
+                  canvasSize,
+                  document,
+                ),
+                onPanEnd: (_) => _endPreviewMotionKeyframe(),
+                onPanCancel: _endPreviewMotionKeyframe,
+                child: Center(
+                  child: Transform.rotate(
+                    angle: math.pi / 4,
+                    child: Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        color: timeMs == document.playheadMs
+                            ? const Color(0xFFFFA65C)
+                            : const Color(0xFFF5D27E),
+                        border: Border.all(
+                          color: Colors.white,
+                          width: 1,
+                        ),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x99000000),
+                            blurRadius: 3,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -10069,10 +10195,11 @@ class _PreviewMotionPathPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final xTracks = layer.keyframeTracks.where((t) => t.property == 'position.x');
     final yTracks = layer.keyframeTracks.where((t) => t.property == 'position.y');
-    if (xTracks.isEmpty || yTracks.isEmpty) return;
     final times = <int>{
-      for (final key in xTracks.first.keyframes) key.timeMs,
-      for (final key in yTracks.first.keyframes) key.timeMs,
+      if (xTracks.isNotEmpty)
+        for (final key in xTracks.first.keyframes) key.timeMs,
+      if (yTracks.isNotEmpty)
+        for (final key in yTracks.first.keyframes) key.timeMs,
     }.toList()..sort();
     if (times.length < 2) return;
 

@@ -1196,4 +1196,53 @@ void main() {
     controller.dispose();
   });
 
+
+  test('preview motion keyframe edits its own timeline time without changing playhead', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 5000,
+        playheadMs: 2500,
+        layers: [
+          CompositionLayer(
+            id: 'shape',
+            name: 'Shape',
+            kind: LayerKind.shape,
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'position.x',
+                keyframes: [
+                  ScalarKeyframe(timeMs: 500, value: 200),
+                  ScalarKeyframe(timeMs: 1500, value: 500),
+                ],
+              ),
+              KeyframeTrack(
+                property: 'position.y',
+                keyframes: [
+                  ScalarKeyframe(timeMs: 500, value: 300),
+                  ScalarKeyframe(timeMs: 1500, value: 600),
+                ],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'shape',
+      ),
+    );
+
+    controller.updateTransformValues(
+      {'position.x': 420, 'position.y': 380},
+      autoKey: true,
+      timeMs: 500,
+    );
+    final layer = controller.selectedLayer!;
+    expect(layer.valueAt('position.x', 500), 420);
+    expect(layer.valueAt('position.y', 500), 380);
+    expect(layer.keyframeTracks.first.keyframes.first.timeMs, 500);
+    expect(controller.document.playheadMs, 2500);
+
+    controller.undo();
+    expect(controller.selectedLayer!.valueAt('position.x', 500), 200);
+    controller.dispose();
+  });
+
 }

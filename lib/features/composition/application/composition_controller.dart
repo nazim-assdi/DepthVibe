@@ -1358,13 +1358,15 @@ class CompositionController extends ChangeNotifier {
   void updateTransformValues(
     Map<String, double> values, {
     bool autoKey = false,
+    int? timeMs,
     bool recordHistory = true,
   }) {
     final layer = selectedLayer;
     if (layer == null || layer.locked || values.isEmpty) return;
     var transform = layer.transform;
     final tracks = [...layer.keyframeTracks];
-    final timeMs = _document.playheadMs;
+    final targetTimeMs =
+        (timeMs ?? _document.playheadMs).clamp(0, _document.durationMs).toInt();
 
     for (final entry in values.entries) {
       if (!entry.value.isFinite) continue;
@@ -1375,10 +1377,10 @@ class CompositionController extends ChangeNotifier {
         continue;
       }
       final track = trackIndex < 0 ? KeyframeTrack(property: entry.key) : tracks[trackIndex];
-      final existingIndex = track.keyframes.indexWhere((item) => item.timeMs == timeMs);
+      final existingIndex = track.keyframes.indexWhere((item) => item.timeMs == targetTimeMs);
       final existing = existingIndex < 0 ? null : track.keyframes[existingIndex];
       final updated = track.upsert(ScalarKeyframe(
-        timeMs: timeMs,
+        timeMs: targetTimeMs,
         value: entry.value,
         interpolation: existing?.interpolation ?? Interpolation.easeInOut,
         inTangent: existing?.inTangent ?? 0,
