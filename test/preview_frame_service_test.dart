@@ -134,6 +134,40 @@ void main() {
     service.dispose();
   });
 
+  test('fast UI frames cannot hide a slow native video decoder', () {
+    final service = PreviewFrameService(maxConcurrentDecodes: 1);
+    service.configurePreviewProfile(width: 960, frameRate: 30);
+
+    for (var index = 0; index < 5; index++) {
+      service.recordUiFrameDuration(const Duration(milliseconds: 1));
+      service.recordDecodeDuration(const Duration(milliseconds: 120));
+    }
+
+    expect(service.effectivePreviewWidth, 768);
+    expect(service.effectivePreviewFrameRate, 27);
+    expect(service.stats.lastDecodeMs, 120);
+    expect(service.stats.lastUiFrameMs, 1);
+    expect(service.stats.averageDecodeMs, 120);
+    expect(service.stats.averageUiFrameMs, 1);
+    service.dispose();
+  });
+
+  test('slow Flutter raster frames lower preview quality even with fast decode', () {
+    final service = PreviewFrameService(maxConcurrentDecodes: 1);
+    service.configurePreviewProfile(width: 960, frameRate: 30);
+
+    for (var index = 0; index < 5; index++) {
+      service.recordDecodeDuration(const Duration(milliseconds: 1));
+      service.recordUiFrameDuration(const Duration(milliseconds: 120));
+    }
+
+    expect(service.effectivePreviewWidth, 768);
+    expect(service.effectivePreviewFrameRate, 27);
+    expect(service.stats.lastDecodeMs, 1);
+    expect(service.stats.lastUiFrameMs, 120);
+    service.dispose();
+  });
+
   test('one-second batch decode time is normalized by its frame count', () {
     final service = PreviewFrameService(maxConcurrentDecodes: 1);
     service.configurePreviewProfile(width: 960, frameRate: 30);
