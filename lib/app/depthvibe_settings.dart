@@ -24,9 +24,12 @@ enum DepthVibePerformanceMode {
   bool get enableVideoHardwareAcceleration =>
       this != DepthVibePerformanceMode.compatibility;
 
-  /// Let MPV use a supported hardware decoder and fall back to software
-  /// decoding when the installed GPU/codec cannot handle the source.
-  String get videoHardwareDecoder => 'auto-safe';
+  /// Compatibility renders through the CPU pixel-buffer path, so also force
+  /// software decoding instead of handing hardware surfaces to that renderer.
+  /// Balanced/Quality may use a supported hardware decoder.
+  String get videoHardwareDecoder => this == DepthVibePerformanceMode.compatibility
+      ? 'no'
+      : 'auto-safe';
 
   /// Maximum width used by the compositor's realtime video-frame cache.
   int get previewFrameWidth => switch (this) {
