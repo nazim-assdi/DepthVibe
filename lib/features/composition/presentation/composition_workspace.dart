@@ -558,8 +558,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       if (frame == null) {
         // A completed failed Future must never pin a layer to a blank preview.
         // A later rebuild or explicit Retry can start a clean decoder request.
-        if (!prefetch &&
-            identical(_videoFrameJobs[requestKey], job)) {
+        if (identical(_videoFrameJobs[requestKey], job)) {
           _videoFrameJobs.remove(requestKey);
         }
         return null;
