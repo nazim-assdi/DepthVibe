@@ -348,3 +348,15 @@ The extension manager is a data-only v1, not a general-purpose runtime for arbit
 - Added regression tests for cancellation lifecycle and monotonic preview workload presets.
 
 **Scope boundary:** this is active-render cancellation and progress, not yet a persistent multi-job Render Queue. Job scheduling, durable per-job logs, recovery/resume and retry controls remain open. Low-end CPU/GPU performance still requires physical-device measurement.
+
+
+### Adaptive compositor preview pipeline — 22 November 2026
+
+- **Bounded frame scheduler:** compositor video-layer preview now uses a latest-frame-wins queue. One pending frame per layer is retained; obsolete queued requests are completed as dropped instead of building up behind slow FFmpeg decodes. Identical requests share in-flight work.
+- **Preview frame cache:** decoded low-resolution JPEGs are cached in memory and in a temporary disk directory. FFmpeg writes to a separate `.part.jpg` path and the frame is renamed to its final cache path only after a successful decode. Cache cleanup preserves currently displayed layer frames and trims unpinned disk frames after the preview cache crosses its size limit.
+- **Lookahead and stale-frame handling:** one frame ahead is requested per visible video layer. While a new frame is being prepared, the last successfully decoded frame remains displayed instead of flashing a spinner/blank surface. Late results cannot replace a newer playhead frame.
+- **Adaptive quality governor:** Compatibility targets 480 px / 18 FPS, Balanced 640 px / 24 FPS and Quality 960 px / 30 FPS. Native decode time and Flutter build+raster frame timings feed the governor: repeated slow frames lower preview width/cadence, while sustained fast frames gradually restore the selected profile. Native decoder concurrency is capped by profile (1 / 1 / 2).
+- **UI scheduling:** playhead updates use a separate `ValueNotifier`, so high-frequency scrubbing rebuilds the canvas and timeline rather than the entire inspector/panel tree. Compositor preview transport follows the current adaptive cadence and pauses on scrub, app background and full export. Per-layer `RepaintBoundary` widgets isolate raster invalidation.
+- **Output boundary:** all of these settings affect live preview only. Final composition resolution, frame rate and export filter graph are unchanged.
+
+**Known limits:** this is cached low-resolution frame seeking, not yet a persistent proxy-media generator or a continuously decoded multi-stream proxy engine. The Compositor still uses FFmpeg to fetch source frames as cache misses occur, and the complete effect stack is not yet a unified live GPU render graph (some effect, blend, curve/LUT, mask-feather and 3D paths still differ between preview and export). Heavy codecs, many simultaneous long-GOP videos, very large effects stacks or weak CPUs can still miss the target cadence. CI and unit tests verify scheduler logic and compilation, not smooth playback on every physical GPU/CPU; device stress tests and proxy generation remain open.
