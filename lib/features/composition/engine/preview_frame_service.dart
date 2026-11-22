@@ -115,21 +115,24 @@ class PreviewFrameService {
     }
 
     if (_slowDecodeStreak >= 5) {
-      _effectivePreviewWidth =
-          (_effectivePreviewWidth * 0.8).round().clamp(320, _preferredPreviewWidth);
-      _effectivePreviewFrameRate =
-          (_effectivePreviewFrameRate - 3).clamp(12, _preferredPreviewFrameRate);
+      _effectivePreviewWidth = (_effectivePreviewWidth * 0.8)
+          .round()
+          .clamp(320, _preferredPreviewWidth)
+          .toInt();
+      _effectivePreviewFrameRate = (_effectivePreviewFrameRate - 3)
+          .clamp(12, _preferredPreviewFrameRate)
+          .toInt();
       _slowDecodeStreak = 0;
       _fastDecodeStreak = 0;
     } else if (_fastDecodeStreak >= 40) {
       _effectivePreviewWidth = math.min(
         _preferredPreviewWidth,
         (_effectivePreviewWidth * 1.2).round(),
-      );
+      ).toInt();
       _effectivePreviewFrameRate = math.min(
         _preferredPreviewFrameRate,
         _effectivePreviewFrameRate + 2,
-      );
+      ).toInt();
       _fastDecodeStreak = 0;
     }
   }
