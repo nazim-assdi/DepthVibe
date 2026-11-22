@@ -208,10 +208,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     }
     final profile = DepthVibeSettingsService.instance.performanceMode;
     _previewFrameService
-      ..maxConcurrentDecodes = profile.previewDecodeConcurrency;
+      ..maxConcurrentDecodes = profile.previewDecodeConcurrency
+      ..configurePreviewProfile(
+        width: profile.previewFrameWidth,
+        frameRate: profile.previewFrameRate,
+      );
     final previewFps = math.min(
       frameRate,
-      profile.previewFrameRate.toDouble(),
+      _previewFrameService.effectivePreviewFrameRate.toDouble(),
     );
     final sourceTimeMs = math.max(
       0,
@@ -219,7 +223,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
     final frameIndex = (sourceTimeMs * previewFps / 1000).floor();
     final seekMs = (frameIndex * 1000 / previewFps).round();
-    final width = profile.previewFrameWidth;
+    final width = _previewFrameService.effectivePreviewWidth;
     final requestKey =
         '${path.hashCode.toUnsigned(32)}_${layer.id}_'
         '${frameIndex}_${width}_${previewFps.toStringAsFixed(1)}';
@@ -6980,9 +6984,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               const Text('NLE / ANIMATION TIMELINE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
               const Spacer(),
               Text(_time(playhead), style: const TextStyle(fontSize: 10, color: Color(0xFFB7C4DC))),
-              Text(
-                '${DepthVibeSettingsService.instance.performanceMode.previewFrameWidth}px · ${DepthVibeSettingsService.instance.performanceMode.previewFrameRate} FPS',
-                style: const TextStyle(fontSize: 8, color: Color(0xFF8D9CB3)),
+              Builder(
+                builder: (context) {
+                  final stats = _previewFrameService.stats;
+                  final decodeText = stats.averageDecodeMs <= 0
+                      ? 'warming up'
+                      : '${stats.averageDecodeMs.round()} ms decode';
+                  return Text(
+                    '${stats.effectivePreviewWidth}px · '
+                    '${stats.effectivePreviewFrameRate} FPS · $decodeText',
+                    style: const TextStyle(
+                      fontSize: 8,
+                      color: Color(0xFF8D9CB3),
+                    ),
+                  );
+                },
               ),
               IconButton(
                 tooltip: _previewPlaying ? 'Pause realtime preview' : 'Play realtime preview',
