@@ -896,6 +896,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     'Layers',
     'Timing',
     'Typography',
+    'Preview',
     'Shape',
     'Color',
     'Masks',
@@ -2435,6 +2436,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               'Layers',
               'Timing',
               'Typography',
+              'Preview',
               'Shape',
               'Color',
               'Masks',
@@ -2638,12 +2640,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           _workspaceMenuButton(
             'Window',
             const [
-              PopupMenuItem(value: 'Layers', child: Text('Project / Layers')),
-              PopupMenuItem(value: 'Transform', child: Text('Transform')),
+              PopupMenuItem(value: 'Project', child: Text('Project')),
+              PopupMenuItem(value: 'Effects & Presets', child: Text('Effects & Presets')),
+              PopupMenuItem(value: 'Transform', child: Text('Properties')),
               PopupMenuItem(value: 'Effects', child: Text('Effect Controls')),
-              PopupMenuItem(value: 'Animation', child: Text('Graph / Keyframe Editor')),
+              PopupMenuItem(value: 'Preview', child: Text('Preview')),
+              PopupMenuItem(value: 'Animation', child: Text('Graph Editor')),
               PopupMenuItem(value: 'Timing', child: Text('Timing')),
-              PopupMenuItem(value: 'Typography', child: Text('Character / Typography')),
+              PopupMenuItem(value: 'Typography', child: Text('Character')),
               PopupMenuItem(value: 'Shape', child: Text('Shape')),
               PopupMenuItem(value: 'Color', child: Text('Color')),
               PopupMenuItem(value: 'Audio', child: Text('Audio')),
@@ -2655,7 +2659,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               PopupMenuItem(value: 'Parent', child: Text('Parent & Link')),
               PopupMenuItem(value: '3D', child: Text('3D Controls')),
             ],
-            (panel) => setState(() => _panel = panel),
+            (panel) => setState(() {
+              if (panel == 'Project' || panel == 'Effects & Presets') {
+                _leftPanel = panel;
+              } else {
+                _panel = panel;
+              }
+            }),
           ),
           _workspaceMenuButton(
             'Workspace',
@@ -7696,7 +7706,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   Widget _buildPreviewPanel() {
     final document = _controller.document;
-    final frameStep = (1000 / document.frameRate).round().clamp(1, 1000);
+    final frameStep = (1000 / document.frameRate).round().clamp(1, 1000).toInt();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
