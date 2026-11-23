@@ -902,6 +902,8 @@ class CompositionLayer {
     this.enabled = true,
     this.solo = false,
     this.locked = false,
+    this.guideLayer = false,
+    this.shy = false,
     this.parentId,
     this.sourceUri,
     this.sourceDocumentUri,
@@ -951,6 +953,10 @@ class CompositionLayer {
   final bool enabled;
   final bool solo;
   final bool locked;
+  /// Visible in the editor but excluded from rendered output.
+  final bool guideLayer;
+  /// Hidden from layer stacks when Hide Shy is enabled.
+  final bool shy;
   final String? parentId;
   final String? sourceUri;
   final String? sourceDocumentUri;
@@ -1014,6 +1020,8 @@ class CompositionLayer {
     bool? enabled,
     bool? solo,
     bool? locked,
+    bool? guideLayer,
+    bool? shy,
     String? parentId,
     bool clearParent = false,
     String? sourceUri,
@@ -1069,6 +1077,8 @@ class CompositionLayer {
         enabled: enabled ?? this.enabled,
         solo: solo ?? this.solo,
         locked: locked ?? this.locked,
+        guideLayer: guideLayer ?? this.guideLayer,
+        shy: shy ?? this.shy,
         parentId: clearParent ? null : (parentId ?? this.parentId),
         sourceUri: sourceUri ?? this.sourceUri,
         sourceDocumentUri: sourceDocumentUri ?? this.sourceDocumentUri,
