@@ -54,6 +54,7 @@ import '../engine/software_3d_renderer.dart';
 import '../engine/gpu_3d_mesh_view.dart';
 import '../engine/audio_waveform_service.dart';
 import '../engine/color_grade_preview.dart';
+import '../engine/live_effect_preview.dart';
 import '../engine/cube_lut_validator.dart';
 import '../engine/motion_tracking_service.dart';
 import '../engine/transition_frame_validator.dart';
@@ -65,6 +66,10 @@ import 'color_curve_editor.dart';
 import 'color_scopes_view.dart';
 import 'transition_preview_tile.dart';
 import 'effect_preview_tile.dart';
+
+enum _CameraPreviewLayout { single, dual, quad }
+
+enum _CameraPreviewView { front, back, left, right, top, bottom }
 
 class CompositionWorkspace extends StatefulWidget {
   const CompositionWorkspace({
@@ -123,6 +128,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   List<MotionBroPresetPack> _motionBroPacks = [];
   bool _motionBroBusy = false;
   String _motionBroSearch = '';
+  _CameraPreviewLayout _cameraPreviewLayout = _CameraPreviewLayout.single;
+  _CameraPreviewView _cameraPreviewView = _CameraPreviewView.top;
 
   Future<File?> _waveformFor(String path) =>
       _waveformJobs.putIfAbsent(path, () => _waveformService.generate(path));
@@ -2580,6 +2587,45 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               color: palette.secondaryText,
             ),
           ),
+          if (hasCamera) ...[
+            PopupMenuButton<_CameraPreviewLayout>(
+              tooltip: 'Camera multi-view layout',
+              padding: EdgeInsets.zero,
+              onSelected: (value) => setState(() => _cameraPreviewLayout = value),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: _CameraPreviewLayout.single, child: Text('1 View · Active Camera')),
+                PopupMenuItem(value: _CameraPreviewLayout.dual, child: Text('2 Views · Active + Reference')),
+                PopupMenuItem(value: _CameraPreviewLayout.quad, child: Text('4 Views · Active + Front / Top / Right')),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+                child: Text(
+                  switch (_cameraPreviewLayout) {
+                    _CameraPreviewLayout.single => '1 VIEW',
+                    _CameraPreviewLayout.dual => '2 VIEW',
+                    _CameraPreviewLayout.quad => '4 VIEW',
+                  },
+                  style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: palette.accent),
+                ),
+              ),
+            ),
+            if (_cameraPreviewLayout == _CameraPreviewLayout.dual)
+              PopupMenuButton<_CameraPreviewView>(
+                tooltip: 'Reference camera angle',
+                padding: EdgeInsets.zero,
+                onSelected: (value) => setState(() => _cameraPreviewView = value),
+                itemBuilder: (_) => _CameraPreviewView.values.map((view) =>
+                  PopupMenuItem(value: view, child: Text(view.name.toUpperCase()))
+                ).toList(),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  child: Text(
+                    _cameraPreviewView.name.toUpperCase(),
+                    style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: palette.secondaryText),
+                  ),
+                ),
+              ),
+          ],
           const SizedBox(width: 10),
           Text(
             '${document.width} × ${document.height}',
@@ -4788,7 +4834,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             doc,
             cameraLayer != null,
           ),
-          Expanded(
+          Flexible(
+            flex: 4,
             child: Center(
               child: AspectRatio(
                 aspectRatio: doc.width / doc.height,
@@ -4956,6 +5003,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ),
             ),
           ),
+          if (cameraLayer != null &&
+              _cameraPreviewLayout != _CameraPreviewLayout.single) ...[
+            const SizedBox(height: 7),
+            SizedBox(
+              height: _cameraPreviewLayout == _CameraPreviewLayout.quad ? 118 : 138,
+              child: _buildCameraMultiViewStrip(
+                doc,
+                resolvedTransforms,
+                cameraLayer,
+                cameraTransform,
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -5128,6 +5188,141 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ),
         ],
       ),
+    );
+  }
+
+  ResolvedLayerTransform? _cameraTransformForView(
+    ResolvedLayerTransform? active,
+    _CameraPreviewView view,
+  ) {
+    if (active == null) return null;
+    final rotation = switch (view) {
+      _CameraPreviewView.front => const Vector3(0, 0, 0),
+      _CameraPreviewView.back => const Vector3(0, 180, 0),
+      _CameraPreviewView.left => const Vector3(0, 90, 0),
+      _CameraPreviewView.right => const Vector3(0, -90, 0),
+      _CameraPreviewView.top => const Vector3(90, 0, 0),
+      _CameraPreviewView.bottom => const Vector3(-90, 0, 0),
+    };
+    return ResolvedLayerTransform(
+      position: active.position,
+      scale: active.scale,
+      rotation: rotation,
+      opacity: active.opacity,
+      enabled: active.enabled,
+    );
+  }
+
+  Widget _buildCameraMultiViewStrip(
+    CompositionDocument doc,
+    Map<String, ResolvedLayerTransform> resolvedTransforms,
+    CompositionLayer cameraLayer,
+    ResolvedLayerTransform? cameraTransform,
+  ) {
+    final views = _cameraPreviewLayout == _CameraPreviewLayout.dual
+        ? <_CameraPreviewView>[_cameraPreviewView]
+        : const <_CameraPreviewView>[
+            _CameraPreviewView.front,
+            _CameraPreviewView.top,
+            _CameraPreviewView.right,
+          ];
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final view in views)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: _buildCameraReferenceViewport(
+                doc,
+                resolvedTransforms,
+                cameraLayer,
+                cameraTransform,
+                view,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCameraReferenceViewport(
+    CompositionDocument doc,
+    Map<String, ResolvedLayerTransform> resolvedTransforms,
+    CompositionLayer cameraLayer,
+    ResolvedLayerTransform? cameraTransform,
+    _CameraPreviewView view,
+  ) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final referenceCamera = cameraLayer.copyWith(
+      camera: (cameraLayer.camera ?? const CameraSettings()).copyWith(
+        projection: 'orthographic',
+        cameraMode: 'oneNode',
+      ),
+    );
+    final referenceTransform = _cameraTransformForView(cameraTransform, view);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(
+          constraints.maxWidth.isFinite ? constraints.maxWidth : 320,
+          constraints.maxHeight.isFinite ? constraints.maxHeight : 110,
+        );
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xFF101722),
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(color: palette.border),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(7),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (_showCanvasGrid)
+                  const CustomPaint(painter: _CanvasGridPainter()),
+                IgnorePointer(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      for (final layer in doc.layers.reversed.where((item) => item.enabled))
+                        _buildLayerVisual(
+                          layer,
+                          doc,
+                          size,
+                          resolvedTransforms: resolvedTransforms,
+                          cameraLayer: referenceCamera,
+                          cameraTransform: referenceTransform,
+                        ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  left: 7,
+                  top: 5,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: const Color(0xCC09111D),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      child: Text(
+                        view.name.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 8,
+                          letterSpacing: 0.7,
+                          fontWeight: FontWeight.w900,
+                          color: palette.accent,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -5523,6 +5718,54 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final gradedVisual = gradeFilter == null
         ? maskedVisual
         : ColorFiltered(colorFilter: gradeFilter, child: maskedVisual);
+    Widget previewVisual = LiveEffectPreview.apply(
+      child: gradedVisual,
+      effects: layer.effects,
+      timeMs: timeMs,
+      canvasSize: canvasSize,
+    );
+
+    for (final transition in doc.transitions.where((item) =>
+        item.fromLayerId == layer.id || item.toLayerId == layer.id)) {
+      if (transition.durationMs <= 0) continue;
+      final rawProgress = (timeMs - transition.startMs) / transition.durationMs;
+      if (rawProgress < 0 || rawProgress > 1) continue;
+      final incoming = transition.toLayerId == layer.id;
+      final progress = (incoming ? rawProgress : 1 - rawProgress)
+          .clamp(0.0, 1.0).toDouble();
+      final kind = transition.kind.name.toLowerCase();
+      if (kind.contains('wipe')) {
+        final vertical = kind.contains('up') || kind.contains('down');
+        final alignment = kind.contains('right') || kind.contains('down')
+            ? (vertical ? Alignment.bottomCenter : Alignment.centerRight)
+            : (vertical ? Alignment.topCenter : Alignment.centerLeft);
+        previewVisual = ClipRect(
+          child: Align(
+            alignment: alignment,
+            widthFactor: vertical ? 1 : progress,
+            heightFactor: vertical ? progress : 1,
+            child: previewVisual,
+          ),
+        );
+      } else if (kind.contains('slide') || kind.contains('cover') || kind.contains('reveal')) {
+        final reverse = kind.contains('right') || kind.contains('down');
+        final vertical = kind.contains('up') || kind.contains('down');
+        final distance = (1 - progress) * (vertical ? canvasSize.height : canvasSize.width);
+        previewVisual = Transform.translate(
+          offset: vertical
+              ? Offset(0, reverse ? distance : -distance)
+              : Offset(reverse ? distance : -distance, 0),
+          child: previewVisual,
+        );
+      } else if (kind.contains('zoom')) {
+        previewVisual = Transform.scale(
+          scale: kind.contains('out') ? 1 + (1 - progress) * 0.25 : 0.75 + 0.25 * progress,
+          child: previewVisual,
+        );
+      } else {
+        previewVisual = Opacity(opacity: progress, child: previewVisual);
+      }
+    }
 
     final isSelected = doc.selectedLayerId == layer.id;
     final visualWidth = width.clamp(1, canvasSize.width * 4).toDouble();
@@ -5600,7 +5843,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                           _endPreviewPenPointGesture();
                         },
                   child: RepaintBoundary(
-                    child: Opacity(opacity: opacity, child: gradedVisual),
+                    child: Opacity(opacity: opacity, child: previewVisual),
                   ),
                 ),
               ),
@@ -10558,10 +10801,33 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         children: [
           _panelHeader('CAMERA CONTROLS', Icons.videocam),
           const Text(
-            'Camera orientation and perspective now drive image cards and imported OBJ geometry. Near/far clipping is shared by preview and FFmpeg camera projection; depth-of-field blur and shadow maps remain pending.',
+            'One-Node cameras use animated Euler rotation. Two-Node cameras aim at a saved world-space point of interest. The active camera and orthographic reference views update with the playhead; depth-of-field remains a separate render capability.',
             style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
           ),
           const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            initialValue: camera.cameraMode,
+            decoration: const InputDecoration(labelText: 'Camera rig'),
+            items: const [
+              DropdownMenuItem(value: 'oneNode', child: Text('One-Node · Free camera')),
+              DropdownMenuItem(value: 'twoNode', child: Text('Two-Node · Look at target')),
+            ],
+            onChanged: (value) => _controller.setCameraSettings(
+              camera.copyWith(cameraMode: value ?? 'oneNode'),
+            ),
+          ),
+          if (camera.cameraMode == 'twoNode') ...[
+            const SizedBox(height: 7),
+            const Text('POINT OF INTEREST · WORLD SPACE', style: TextStyle(
+              fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.7,
+            )),
+            _settingSlider('Target X', camera.pointOfInterestX, -5000, 5000,
+                (value) => _controller.setCameraSettings(camera.copyWith(pointOfInterestX: value))),
+            _settingSlider('Target Y', camera.pointOfInterestY, -5000, 5000,
+                (value) => _controller.setCameraSettings(camera.copyWith(pointOfInterestY: value))),
+            _settingSlider('Target Z', camera.pointOfInterestZ, -5000, 5000,
+                (value) => _controller.setCameraSettings(camera.copyWith(pointOfInterestZ: value))),
+          ],
           DropdownButtonFormField<String>(
             initialValue: camera.projection,
             decoration: const InputDecoration(labelText: 'Projection'),
