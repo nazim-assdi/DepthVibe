@@ -806,6 +806,10 @@ class ShapeStyle {
 class CameraSettings {
   const CameraSettings({
     this.projection = 'perspective',
+    this.cameraMode = 'oneNode',
+    this.pointOfInterestX = 0,
+    this.pointOfInterestY = 0,
+    this.pointOfInterestZ = 0,
     this.fieldOfView = 50,
     this.focalLength = 50,
     this.focusDistance = 1000,
@@ -817,6 +821,11 @@ class CameraSettings {
   });
 
   final String projection;
+  /// oneNode uses animated Euler rotation; twoNode aims at the world-space POI.
+  final String cameraMode;
+  final double pointOfInterestX;
+  final double pointOfInterestY;
+  final double pointOfInterestZ;
   final double fieldOfView;
   final double focalLength;
   final double focusDistance;
@@ -828,6 +837,10 @@ class CameraSettings {
 
   CameraSettings copyWith({
     String? projection,
+    String? cameraMode,
+    double? pointOfInterestX,
+    double? pointOfInterestY,
+    double? pointOfInterestZ,
     double? fieldOfView,
     double? focalLength,
     double? focusDistance,
@@ -838,6 +851,10 @@ class CameraSettings {
     bool? depthOfField,
   }) => CameraSettings(
     projection: projection ?? this.projection,
+    cameraMode: cameraMode ?? this.cameraMode,
+    pointOfInterestX: pointOfInterestX ?? this.pointOfInterestX,
+    pointOfInterestY: pointOfInterestY ?? this.pointOfInterestY,
+    pointOfInterestZ: pointOfInterestZ ?? this.pointOfInterestZ,
     fieldOfView: fieldOfView ?? this.fieldOfView,
     focalLength: focalLength ?? this.focalLength,
     focusDistance: focusDistance ?? this.focusDistance,
