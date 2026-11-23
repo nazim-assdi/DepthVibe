@@ -153,6 +153,60 @@
       setKey(scale, start + duration * 0.45, scaledValue(baseScale, 1.14));
       setKey(scale, end, baseScale);
       created.push([scale, start, end]);
+    } else if (preset === "slide-right") {
+      setKey(position, start, offsetPosition(basePosition, -comp.width * 0.14, 0));
+      setKey(position, end, basePosition);
+      setKey(opacity, start, 0);
+      setKey(opacity, end, baseOpacity);
+      created.push([position, start, end], [opacity, start, end]);
+    } else if (preset === "slide-down") {
+      setKey(position, start, offsetPosition(basePosition, 0, -comp.height * 0.14));
+      setKey(position, end, basePosition);
+      setKey(opacity, start, 0);
+      setKey(opacity, end, baseOpacity);
+      created.push([position, start, end], [opacity, start, end]);
+    } else if (preset === "zoom-in") {
+      setKey(scale, start, scaledValue(baseScale, 0.62));
+      setKey(scale, end, baseScale);
+      setKey(opacity, start, 0);
+      setKey(opacity, end, baseOpacity);
+      created.push([scale, start, end], [opacity, start, end]);
+    } else if (preset === "elastic-pop") {
+      setKey(scale, start, scaledValue(baseScale, 0.42));
+      setKey(scale, start + duration * 0.56, scaledValue(baseScale, 1.18));
+      setKey(scale, start + duration * 0.76, scaledValue(baseScale, 0.92));
+      setKey(scale, start + duration * 0.9, scaledValue(baseScale, 1.035));
+      setKey(scale, end, baseScale);
+      setKey(opacity, start, 0);
+      setKey(opacity, start + duration * 0.18, baseOpacity);
+      created.push([scale, start, end], [opacity, start, end]);
+    } else if (preset === "text-rise") {
+      setKey(position, start, offsetPosition(basePosition, 0, comp.height * 0.08));
+      setKey(position, end, basePosition);
+      setKey(opacity, start, 0);
+      setKey(opacity, end, baseOpacity);
+      created.push([position, start, end], [opacity, start, end]);
+    } else if (preset === "pulse") {
+      setKey(scale, start, baseScale);
+      setKey(scale, start + duration * 0.5, scaledValue(baseScale, 1.08));
+      setKey(scale, end, baseScale);
+      created.push([scale, start, end]);
+    } else if (preset === "whip-left") {
+      setKey(position, start, offsetPosition(basePosition, comp.width * 0.65, 0));
+      setKey(position, end, basePosition);
+      setKey(rotation, start, baseRotation + 14);
+      setKey(rotation, end, baseRotation);
+      setKey(opacity, start, 0);
+      setKey(opacity, end, baseOpacity);
+      created.push([position, start, end], [rotation, start, end], [opacity, start, end]);
+    } else if (preset === "whip-right") {
+      setKey(position, start, offsetPosition(basePosition, -comp.width * 0.65, 0));
+      setKey(position, end, basePosition);
+      setKey(rotation, start, baseRotation - 14);
+      setKey(rotation, end, baseRotation);
+      setKey(opacity, start, 0);
+      setKey(opacity, end, baseOpacity);
+      created.push([position, start, end], [rotation, start, end], [opacity, start, end]);
     }
 
     for (var i = 0; i < created.length; i++) {
@@ -413,7 +467,7 @@
 
     var tabs = panel.add("tabbedpanel");
     tabs.alignChildren = ["fill", "top"];
-    tabs.preferredSize = [390, 505];
+    tabs.preferredSize = [390, 640];
 
     function makeTab(label) {
       var item = tabs.add("tab", undefined, label);
@@ -460,6 +514,68 @@
     addButton(effectsTab, "Add Posterize Time", function () {
       addNativeEffect("ADBE Posterize Time", "Posterize Time");
     });
+    addButton(effectsTab, "Add Fast Box Blur", function () {
+      addNativeEffect("ADBE Box Blur2", "Fast Box Blur");
+    });
+    addButton(effectsTab, "Add Directional Blur", function () {
+      addNativeEffect("ADBE Motion Blur", "Directional Blur");
+    });
+    addButton(effectsTab, "Add Hue/Saturation", function () {
+      addNativeEffect("ADBE HUE SATURATION", "Hue/Saturation");
+    });
+    addButton(effectsTab, "Add Curves", function () {
+      addNativeEffect("ADBE CurvesCustom", "Curves");
+    });
+    addButton(effectsTab, "Add Levels", function () {
+      addNativeEffect("ADBE Easy Levels2", "Levels");
+    });
+    addButton(effectsTab, "Add Lumetri Color", function () {
+      addNativeEffect("ADBE Lumetri", "Lumetri Color");
+    });
+    addButton(effectsTab, "Add Vibrance", function () {
+      addNativeEffect("ADBE Vibrance", "Vibrance");
+    });
+    addButton(effectsTab, "Add Exposure", function () {
+      addNativeEffect("ADBE Exposure2", "Exposure");
+    });
+
+    var vfxTab = makeTab("VFX");
+    addButton(vfxTab, "Add Fractal Noise", function () {
+      addNativeEffect("ADBE Fractal Noise", "Fractal Noise");
+    });
+    addButton(vfxTab, "Add Turbulent Displace", function () {
+      addNativeEffect("ADBE Turbulent Displace", "Turbulent Displace");
+    });
+    addButton(vfxTab, "Add Wave Warp", function () {
+      addNativeEffect("ADBE Wave Warp", "Wave Warp");
+    });
+    addButton(vfxTab, "Add Displacement Map", function () {
+      addNativeEffect("ADBE Displacement Map", "Displacement Map");
+    });
+    addButton(vfxTab, "Add Optics Compensation", function () {
+      addNativeEffect("ADBE Optics Compensation", "Optics Compensation");
+    });
+    addButton(vfxTab, "Add Echo", function () {
+      addNativeEffect("ADBE Echo", "Echo");
+    });
+    addButton(vfxTab, "Add Pixel Motion Blur", function () {
+      addNativeEffect("ADBE OFMotionBlur", "Pixel Motion Blur");
+    });
+    addButton(vfxTab, "Add Linear Wipe", function () {
+      addNativeEffect("ADBE Linear Wipe", "Linear Wipe");
+    });
+    addButton(vfxTab, "Add Radial Wipe", function () {
+      addNativeEffect("ADBE Radial Wipe", "Radial Wipe");
+    });
+    addButton(vfxTab, "Add Block Dissolve", function () {
+      addNativeEffect("ADBE Block Dissolve", "Block Dissolve");
+    });
+    addButton(vfxTab, "Add 4-Color Gradient", function () {
+      addNativeEffect("ADBE 4ColorGradient", "4-Color Gradient");
+    });
+    addButton(vfxTab, "Add CC Light Sweep", function () {
+      addNativeEffect("CC Light Sweep", "CC Light Sweep");
+    });
 
     var motionTab = makeTab("MOTION");
     addButton(motionTab, "Fade In", function () {
@@ -486,11 +602,35 @@
     addButton(motionTab, "Scale Punch", function () {
       animateSelected("scale-punch", "Scale Punch");
     });
+    addButton(motionTab, "Slide Right", function () {
+      animateSelected("slide-right", "Slide Right");
+    });
+    addButton(motionTab, "Slide Down", function () {
+      animateSelected("slide-down", "Slide Down");
+    });
+    addButton(motionTab, "Zoom In", function () {
+      animateSelected("zoom-in", "Zoom In");
+    });
+    addButton(motionTab, "Elastic Pop", function () {
+      animateSelected("elastic-pop", "Elastic Pop");
+    });
+    addButton(motionTab, "Text Rise", function () {
+      animateSelected("text-rise", "Text Rise");
+    });
+    addButton(motionTab, "Pulse", function () {
+      animateSelected("pulse", "Pulse");
+    });
+    addButton(motionTab, "Whip In Left", function () {
+      animateSelected("whip-left", "Whip In Left");
+    });
+    addButton(motionTab, "Whip In Right", function () {
+      animateSelected("whip-right", "Whip In Right");
+    });
     addButton(motionTab, "Stagger Selected Layers", staggerSelectedLayers);
     addButton(motionTab, "Easy Ease Selected Keys", easyEaseSelectedKeys);
 
     panel.add("statictext", undefined, "Actions target unlocked layers and support Ctrl/Cmd+Z.");
-    panel.preferredSize = [410, 590];
+    panel.preferredSize = [410, 730];
     panel.onResizing = panel.onResize = function () { this.layout.resize(); };
     panel.layout.layout(true);
     return panel;
