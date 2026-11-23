@@ -2543,6 +2543,24 @@ class CompositionController extends ChangeNotifier {
     _replace(layer.copyWith(locked: locked));
   }
 
+  void setLayerSolo(String id, bool solo) {
+    final layer = _find(id);
+    if (layer == null) return;
+    _replace(layer.copyWith(solo: solo));
+  }
+
+  void setLayerGuide(String id, bool guideLayer) {
+    final layer = _find(id);
+    if (layer == null) return;
+    _replace(layer.copyWith(guideLayer: guideLayer));
+  }
+
+  void setLayerShy(String id, bool shy) {
+    final layer = _find(id);
+    if (layer == null) return;
+    _replace(layer.copyWith(shy: shy));
+  }
+
   CompositionLayer? _find(String id) {
     for (final layer in _document.layers) {
       if (layer.id == id) return layer;
