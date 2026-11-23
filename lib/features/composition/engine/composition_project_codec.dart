@@ -42,6 +42,7 @@ class CompositionProjectCodec {
         'externalLayerIndex': layer.externalLayerIndex,
         'interchangeMetadata': layer.interchangeMetadata,
         'textContent': layer.textContent,
+        'is3dText': layer.is3dText,
         'textFontFamily': layer.textFontFamily,
         'textFontAssetUri': asset(layer.textFontAssetUri),
         'textFontFallback': layer.textFontFallback,
@@ -166,6 +167,7 @@ class CompositionProjectCodec {
         externalLayerIndex: _optionalInteger(item['externalLayerIndex']),
         interchangeMetadata: _safeMetadata(item['interchangeMetadata']),
         textContent: _optionalString(item['textContent']),
+        is3dText: _boolean(item['is3dText'], false),
         textFontFamily: _optionalString(item['textFontFamily']),
         textFontAssetUri: asset(_optionalString(item['textFontAssetUri'])),
         textFontFallback: (item['textFontFallback'] as List? ?? const [])
