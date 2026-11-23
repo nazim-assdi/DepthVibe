@@ -92,6 +92,71 @@ void main() {
     );
   });
 
+  test('parent XYZ rotation rotates the child offset before world positioning', () {
+    const parent = CompositionLayer(
+      id: 'rotation-null',
+      name: 'Rotation Null',
+      kind: LayerKind.nullObject,
+      transform: LayerTransform(
+        position: Vector3(0, 0, 0),
+        scale: Vector3(100, 100, 100),
+        rotation: Vector3(0, 0, 90),
+      ),
+    );
+    const child = CompositionLayer(
+      id: 'rotated-child',
+      name: 'Child',
+      kind: LayerKind.text,
+      parentId: 'rotation-null',
+      transform: LayerTransform(
+        position: Vector3(10, 0, 0),
+      ),
+    );
+    const layers = [parent, child];
+    const resolver = ParentTransformResolver();
+
+    final resolved = resolver.resolve(
+      layer: child,
+      timeMs: 0,
+      layers: layers,
+    );
+    final all = resolver.resolveAll(timeMs: 0, layers: layers)[child.id]!;
+
+    expect(resolved.position.x, closeTo(0, 0.000001));
+    expect(resolved.position.y, closeTo(10, 0.000001));
+    expect(all.position.x, closeTo(resolved.position.x, 0.000001));
+    expect(all.position.y, closeTo(resolved.position.y, 0.000001));
+  });
+
+  test('parent X rotation carries a child offset into Z depth', () {
+    const parent = CompositionLayer(
+      id: 'x-null',
+      name: 'X Null',
+      kind: LayerKind.nullObject,
+      transform: LayerTransform(
+        position: Vector3(0, 0, 0),
+        rotation: Vector3(90, 0, 0),
+      ),
+    );
+    const child = CompositionLayer(
+      id: 'z-child',
+      name: 'Depth Child',
+      kind: LayerKind.text,
+      parentId: 'x-null',
+      transform: LayerTransform(
+        position: Vector3(0, 10, 0),
+      ),
+    );
+
+    final resolved = const ParentTransformResolver().resolve(
+      layer: child,
+      timeMs: 0,
+      layers: const [parent, child],
+    );
+    expect(resolved.position.y, closeTo(0, 0.000001));
+    expect(resolved.position.z, closeTo(10, 0.000001));
+  });
+
   test('disabled group parent hides nested child layers', () {
     const group = CompositionLayer(
       id: 'group',
