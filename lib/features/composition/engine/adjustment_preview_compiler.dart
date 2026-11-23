@@ -90,7 +90,7 @@ class AdjustmentPreviewCompiler {
     if (!effect.enabled) return null;
     switch (effect.effectId) {
       case 'brightness':
-        final value = _value(effect, 'value', timeMs, 0).clamp(-1.0, 1.0);
+        final value = _value(effect, 'value', timeMs, 0).clamp(-1.0, 1.0).toDouble();
         return AdjustmentPreviewOperation(
           kind: AdjustmentPreviewKind.colorMatrix,
           colorMatrix: [
@@ -126,7 +126,7 @@ class AdjustmentPreviewCompiler {
           ],
         );
       case 'exposure':
-        final exposure = _value(effect, 'value', timeMs, 0).clamp(-8.0, 8.0);
+        final exposure = _value(effect, 'value', timeMs, 0).clamp(-8.0, 8.0).toDouble();
         final multiplier = math.pow(2, exposure).toDouble();
         return AdjustmentPreviewOperation(
           kind: AdjustmentPreviewKind.colorMatrix,
@@ -143,9 +143,9 @@ class AdjustmentPreviewCompiler {
           colorMatrix: _hue(_value(effect, 'degrees', timeMs, 0)),
         );
       case 'color_balance':
-        final red = _value(effect, 'red', timeMs, 0).clamp(-1.0, 1.0);
-        final green = _value(effect, 'green', timeMs, 0).clamp(-1.0, 1.0);
-        final blue = _value(effect, 'blue', timeMs, 0).clamp(-1.0, 1.0);
+        final red = _value(effect, 'red', timeMs, 0).clamp(-1.0, 1.0).toDouble();
+        final green = _value(effect, 'green', timeMs, 0).clamp(-1.0, 1.0).toDouble();
+        final blue = _value(effect, 'blue', timeMs, 0).clamp(-1.0, 1.0).toDouble();
         return AdjustmentPreviewOperation(
           kind: AdjustmentPreviewKind.colorMatrix,
           colorMatrix: [
@@ -158,12 +158,12 @@ class AdjustmentPreviewCompiler {
       case 'gaussian_blur':
         return AdjustmentPreviewOperation(
           kind: AdjustmentPreviewKind.gaussianBlur,
-          amount: _value(effect, 'sigma', timeMs, 2).clamp(0.0, 30.0),
+          amount: _value(effect, 'sigma', timeMs, 2).clamp(0.0, 30.0).toDouble(),
         );
       case 'box_blur':
         return AdjustmentPreviewOperation(
           kind: AdjustmentPreviewKind.boxBlur,
-          amount: _value(effect, 'radius', timeMs, 2).clamp(0.0, 20.0),
+          amount: _value(effect, 'radius', timeMs, 2).clamp(0.0, 20.0).toDouble(),
         );
       case 'mirror':
         return const AdjustmentPreviewOperation(
@@ -176,7 +176,7 @@ class AdjustmentPreviewCompiler {
       case 'vignette':
         return AdjustmentPreviewOperation(
           kind: AdjustmentPreviewKind.vignette,
-          amount: _value(effect, 'angle', timeMs, 0.8).clamp(0.1, 1.5),
+          amount: _value(effect, 'angle', timeMs, 0.8).clamp(0.1, 1.5).toDouble(),
         );
       default:
         return null;
