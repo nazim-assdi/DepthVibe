@@ -3107,7 +3107,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               final remainingVisible = [...visibleLayers]..removeAt(oldIndex);
               final remainingAll = [...layers]
                 ..removeWhere((layer) => layer.id == moving.id);
-              final insertion = newIndex.clamp(0, remainingVisible.length);
+              final insertion = newIndex.clamp(0, remainingVisible.length).toInt();
               final targetId = insertion < remainingVisible.length
                   ? remainingVisible[insertion].id
                   : null;
