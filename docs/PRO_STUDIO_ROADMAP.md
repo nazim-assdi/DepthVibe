@@ -323,6 +323,14 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 
 **Known boundary:** this increment does not add true extruded 3D text, arbitrary 3D layer planes with perspective rotation, complete PSD adjustment semantics, a unified GPU render graph or Adobe-native .aex effect parity. These remain explicit roadmap items and are not release-verified until Windows CI and render integration tests pass.
 
+### Camera-aware 3D text plane increment — 23 November 2026
+
+- Text layers can opt into a 3D plane mode. The editable text content and typography are rasterized with Flutter text shaping into a transparent PNG, decoded as a BLEND-mode texture and mapped onto a camera-facing quad.
+- The preview uses the software mesh renderer; final composition export prepares a per-frame transparent 3D plate using the same parent transform, camera and scene-light inputs used for imported mesh layers. The 3D plane mode is persisted in `.dvproj` and can be toggled in Typography.
+- Added texture-quad and portable project round-trip tests. The text remains an editable text layer; the generated mesh is not persisted as a destructive outline conversion.
+
+**Explicit limit:** this is a flat camera-aware 3D text plane, not true extruded glyph geometry. Bevel/depth/material controls for individual letters, text-on-path extrusion, per-character 3D animation and full GPU text rendering remain unfinished.
+
 ## Implementation Update — Extension manager and editing reliability (20 November 2026)
 
 - Added .dvext declarative package installation, local package registry, enable/disable and uninstall.
