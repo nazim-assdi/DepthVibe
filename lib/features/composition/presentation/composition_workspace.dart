@@ -3103,7 +3103,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   style: const TextStyle(fontSize: 8),
                 ),
                 trailing: SizedBox(
-                  width: 82,
+                  width: 94,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -8035,7 +8035,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           style: const TextStyle(fontSize: 11, color: Color(0xFF9BAAC1)),
         ),
         const Text(
-          'Drag the clip body in the timeline to move it. Drag its right edge to change duration. Source In trims the media before timeline placement.',
+          'Drag the clip body to move it. Drag the left edge to trim the start (video/audio advance Source In); drag the right edge to trim the end. Source In can also be edited directly.',
           style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
         ),
       ],

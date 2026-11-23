@@ -1989,4 +1989,34 @@ void main() {
     controller.dispose();
   });
 
+  test('editing a disabled opacity track changes the base layer value', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(
+            id: 'clip',
+            name: 'Clip',
+            kind: LayerKind.video,
+            transform: LayerTransform(opacity: 80),
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'opacity',
+                enabled: false,
+                keyframes: [ScalarKeyframe(timeMs: 0, value: 25)],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'clip',
+      ),
+    );
+
+    controller.setTransformValue('opacity', 45);
+    final layer = controller.selectedLayer!;
+    expect(layer.transform.opacity, 45);
+    expect(layer.keyframeTracks.single.enabled, isFalse);
+    expect(layer.keyframeTracks.single.keyframes.single.value, 25);
+    controller.dispose();
+  });
+
 }

@@ -1589,7 +1589,8 @@ class CompositionController extends ChangeNotifier {
     );
     // Once a property is animated, editing its value at the playhead must
     // update/create a keyframe instead of silently changing the hidden base.
-    final writeKeyframe = keyframe || trackIndex >= 0;
+    final writeKeyframe = keyframe ||
+        (trackIndex >= 0 && layer.keyframeTracks[trackIndex].enabled);
     if (writeKeyframe) {
       final track = trackIndex < 0
           ? KeyframeTrack(property: property)
