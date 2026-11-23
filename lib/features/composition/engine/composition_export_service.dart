@@ -845,6 +845,7 @@ class CompositionExportService {
           layer: layer,
           property: 'opacity',
           fallback: layer.transform.opacity,
+          timeVariable: 'T',
         );
         final mix = 'if(between(T,' + start + ',' + end +
             '),A*(1-max(0,min(1,(' + opacity + ')/100)))+' +
@@ -852,7 +853,7 @@ class CompositionExportService {
         final next = 'base' + (index + 1).toString();
         filters.add(
           '[' + baseLabel + '][' + adjusted + ']blend=all_expr=' +
-              _quote(mix) + ':shortest=1:repeatlast=0,format=rgba[' + next + ']',
+              _quote(mix) + ':shortest=1,format=rgba[' + next + ']',
         );
         previous = next;
         continue;
