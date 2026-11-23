@@ -917,6 +917,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   bool _graphDragHistoryRecorded = false;
   bool _graphScrubbing = false;
   bool _showCanvasGrid = true;
+  bool _showSafeMargins = false;
+  bool _showCenterGuides = false;
+  bool _previewLoopPlayback = false;
   bool _autoKeyEnabled = false;
   bool _showLayerControls = true;
   bool _hideShyLayers = false;
@@ -1811,6 +1814,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ? 0
         : document.playheadMs;
     final stopwatch = Stopwatch()..start();
+    var playbackOriginMs = startTime;
     var lastTickMs = -1;
 
     setState(() {
@@ -1843,8 +1847,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         lastTickMs = elapsedMs;
 
         final duration = currentDocument.durationMs;
-        final nextTime = startTime + elapsedMs;
-        if (duration <= 0 || nextTime >= duration) {
+        final nextTime = playbackOriginMs + elapsedMs;
+        if (duration <= 0) {
+          _pausePreviewPlayback();
+          return;
+        }
+        if (nextTime >= duration) {
+          if (_previewLoopPlayback) {
+            playbackOriginMs = 0;
+            stopwatch.reset();
+            lastTickMs = -1;
+            _controller.setPlayhead(0);
+            return;
+          }
           _controller.setPlayhead(math.max(0, duration - 1));
           _pausePreviewPlayback();
           return;
@@ -2756,8 +2771,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   ) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
-      height: 31,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: palette.toolbar,
         border: Border(bottom: BorderSide(color: palette.border)),
@@ -2782,80 +2797,90 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             hasCamera ? 'ACTIVE CAMERA' : 'ACTIVE VIEW',
             style: TextStyle(
               fontSize: 8,
-              letterSpacing: 0.55,
+              letterSpacing: 0.45,
               color: palette.secondaryText,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Text(
             '${document.width} × ${document.height}',
             style: TextStyle(fontSize: 8, color: palette.secondaryText),
           ),
+          const SizedBox(width: 7),
+          Text(
+            _time(document.playheadMs),
+            style: TextStyle(
+              fontSize: 8,
+              fontFeatures: const [ui.FontFeature.tabularFigures()],
+              color: palette.primaryText,
+            ),
+          ),
           IconButton(
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+            constraints: const BoxConstraints(minWidth: 25, minHeight: 26),
             tooltip: _autoKeyEnabled
                 ? 'Auto-Key enabled · preview transforms create keyframes'
                 : 'Auto-Key disabled · existing animated properties still update keys',
             onPressed: () => setState(() => _autoKeyEnabled = !_autoKeyEnabled),
             icon: Icon(
               Icons.diamond_outlined,
-              size: 15,
-              color: _autoKeyEnabled ? palette.accent : palette.secondaryText,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            'AUTO KEY',
-            style: TextStyle(
-              fontSize: 7,
-              fontWeight: FontWeight.w800,
+              size: 14,
               color: _autoKeyEnabled ? palette.accent : palette.secondaryText,
             ),
           ),
           PopupMenuButton<double>(
-            tooltip: 'Composition magnification · mouse wheel to zoom',
+            tooltip: 'Composition magnification',
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 26),
+            constraints: const BoxConstraints(minWidth: 42, minHeight: 26),
             initialValue: _previewZoom,
             onSelected: (value) => setState(() {
               _previewZoom = value;
               _previewPanOffset = Offset.zero;
             }),
             itemBuilder: (context) => const [
+              PopupMenuItem(value: 0.25, child: Text('25%')),
               PopupMenuItem(value: 0.5, child: Text('50%')),
               PopupMenuItem(value: 0.75, child: Text('75%')),
-              PopupMenuItem(value: 1, child: Text('Fit / 100%')),
+              PopupMenuItem(value: 1, child: Text('Fit')),
+              PopupMenuItem(value: 1.25, child: Text('125%')),
               PopupMenuItem(value: 1.5, child: Text('150%')),
               PopupMenuItem(value: 2, child: Text('200%')),
+              PopupMenuItem(value: 4, child: Text('400%')),
             ],
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Text(
-                _previewZoom == 1 ? 'FIT' : '${(_previewZoom * 100).round()}%',
+                _previewZoom == 1
+                    ? 'FIT'
+                    : '${(_previewZoom * 100).round()}%',
                 style: TextStyle(
                   fontSize: 8,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w900,
                   color: palette.accent,
                 ),
               ),
             ),
           ),
           PopupMenuButton<String>(
-            tooltip: 'Composition view options',
+            tooltip: 'Composition overlays and view options',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 24, minHeight: 26),
             icon: Icon(Icons.tune, size: 14, color: palette.secondaryText),
             onSelected: (value) {
               setState(() {
-                if (value == 'controls') {
-                  _showLayerControls = !_showLayerControls;
-                } else if (value == 'motion') {
-                  _showMotionPaths = !_showMotionPaths;
-                } else if (value == 'reset') {
-                  _previewZoom = 1;
-                  _previewPanOffset = Offset.zero;
+                switch (value) {
+                  case 'controls':
+                    _showLayerControls = !_showLayerControls;
+                  case 'motion':
+                    _showMotionPaths = !_showMotionPaths;
+                  case 'safe':
+                    _showSafeMargins = !_showSafeMargins;
+                  case 'center':
+                    _showCenterGuides = !_showCenterGuides;
+                  case 'reset':
+                    _previewZoom = 1;
+                    _previewPanOffset = Offset.zero;
                 }
               });
             },
@@ -2872,22 +2897,43 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   '${_showMotionPaths ? '✓' : '　'} Show Motion Paths',
                 ),
               ),
+              PopupMenuItem(
+                value: 'safe',
+                child: Text(
+                  '${_showSafeMargins ? '✓' : '　'} Title / Action Safe',
+                ),
+              ),
+              PopupMenuItem(
+                value: 'center',
+                child: Text(
+                  '${_showCenterGuides ? '✓' : '　'} Center Guides',
+                ),
+              ),
               const PopupMenuDivider(),
-              const PopupMenuItem(value: 'reset', child: Text('Reset View')),
+              const PopupMenuItem(value: 'reset', child: Text('Fit Composition / Reset View')),
             ],
           ),
-          const SizedBox(width: 5),
           IconButton(
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-            tooltip: _showCanvasGrid ? 'Hide transparency grid' : 'Show transparency grid',
+            tooltip: _showCanvasGrid
+                ? 'Hide transparency checkerboard'
+                : 'Show transparency checkerboard',
             onPressed: () => setState(() => _showCanvasGrid = !_showCanvasGrid),
             icon: Icon(
-              _showCanvasGrid ? Icons.grid_on : Icons.grid_off,
+              Icons.grid_on,
               size: 14,
               color: _showCanvasGrid ? palette.accent : palette.secondaryText,
             ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+            tooltip: 'Open Preview panel',
+            onPressed: () => setState(() => _panel = 'Preview'),
+            icon: Icon(Icons.play_circle_outline, size: 15, color: palette.secondaryText),
           ),
         ],
       ),
@@ -5223,7 +5269,26 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
+                                if (_showCanvasGrid)
+                                  Positioned.fill(
+                                    child: IgnorePointer(
+                                      child: CustomPaint(
+                                        painter: _CanvasGridPainter(),
+                                      ),
+                                    ),
+                                  ),
                                 Positioned.fill(child: composite),
+                                if (_showSafeMargins || _showCenterGuides)
+                                  Positioned.fill(
+                                    child: IgnorePointer(
+                                      child: CustomPaint(
+                                        painter: _CompositionGuidesPainter(
+                                          showSafeMargins: _showSafeMargins,
+                                          showCenterGuides: _showCenterGuides,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                           if (_showMotionPaths)
                             _buildMotionPathOverlay(
                               selected,
@@ -7742,74 +7807,211 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   Widget _buildPreviewPanel() {
     final document = _controller.document;
-    final frameStep = (1000 / document.frameRate).round().clamp(1, 1000).toInt();
+    final frameStep =
+        (1000 / math.max(1, document.frameRate)).round().clamp(1, 1000).toInt();
+    final duration = math.max(1, document.durationMs);
+    final currentFrame =
+        (document.playheadMs * document.frameRate / 1000).floor();
+    final totalFrames =
+        (document.durationMs * document.frameRate / 1000).ceil();
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+
+    void jumpTo(int timeMs) {
+      _pausePreviewPlayback();
+      _controller.setPlayhead(timeMs);
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _panelHeader('PREVIEW', Icons.play_circle_outline),
-        Text(
-          document.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          '${document.frameRate.toStringAsFixed(2)} fps · '
-          '${document.width} × ${document.height} · '
-          '${_time(document.durationMs)}',
-          style: const TextStyle(fontSize: 9, color: Color(0xFF9BAAC1)),
-        ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 8),
         Row(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            IconButton(
-              tooltip: 'Previous frame',
-              onPressed: () {
-                _pausePreviewPlayback();
-                _controller.setPlayhead(document.playheadMs - frameStep);
-              },
-              icon: const Icon(Icons.skip_previous),
-            ),
-            IconButton(
-              tooltip: _previewPlaying ? 'Stop preview' : 'Play preview',
-              onPressed: _togglePreviewPlayback,
-              iconSize: 28,
-              icon: Icon(
-                _previewPlaying
-                    ? Icons.stop_circle_outlined
-                    : Icons.play_circle_fill,
-                color: const Color(0xFF9FB2FF),
+            Expanded(
+              child: Text(
+                document.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
               ),
             ),
-            IconButton(
-              tooltip: 'Next frame',
-              onPressed: () {
-                _pausePreviewPlayback();
-                _controller.setPlayhead(document.playheadMs + frameStep);
-              },
-              icon: const Icon(Icons.skip_next),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+              decoration: BoxDecoration(
+                color: palette.panelRaised,
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: palette.border),
+              ),
+              child: Text(
+                '${document.frameRate.toStringAsFixed(2)} FPS',
+                style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                  color: palette.accent,
+                ),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Text(
-          'Current Time  ${_time(document.playheadMs)}',
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 10, color: Color(0xFFB7C4DC)),
+          '${document.width} × ${document.height}  ·  ${_time(document.durationMs)}',
+          style: TextStyle(fontSize: 9, color: palette.secondaryText),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 7),
+          decoration: BoxDecoration(
+            color: palette.panelRaised,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: palette.border),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              IconButton(
+                tooltip: 'Go to beginning',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => jumpTo(0),
+                icon: const Icon(Icons.first_page, size: 19),
+              ),
+              IconButton(
+                tooltip: 'Step back one frame',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => jumpTo(document.playheadMs - frameStep),
+                icon: const Icon(Icons.skip_previous, size: 19),
+              ),
+              IconButton(
+                tooltip: _previewPlaying ? 'Pause preview' : 'Play preview',
+                visualDensity: VisualDensity.compact,
+                iconSize: 31,
+                onPressed: _togglePreviewPlayback,
+                icon: Icon(
+                  _previewPlaying
+                      ? Icons.pause_circle_filled
+                      : Icons.play_circle_fill,
+                  color: palette.accent,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Step forward one frame',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => jumpTo(document.playheadMs + frameStep),
+                icon: const Icon(Icons.skip_next, size: 19),
+              ),
+              IconButton(
+                tooltip: 'Go to end',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => jumpTo(math.max(0, document.durationMs - frameStep)),
+                icon: const Icon(Icons.last_page, size: 19),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'CURRENT TIME',
+              style: TextStyle(
+                fontSize: 8,
+                letterSpacing: 0.65,
+                fontWeight: FontWeight.w900,
+                color: palette.secondaryText,
+              ),
+            ),
+            Text(
+              '${_time(document.playheadMs)} / ${_time(document.durationMs)}',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: palette.primaryText,
+                fontFeatures: const [ui.FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
         Slider(
           min: 0,
-          max: math.max(1, document.durationMs).toDouble(),
-          value: document.playheadMs
-              .clamp(0, math.max(1, document.durationMs))
-              .toDouble(),
+          max: duration.toDouble(),
+          value: document.playheadMs.clamp(0, duration).toDouble(),
           onChanged: (value) {
             _pausePreviewPlayback();
             _controller.setPlayhead(value.round());
           },
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'FRAME ${currentFrame.toString().padLeft(4, '0')} / ${totalFrames.toString().padLeft(4, '0')}',
+              style: TextStyle(
+                fontSize: 8,
+                fontWeight: FontWeight.w800,
+                color: palette.secondaryText,
+              ),
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: _previewLoopPlayback
+                      ? 'Disable loop playback'
+                      : 'Enable loop playback',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  onPressed: () => setState(
+                    () => _previewLoopPlayback = !_previewLoopPlayback,
+                  ),
+                  icon: Icon(
+                    Icons.repeat,
+                    size: 16,
+                    color: _previewLoopPlayback
+                        ? palette.accent
+                        : palette.secondaryText,
+                  ),
+                ),
+                Text(
+                  'LOOP',
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                    color: _previewLoopPlayback
+                        ? palette.accent
+                        : palette.secondaryText,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Icon(
+              _previewPlaying ? Icons.play_arrow_rounded : Icons.stop_rounded,
+              size: 13,
+              color: _previewPlaying ? palette.accent : palette.secondaryText,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              _previewPlaying ? 'PREVIEW PLAYING' : 'PREVIEW STOPPED',
+              style: TextStyle(
+                fontSize: 8,
+                letterSpacing: 0.45,
+                fontWeight: FontWeight.w900,
+                color: _previewPlaying ? palette.accent : palette.secondaryText,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '${document.width} × ${document.height}',
+              style: TextStyle(fontSize: 8, color: palette.secondaryText),
+            ),
+          ],
         ),
       ],
     );
@@ -13504,20 +13706,118 @@ class _CanvasGridPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF263249)
-      ..strokeWidth = 0.5;
-    const step = 24.0;
-    for (var x = 0.0; x < size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (var y = 0.0; y < size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    const cellSize = 18.0;
+    final light = Paint()..color = const Color(0xFF3A4352);
+    final dark = Paint()..color = const Color(0xFF252D3A);
+    for (var row = 0; row * cellSize < size.height; row++) {
+      for (var column = 0; column * cellSize < size.width; column++) {
+        final rect = Rect.fromLTWH(
+          column * cellSize,
+          row * cellSize,
+          cellSize,
+          cellSize,
+        );
+        canvas.drawRect(
+          rect,
+          (row + column).isEven ? light : dark,
+        );
+      }
     }
   }
 
   @override
   bool shouldRepaint(covariant _CanvasGridPainter oldDelegate) => false;
+}
+
+class _CompositionGuidesPainter extends CustomPainter {
+  const _CompositionGuidesPainter({
+    required this.showSafeMargins,
+    required this.showCenterGuides,
+  });
+
+  final bool showSafeMargins;
+  final bool showCenterGuides;
+
+  void _drawDashedLine(
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Paint paint,
+  ) {
+    final delta = end - start;
+    final length = delta.distance;
+    if (length <= 0) return;
+    final direction = delta / length;
+    const dashLength = 8.0;
+    const gapLength = 5.0;
+    for (var offset = 0.0; offset < length; offset += dashLength + gapLength) {
+      final finish = math.min(length, offset + dashLength);
+      canvas.drawLine(
+        start + direction * offset,
+        start + direction * finish,
+        paint,
+      );
+    }
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (showSafeMargins) {
+      final actionSafe = Paint()
+        ..color = const Color(0xBFFFFFFF)
+        ..strokeWidth = 1
+        ..style = PaintingStyle.stroke;
+      final titleSafe = Paint()
+        ..color = const Color(0xBFA9B8FF)
+        ..strokeWidth = 1
+        ..style = PaintingStyle.stroke;
+      canvas.drawRect(
+        Rect.fromLTWH(
+          size.width * 0.05,
+          size.height * 0.05,
+          size.width * 0.90,
+          size.height * 0.90,
+        ),
+        actionSafe,
+      );
+      canvas.drawRect(
+        Rect.fromLTWH(
+          size.width * 0.10,
+          size.height * 0.10,
+          size.width * 0.80,
+          size.height * 0.80,
+        ),
+        titleSafe,
+      );
+    }
+    if (showCenterGuides) {
+      final centerPaint = Paint()
+        ..color = const Color(0xCC6ED8CF)
+        ..strokeWidth = 1;
+      _drawDashedLine(
+        canvas,
+        Offset(size.width / 2, 0),
+        Offset(size.width / 2, size.height),
+        centerPaint,
+      );
+      _drawDashedLine(
+        canvas,
+        Offset(0, size.height / 2),
+        Offset(size.width, size.height / 2),
+        centerPaint,
+      );
+      canvas.drawCircle(
+        Offset(size.width / 2, size.height / 2),
+        3,
+        Paint()..color = const Color(0xEE6ED8CF),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CompositionGuidesPainter oldDelegate) =>
+      oldDelegate.showSafeMargins != showSafeMargins ||
+      oldDelegate.showCenterGuides != showCenterGuides;
 }
 
 
