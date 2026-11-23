@@ -32,6 +32,33 @@ void main() {
     expect(mesh.maxDimension, 1);
   });
 
+  test('builds extruded side walls and caps for 3D text', () async {
+    final png = const Software3dPngEncoder().encodeRgba(
+      width: 4,
+      height: 2,
+      rgba: Uint8List.fromList([
+        255, 255, 255, 0, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 0,
+        255, 255, 255, 0, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 0,
+      ]),
+    );
+
+    final mesh = await const TextPlaneMeshBuilder().fromPngBytes(
+      png,
+      extrusionDepth: 0.2,
+      sideColor: '#FFFFFFFF',
+    );
+
+    expect(mesh.triangles.length, greaterThan(4));
+    expect(mesh.materials.keys, containsAll(['text', 'side']));
+    expect(mesh.triangles.where((item) => item.material == 'side'), isNotEmpty);
+    expect(mesh.boundsMin.z, closeTo(-0.1, 0.000001));
+    expect(mesh.boundsMax.z, closeTo(0.1, 0.000001));
+    expect(mesh.textureCoordinates, hasLength(mesh.vertices.length));
+    expect(mesh.hasTextureCoordinates, isTrue);
+  });
+
   test('rejects empty and invalid text image data', () async {
     final builder = const TextPlaneMeshBuilder();
     await expectLater(builder.fromPngBytes(Uint8List(0)), throwsFormatException);
