@@ -47,9 +47,18 @@ jobs:
           flutter test
       - name: Build Windows desktop release
         run: flutter build windows --release
-      - name: Package portable Windows application
+      - name: Verify and package portable Windows application
         shell: pwsh
         run: |
+          $releaseDir = "build/windows/x64/runner/Release"
+          $exe = Join-Path $releaseDir "DepthVibe.exe"
+          if (!(Test-Path $exe)) { throw "DepthVibe.exe was not generated." }
+          if (!(Test-Path (Join-Path $releaseDir "data/flutter_assets"))) {
+            throw "Flutter assets are missing from the Windows release."
+          }
+          if (!(Test-Path (Join-Path $releaseDir "flutter_windows.dll"))) {
+            throw "Flutter Windows runtime is missing from the Windows release."
+          }
           New-Item -ItemType Directory -Force dist | Out-Null
           @'
           DepthVibe Windows x64
@@ -59,13 +68,14 @@ jobs:
           Keep all DLL files, data folders and plugin folders beside the executable.
           Do not move DepthVibe.exe out of this folder.
           '@ | Set-Content dist/README.txt
-          Compress-Archive -Path build/windows/x64/runner/Release/*,dist/README.txt -DestinationPath dist/DepthVibe-Windows-x64.zip -CompressionLevel Optimal
-      - name: Upload Windows release package and raw build
+          Compress-Archive -Path "$releaseDir/*",dist/README.txt -DestinationPath dist/DepthVibe-Windows-x64.zip -CompressionLevel Optimal
+          $hash = (Get-FileHash dist/DepthVibe-Windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -NoNewline dist/DepthVibe-Windows-x64.zip.sha256 "$hash  DepthVibe-Windows-x64.zip"
+      - name: Upload portable Windows release only
         uses: actions/upload-artifact@v4
         with:
           name: DepthVibe-Windows-x64
           path: |
             dist/DepthVibe-Windows-x64.zip
-            build/windows/x64/runner/Release/
+            dist/DepthVibe-Windows-x64.zip.sha256
           if-no-files-found: error
-
