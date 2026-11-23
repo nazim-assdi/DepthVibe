@@ -50,6 +50,7 @@ import '../engine/composition_project_service.dart';
 import '../engine/composition_recovery_service.dart';
 import '../engine/obj_mesh_loader.dart';
 import '../engine/scene_mesh_loader.dart';
+import '../engine/primitive_obj_factory.dart';
 import '../engine/text_plane_mesh_builder.dart';
 import '../engine/software_3d_mesh_view.dart';
 import '../engine/software_3d_renderer.dart';
@@ -916,6 +917,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   bool _showCanvasGrid = true;
   bool _autoKeyEnabled = false;
   bool _showLayerControls = true;
+  bool _hideShyLayers = false;
   bool _showMotionPaths = true;
   double _previewZoom = 1;
   Offset _previewPanOffset = Offset.zero;
@@ -1743,6 +1745,47 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     });
   }
 
+  Future<void> _addPrimitiveModel(String presetId) async {
+    final preset = PrimitiveObjFactory.find(presetId);
+    if (preset == null) return;
+    try {
+      final root = await getApplicationSupportDirectory();
+      final directory = Directory(
+        root.path + Platform.pathSeparator + 'DepthVibe' +
+        Platform.pathSeparator + '3DPrimitives_v1',
+      );
+      await directory.create(recursive: true);
+      final stem = 'primitive_' + preset.id;
+      final objFile = File(
+        directory.path + Platform.pathSeparator + stem + '.obj',
+      );
+      if (!await objFile.exists()) {
+        await objFile.writeAsString(
+          PrimitiveObjFactory.objFor(preset.id),
+          flush: true,
+        );
+      }
+      _meshJobs.remove(objFile.path);
+      final document = _controller.document;
+      _controller.addLayer(
+        LayerKind.threeDModel,
+        name: preset.name,
+        sourceUri: objFile.path,
+        sourceWidth: document.width,
+        sourceHeight: document.height,
+      );
+      if (!mounted) return;
+      setState(() {
+        _panel = '3D';
+        _notice = 'Created ' + preset.name + '. It is an editable 3D layer and can be transformed, lit, parented, animated and rendered.';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _notice = 'Could not create ' + preset.name + ': ' + error.toString());
+      }
+    }
+  }
+
   void _pausePreviewPlayback() {
     _previewPlaybackTimer?.cancel();
     _previewPlaybackTimer = null;
@@ -2542,6 +2585,17 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             },
           ),
           _workspaceMenuButton(
+            '3D Primitive',
+            [
+              for (final preset in PrimitiveObjFactory.presets)
+                PopupMenuItem<String>(
+                  value: preset.id,
+                  child: Text(preset.name),
+                ),
+            ],
+            (presetId) => unawaited(_addPrimitiveModel(presetId)),
+          ),
+          _workspaceMenuButton(
             'Effect',
             const [
               PopupMenuItem(value: 'open', child: Text('Open Effect Library')),
@@ -2980,6 +3034,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     CompositionDocument document,
   ) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final visibleLayers = _hideShyLayers
+        ? layers.where((layer) => !layer.shy).toList()
+        : layers;
     return Column(
       children: [
         Container(
@@ -3026,19 +3083,45 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   color: palette.secondaryText,
                 ),
               ),
+              const Spacer(),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: _hideShyLayers ? 'Show Shy Layers' : 'Hide Shy Layers',
+                onPressed: () => setState(() => _hideShyLayers = !_hideShyLayers),
+                icon: Icon(
+                  _hideShyLayers ? Icons.filter_alt : Icons.filter_alt_outlined,
+                  size: 15,
+                  color: _hideShyLayers ? palette.accent : palette.secondaryText,
+                ),
+              ),
             ],
           ),
         ),
         Expanded(
           child: ReorderableListView.builder(
             buildDefaultDragHandles: false,
-            itemCount: layers.length,
+            itemCount: visibleLayers.length,
             onReorder: (oldIndex, newIndex) {
               if (newIndex > oldIndex) newIndex--;
-              _controller.reorderLayer(layers[oldIndex].id, newIndex);
+              final moving = visibleLayers[oldIndex];
+              final remainingVisible = [...visibleLayers]..removeAt(oldIndex);
+              final remainingAll = [...layers]
+                ..removeWhere((layer) => layer.id == moving.id);
+              final insertion = newIndex.clamp(0, remainingVisible.length).toInt();
+              final targetId = insertion < remainingVisible.length
+                  ? remainingVisible[insertion].id
+                  : null;
+              final globalIndex = targetId == null
+                  ? (remainingVisible.isEmpty
+                      ? remainingAll.length
+                      : remainingAll.indexWhere(
+                            (layer) => layer.id == remainingVisible.last.id,
+                          ) + 1)
+                  : remainingAll.indexWhere((layer) => layer.id == targetId);
+              _controller.reorderLayer(moving.id, globalIndex);
             },
             itemBuilder: (context, index) {
-              final layer = layers[index];
+              final layer = visibleLayers[index];
               final selected = layer.id == document.selectedLayerId;
               var depth = 0;
               var ancestorId = layer.parentId;
@@ -3057,6 +3140,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       ? 'clipped layer'
                       : 'clipped to base',
                 if (layer.smartObjectResourceId != null) 'Smart Object',
+                if (layer.guideLayer) 'Guide',
+                if (layer.shy) 'Shy',
+                if (layer.solo) 'Solo',
                 if (layer.photoshopAdjustmentKey != null)
                   'Adjustment ${layer.photoshopAdjustmentKey}',
               ];
@@ -3103,7 +3189,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   style: const TextStyle(fontSize: 8),
                 ),
                 trailing: SizedBox(
-                  width: 94,
+                  width: 160,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -3117,6 +3203,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                         ),
                         icon: Icon(
                           layer.enabled ? Icons.visibility : Icons.visibility_off,
+                          size: 14,
+                        ),
+                      ),
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        tooltip: layer.solo ? 'Disable Solo' : 'Solo this layer',
+                        color: layer.solo ? palette.accent : null,
+                        onPressed: () => _controller.setLayerSolo(
+                          layer.id,
+                          !layer.solo,
+                        ),
+                        icon: Icon(
+                          layer.solo ? Icons.headphones : Icons.headphones_outlined,
                           size: 14,
                         ),
                       ),
@@ -3149,6 +3249,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             }
                             return;
                           }
+                          if (action == 'guide') {
+                            _controller.setLayerGuide(layer.id, !layer.guideLayer);
+                            return;
+                          }
+                          if (action == 'shy') {
+                            _controller.setLayerShy(layer.id, !layer.shy);
+                            return;
+                          }
                           if (action == 'delete') {
                             final deleted = _controller.removeLayer(layer.id);
                             if (mounted && deleted) {
@@ -3156,7 +3264,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             }
                           }
                         },
-                        itemBuilder: (_) => const [
+                        itemBuilder: (_) => [
                           PopupMenuItem(
                             value: 'rename',
                             child: Row(
@@ -3186,6 +3294,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                 Text('Delete layer'),
                               ],
                             ),
+                          ),
+                          PopupMenuItem(
+                            value: 'guide',
+                            child: Text(layer.guideLayer ? 'Disable Guide Layer' : 'Make Guide Layer'),
+                          ),
+                          PopupMenuItem(
+                            value: 'shy',
+                            child: Text(layer.shy ? 'Unmark Shy Layer' : 'Mark as Shy Layer'),
                           ),
                         ],
                       ),
@@ -5112,8 +5228,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   builder: (context, constraints) {
                     final canvasWidth = constraints.maxWidth;
                     final canvasHeight = constraints.maxHeight;
+                    final soloActive = doc.layers.any(
+                      (item) => item.enabled && item.solo && !item.guideLayer,
+                    );
                     final ordered = doc.layers.reversed
-                        .where((item) => item.enabled)
+                        .where((item) =>
+                            item.enabled &&
+                            (!soloActive || item.solo || item.guideLayer))
                         .toList(growable: false);
                     Widget composite = const SizedBox.expand();
                     final pendingVisualLayers = <Widget>[];
@@ -8128,6 +8249,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ('Position Z', 'position.z', -2000.0, 2000.0),
           ('Scale X', 'scale.x', 0.0, 400.0),
           ('Scale Y', 'scale.y', 0.0, 400.0),
+          ('Scale Z', 'scale.z', 0.0, 400.0),
           ('Rotation Z', 'rotation.z', -360.0, 360.0),
           ('Rotation X', 'rotation.x', -180.0, 180.0),
           ('Rotation Y', 'rotation.y', -180.0, 180.0),
@@ -11160,6 +11282,25 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _panelHeader('3D PRIMITIVE LIBRARY', Icons.category_outlined),
+        Wrap(
+          spacing: 5,
+          runSpacing: 5,
+          children: [
+            for (final preset in PrimitiveObjFactory.presets)
+              OutlinedButton(
+                onPressed: () => unawaited(_addPrimitiveModel(preset.id)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  visualDensity: VisualDensity.compact,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(preset.name, style: const TextStyle(fontSize: 9)),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
         _panelHeader('3D MESH LAYER', Icons.view_in_ar),
         Text(
           layer.sourceUri == null
@@ -11666,9 +11807,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   Widget _buildPlayheadAwareTimeline() {
     final doc = _controller.document;
+    final timelineLayers = _hideShyLayers
+        ? doc.layers.where((layer) => !layer.shy).toList()
+        : doc.layers;
     return AnimatedBuilder(
       animation: _controller.playhead,
-      child: _buildTimelineLayerRows(doc.layers, doc.durationMs),
+      child: _buildTimelineLayerRows(timelineLayers, doc.durationMs),
       builder: (context, layerRows) {
         final currentDoc = _controller.document;
         return _buildTimeline(
