@@ -189,7 +189,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 .round() - 1)
             .clamp(0, 8)
             .toInt();
-    final textDirection = RegExp(r'[\\u0590-\\u08FF\\uFB1D-\\uFEFF]')
+    final textDirection = RegExp(r'[\u0590-\u08FF\uFB1D-\uFEFF]')
             .hasMatch(content)
         ? TextDirection.rtl
         : TextDirection.ltr;
@@ -235,7 +235,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       recorder,
       ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
     );
-    painter.paint(canvas, const ui.Offset(padding.toDouble(), padding.toDouble()));
+    painter.paint(canvas, ui.Offset(padding.toDouble(), padding.toDouble()));
     final picture = recorder.endRecording();
     final image = await picture.toImage(width, height);
     picture.dispose();
