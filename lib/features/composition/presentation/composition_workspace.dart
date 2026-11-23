@@ -4767,6 +4767,50 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     });
   }
 
+  Widget _applyAdjustmentLayerPreview(
+    Widget composite,
+    CompositionLayer layer,
+    int timeMs,
+    ResolvedLayerTransform? resolvedTransform,
+  ) {
+    if (timeMs < layer.startMs || timeMs >= layer.endMs) return composite;
+    final opacity = ((resolvedTransform?.opacity ??
+                layer.valueAt('opacity', timeMs)) /
+            100)
+        .clamp(0.0, 1.0)
+        .toDouble();
+    if (opacity <= 0) return composite;
+
+    var result = composite;
+    for (final effect in layer.effects) {
+      if (!effect.enabled || effect.effectId != 'color_grade') continue;
+      final filter = ColorGradePreview.filterFor(effect, timeMs);
+      if (filter == null) continue;
+      Widget filtered = ColorFiltered(
+        colorFilter: filter,
+        child: result,
+      );
+      final activeMasks = layer.masks.where((mask) => mask.enabled).toList();
+      if (activeMasks.isNotEmpty) {
+        filtered = ClipPath(
+          clipper: _AnimatedMaskClipper(
+            masks: activeMasks,
+            timeMs: timeMs,
+          ),
+          child: filtered,
+        );
+      }
+      result = Stack(
+        fit: StackFit.expand,
+        children: [
+          result,
+          Opacity(opacity: opacity, child: filtered),
+        ],
+      );
+    }
+    return result;
+  }
+
   Widget _buildCanvas(CompositionDocument doc, CompositionLayer? selected) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     final resolvedTransforms = const ParentTransformResolver().resolveAll(
@@ -4796,7 +4840,51 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   builder: (context, constraints) {
                     final canvasWidth = constraints.maxWidth;
                     final canvasHeight = constraints.maxHeight;
-                    final ordered = doc.layers.reversed.where((item) => item.enabled);
+                    final ordered = doc.layers.reversed
+                        .where((item) => item.enabled)
+                        .toList(growable: false);
+                    Widget composite = const SizedBox.expand();
+                    final pendingVisualLayers = <Widget>[];
+                    for (final layer in ordered) {
+                      if (layer.kind == LayerKind.adjustment) {
+                        if (pendingVisualLayers.isNotEmpty) {
+                          composite = Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              composite,
+                              ...pendingVisualLayers,
+                            ],
+                          );
+                          pendingVisualLayers.clear();
+                        }
+                        composite = _applyAdjustmentLayerPreview(
+                          composite,
+                          layer,
+                          doc.playheadMs,
+                          resolvedTransforms[layer.id],
+                        );
+                      } else {
+                        pendingVisualLayers.add(
+                          _buildLayerVisual(
+                            layer,
+                            doc,
+                            Size(canvasWidth, canvasHeight),
+                            resolvedTransforms: resolvedTransforms,
+                            cameraLayer: cameraLayer,
+                            cameraTransform: cameraTransform,
+                          ),
+                        );
+                      }
+                    }
+                    if (pendingVisualLayers.isNotEmpty) {
+                      composite = Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          composite,
+                          ...pendingVisualLayers,
+                        ],
+                      );
+                    }
                     return Container(
                       clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
@@ -4820,17 +4908,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                if (_showCanvasGrid)
-                            const CustomPaint(painter: _CanvasGridPainter()),
-                          for (final layer in ordered)
-                            _buildLayerVisual(
-                              layer,
-                              doc,
-                              Size(canvasWidth, canvasHeight),
-                              resolvedTransforms: resolvedTransforms,
-                              cameraLayer: cameraLayer,
-                              cameraTransform: cameraTransform,
-                            ),
+                                Positioned.fill(child: composite),
                           if (_showMotionPaths)
                             _buildMotionPathOverlay(
                               selected,
