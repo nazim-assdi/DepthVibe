@@ -77,7 +77,7 @@ Glow uses a thresholded RGB split, blur and screen blend pass. Drop Shadow deriv
 
 ## Current composition renderer
 
-CompositionExportService renders a black composition background with ordered visual layers, Flutter-shaped text raster layers, animated 2D position/scale/rotation/opacity, supported 2D masks, blend modes, transition mattes and multi-track audio. It reports unsupported or missing layers instead of pretending they were rendered. Shape, some adjustment operations and true 3D rendering remain unsupported in this output graph.
+CompositionExportService renders a black composition background with ordered visual layers, Flutter-shaped text raster layers, editable vector shape layers, animated 2D position/scale/rotation/opacity, supported 2D masks, blend modes, transition mattes and multi-track audio. Primitive shapes and cubic Bezier paths are rasterized to transparent PNGs for the CPU/FFmpeg compositor; animated path vertices are rasterized per output frame, while static shapes use a single cached render for the export job. Adjustment layers process the accumulated lower-layer image and are blended according to their active timeline range and animated opacity. Unsupported or missing layers are reported instead of silently rendered. Full Photoshop adjustment semantics, true extruded 3D text, GPU PBR parity and some advanced 3D/effect operations remain outside this renderer.
 
 This is a functional first NLE/compositor render path, not yet a complete After Effects/Premiere Pro replacement. A capability is only considered complete after automated tests, preview/export parity and target-device validation.
 
