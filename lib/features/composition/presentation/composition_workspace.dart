@@ -7652,6 +7652,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           onSave: (value) =>
               _controller.updateTextLayer(textContent: value),
         ),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('3D Text Plane'),
+          subtitle: const Text(
+            'Camera-aware 3D plane. Glyph extrusion is not included.',
+            style: TextStyle(fontSize: 10),
+          ),
+          value: layer.is3dText,
+          onChanged: (value) =>
+              _controller.updateTextLayer(is3dText: value),
+        ),
         const SizedBox(height: 10),
         OutlinedButton.icon(
           onPressed: () => _chooseLayerFont(layer),
