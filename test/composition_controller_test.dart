@@ -1829,4 +1829,68 @@ void main() {
     controller.dispose();
   });
 
+  test('renames a layer safely and can undo the name change', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(id: 'title', name: 'Old title', kind: LayerKind.text),
+        ],
+        selectedLayerId: 'title',
+      ),
+    );
+
+    expect(controller.renameLayer('title', '  Main Title  '), isTrue);
+    expect(controller.selectedLayer!.name, 'Main Title');
+    expect(controller.renameLayer('title', '   '), isFalse);
+    expect(controller.selectedLayer!.name, 'Main Title');
+
+    controller.undo();
+    expect(controller.selectedLayer!.name, 'Old title');
+    controller.dispose();
+  });
+
+  test('duplicates layers with independent effect and mask identities', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 5000,
+        layers: [
+          CompositionLayer(
+            id: 'source',
+            name: 'Title',
+            kind: LayerKind.text,
+            transform: LayerTransform(opacity: 65),
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'opacity',
+                keyframes: [ScalarKeyframe(timeMs: 0, value: 65)],
+              ),
+            ],
+            effects: [
+              EffectInstance(id: 'source-effect', effectId: 'glow', name: 'Glow'),
+            ],
+            masks: [
+              MaskModel(id: 'source-mask', name: 'Mask'),
+            ],
+          ),
+        ],
+        selectedLayerId: 'source',
+      ),
+    );
+
+    expect(controller.duplicateLayer('source'), isTrue);
+    expect(controller.document.layers, hasLength(2));
+    final duplicate = controller.selectedLayer!;
+    expect(duplicate.id, isNot('source'));
+    expect(duplicate.name, 'Title Copy');
+    expect(duplicate.transform.opacity, 65);
+    expect(duplicate.keyframeTracks.single.keyframes.single.value, 65);
+    expect(duplicate.effects.single.id, isNot('source-effect'));
+    expect(duplicate.masks.single.id, isNot('source-mask'));
+
+    controller.undo();
+    expect(controller.document.layers, hasLength(1));
+    expect(controller.selectedLayer!.id, 'source');
+    controller.dispose();
+  });
+
 }

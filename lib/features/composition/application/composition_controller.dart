@@ -409,20 +409,64 @@ class CompositionController extends ChangeNotifier {
   void removeSelectedLayer() {
     final selected = selectedLayer;
     if (selected == null) return;
+    removeLayer(selected.id);
+  }
+
+  bool removeLayer(String id) {
+    final selected = _find(id);
+    if (selected == null) return false;
     final remaining = _document.layers
         .where((layer) => layer.id != selected.id)
         .map((layer) => layer.parentId == selected.id
             ? layer.copyWith(clearParent: true)
             : layer)
         .toList();
+    final nextSelectedId = _document.selectedLayerId == id
+        ? (remaining.isEmpty ? null : remaining.first.id)
+        : _document.selectedLayerId;
     _set(_document.copyWith(
       layers: remaining,
-      selectedLayerId: remaining.isEmpty ? null : remaining.first.id,
+      selectedLayerId: nextSelectedId,
       transitions: _document.transitions
           .where((item) =>
               item.fromLayerId != selected.id && item.toLayerId != selected.id)
           .toList(),
     ));
+    return true;
+  }
+
+  bool renameLayer(String id, String name) {
+    final layer = _find(id);
+    final cleanName = name.trim();
+    if (layer == null || cleanName.isEmpty || cleanName.length > 120) {
+      return false;
+    }
+    if (layer.name == cleanName) return true;
+    _replace(layer.copyWith(name: cleanName));
+    return true;
+  }
+
+  bool duplicateLayer(String id) {
+    final layer = _find(id);
+    if (layer == null) return false;
+    final duplicate = layer.copyWith(
+      id: _id('layer'),
+      name: '${layer.name} Copy',
+      effects: layer.effects
+          .map((effect) => effect.copyWith(id: _id('effect')))
+          .toList(growable: false),
+      masks: layer.masks
+          .map((mask) => mask.copyWith(id: _id('mask')))
+          .toList(growable: false),
+    );
+    final index = _document.layers.indexWhere((item) => item.id == id);
+    if (index < 0) return false;
+    final layers = [..._document.layers]..insert(index, duplicate);
+    _set(_document.copyWith(
+      layers: layers,
+      selectedLayerId: duplicate.id,
+    ));
+    return true;
   }
 
   /// Splits the selected clip at the composition playhead.

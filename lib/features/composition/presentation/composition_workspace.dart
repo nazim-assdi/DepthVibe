@@ -3083,11 +3083,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   style: const TextStyle(fontSize: 8),
                 ),
                 trailing: SizedBox(
-                  width: 54,
+                  width: 82,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
+                        padding: EdgeInsets.zero,
                         visualDensity: VisualDensity.compact,
                         tooltip: layer.enabled ? 'Hide layer' : 'Show layer',
                         onPressed: () => _controller.setLayerEnabled(
@@ -3100,6 +3101,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                         ),
                       ),
                       IconButton(
+                        padding: EdgeInsets.zero,
                         visualDensity: VisualDensity.compact,
                         tooltip: layer.locked ? 'Unlock layer' : 'Lock layer',
                         onPressed: () => _controller.setLayerLocked(
@@ -3110,6 +3112,59 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                           layer.locked ? Icons.lock : Icons.lock_open,
                           size: 14,
                         ),
+                      ),
+                      PopupMenuButton<String>(
+                        padding: EdgeInsets.zero,
+                        tooltip: 'Edit layer',
+                        iconSize: 16,
+                        onSelected: (action) {
+                          switch (action) {
+                            case 'rename':
+                              unawaited(_renameLayerDialog(layer));
+                            case 'duplicate':
+                              final duplicated = _controller.duplicateLayer(layer.id);
+                              if (mounted && duplicated) {
+                                setState(() => _notice = 'Duplicated "${layer.name}".');
+                              }
+                            case 'delete':
+                              final deleted = _controller.removeLayer(layer.id);
+                              if (mounted && deleted) {
+                                setState(() => _notice = 'Deleted "${layer.name}". Use Undo to restore it.');
+                              }
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(
+                            value: 'rename',
+                            child: Row(
+                              children: [
+                                Icon(Icons.drive_file_rename_outline, size: 16),
+                                SizedBox(width: 8),
+                                Text('Rename layer'),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'duplicate',
+                            child: Row(
+                              children: [
+                                Icon(Icons.copy_outlined, size: 16),
+                                SizedBox(width: 8),
+                                Text('Duplicate layer'),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete_outline, size: 16),
+                                SizedBox(width: 8),
+                                Text('Delete layer'),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -7617,6 +7672,28 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       children: [
         _panelHeader('SELECTED LAYER', _iconFor(layer.kind)),
         Text(layer.textContent ?? layer.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 7),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => _renameLayerDialog(layer),
+              icon: const Icon(Icons.drive_file_rename_outline, size: 14),
+              label: const Text('Rename'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () {
+                final duplicated = _controller.duplicateLayer(layer.id);
+                if (mounted && duplicated) {
+                  setState(() => _notice = 'Duplicated "${layer.name}".');
+                }
+              },
+              icon: const Icon(Icons.copy_outlined, size: 14),
+              label: const Text('Duplicate'),
+            ),
+          ],
+        ),
         const SizedBox(height: 5),
         Text(layer.kind.name, style: const TextStyle(fontSize: 11, color: Color(0xFF9DABC3))),
         const SizedBox(height: 12),
@@ -11155,6 +11232,48 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         _graphEditorVisible = false;
       }
     });
+  }
+
+  Future<void> _renameLayerDialog(CompositionLayer layer) async {
+    final nameController = TextEditingController(text: layer.name);
+    try {
+      final nextName = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('RENAME LAYER'),
+          content: TextField(
+            controller: nameController,
+            autofocus: true,
+            maxLength: 120,
+            decoration: const InputDecoration(
+              labelText: 'Layer name',
+              hintText: 'Enter a descriptive name',
+            ),
+            onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('CANCEL'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext)
+                  .pop(nameController.text),
+              child: const Text('SAVE'),
+            ),
+          ],
+        ),
+      );
+      if (nextName == null || !mounted) return;
+      final renamed = _controller.renameLayer(layer.id, nextName);
+      setState(() {
+        _notice = renamed
+            ? 'Layer renamed to "${nextName.trim()}".'
+            : 'Layer name cannot be empty and must be 120 characters or fewer.';
+      });
+    } finally {
+      nameController.dispose();
+    }
   }
 
   void _deleteSelectedLayer() {
