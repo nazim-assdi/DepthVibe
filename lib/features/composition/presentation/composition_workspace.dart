@@ -135,7 +135,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       _meshJobs.putIfAbsent(path, () => const SceneMeshLoader().load(path));
 
   Future<ObjMesh> _textPlaneMeshFor(CompositionLayer layer) {
+    final fontManager = FontManagerService.instance;
     final key = Object.hash(
+      fontManager.activeFamily,
+      fontManager.activeFontPath,
+      Object.hashAll(fontManager.fallbackFamilies),
       layer.id,
       layer.textContent,
       layer.textFontFamily,
@@ -4896,10 +4900,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     int timeMs,
     ResolvedLayerTransform? resolvedTransform,
   ) {
+    if (resolvedTransform == null || !resolvedTransform.enabled) {
+      return composite;
+    }
     if (timeMs < layer.startMs || timeMs >= layer.endMs) return composite;
-    final opacity = ((resolvedTransform?.opacity ??
-                layer.valueAt('opacity', timeMs)) /
-            100)
+    final opacity = (resolvedTransform.opacity / 100)
         .clamp(0.0, 1.0)
         .toDouble();
     if (opacity <= 0) return composite;
