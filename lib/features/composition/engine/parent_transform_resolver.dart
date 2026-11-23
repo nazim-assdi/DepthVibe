@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../domain/composition_models.dart';
 
 class ResolvedLayerTransform {
@@ -83,10 +85,16 @@ class ParentTransformResolver {
       final parentOpacity = parent.valueAt('opacity', timeMs) / 100;
       enabled = enabled && parent.enabled;
 
+      final scaledOffset = Vector3(
+        position.x * parentScale.x / 100,
+        position.y * parentScale.y / 100,
+        position.z * parentScale.z / 100,
+      );
+      final rotatedOffset = _rotateByEuler(scaledOffset, parentRotation);
       position = Vector3(
-        parentPosition.x + position.x * parentScale.x / 100,
-        parentPosition.y + position.y * parentScale.y / 100,
-        parentPosition.z + position.z * parentScale.z / 100,
+        parentPosition.x + rotatedOffset.x,
+        parentPosition.y + rotatedOffset.y,
+        parentPosition.z + rotatedOffset.z,
       );
       scale = Vector3(
         scale.x * parentScale.x / 100,
@@ -108,6 +116,32 @@ class ParentTransformResolver {
       rotation: rotation,
       opacity: (opacity * 100).clamp(0, 100).toDouble(),
       enabled: enabled,
+    );
+  }
+
+  /// Applies parent Euler rotation in X, then Y, then Z order to a
+  /// child-space offset. Parent scale is applied before this rotation.
+  Vector3 _rotateByEuler(Vector3 offset, Vector3 rotationDegrees) {
+    final rx = rotationDegrees.x * math.pi / 180;
+    final ry = rotationDegrees.y * math.pi / 180;
+    final rz = rotationDegrees.z * math.pi / 180;
+
+    final cosX = math.cos(rx);
+    final sinX = math.sin(rx);
+    final y1 = offset.y * cosX - offset.z * sinX;
+    final z1 = offset.y * sinX + offset.z * cosX;
+
+    final cosY = math.cos(ry);
+    final sinY = math.sin(ry);
+    final x2 = offset.x * cosY + z1 * sinY;
+    final z2 = -offset.x * sinY + z1 * cosY;
+
+    final cosZ = math.cos(rz);
+    final sinZ = math.sin(rz);
+    return Vector3(
+      x2 * cosZ - y1 * sinZ,
+      x2 * sinZ + y1 * cosZ,
+      z2,
     );
   }
 
@@ -157,10 +191,16 @@ class ParentTransformResolver {
       final parent = parentId == null ? null : byId[parentId];
       if (parent != null) {
         final inherited = resolveOne(parent, visiting);
+        final scaledOffset = Vector3(
+          position.x * inherited.scale.x / 100,
+          position.y * inherited.scale.y / 100,
+          position.z * inherited.scale.z / 100,
+        );
+        final rotatedOffset = _rotateByEuler(scaledOffset, inherited.rotation);
         position = Vector3(
-          inherited.position.x + position.x * inherited.scale.x / 100,
-          inherited.position.y + position.y * inherited.scale.y / 100,
-          inherited.position.z + position.z * inherited.scale.z / 100,
+          inherited.position.x + rotatedOffset.x,
+          inherited.position.y + rotatedOffset.y,
+          inherited.position.z + rotatedOffset.z,
         );
         scale = Vector3(
           scale.x * inherited.scale.x / 100,
