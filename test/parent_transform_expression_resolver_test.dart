@@ -37,6 +37,8 @@ void main() {
 
     expect(result.positionX, contains('100.00000'));
     expect(result.positionX, contains('20.00000'));
+    expect(result.positionX, contains('cos('));
+    expect(result.positionY, contains('sin('));
     expect(result.scaleX, contains('200.00000'));
     expect(result.scaleX, contains('50.00000'));
     expect(result.rotationZ, contains('30.00000'));

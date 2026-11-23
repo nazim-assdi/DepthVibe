@@ -1655,4 +1655,479 @@ void main() {
     controller.dispose();
   });
 
+  test('animated transform slider edits the key at the playhead in one undo step', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 4000,
+        playheadMs: 1000,
+        layers: [
+          CompositionLayer(
+            id: 'clip',
+            name: 'Clip',
+            kind: LayerKind.video,
+            transform: LayerTransform(opacity: 82),
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'opacity',
+                keyframes: [
+                  ScalarKeyframe(timeMs: 0, value: 100),
+                  ScalarKeyframe(timeMs: 2000, value: 40),
+                ],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'clip',
+      ),
+    );
+
+    controller.beginInteractiveEdit();
+    controller.setTransformValue('opacity', 63);
+    controller.setTransformValue('opacity', 27);
+    controller.endInteractiveEdit();
+
+    final edited = controller.selectedLayer!;
+    final opacityTrack = edited.keyframeTracks.single;
+    expect(opacityTrack.keyframes.length, 3);
+    expect(
+      opacityTrack.keyframes.firstWhere((frame) => frame.timeMs == 1000).value,
+      27,
+    );
+    expect(edited.transform.opacity, 82);
+    expect(controller.undoHistoryLength, 1);
+
+    controller.undo();
+    final restored = controller.selectedLayer!;
+    expect(restored.keyframeTracks.single.keyframes.length, 2);
+    expect(restored.transform.opacity, 82);
+    controller.dispose();
+  });
+
+  test('transform edits respect locked layers and preserve base transform', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(
+            id: 'locked',
+            name: 'Locked',
+            kind: LayerKind.video,
+            locked: true,
+            transform: LayerTransform(opacity: 75),
+          ),
+        ],
+        selectedLayerId: 'locked',
+      ),
+    );
+
+    controller.setTransformValue('opacity', 10);
+    expect(controller.selectedLayer!.transform.opacity, 75);
+    expect(controller.canUndo, isFalse);
+    controller.dispose();
+  });
+
+  test('left trim preserves clip out-point and advances media source in-point', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 10000,
+        layers: [
+          CompositionLayer(
+            id: 'video',
+            name: 'Video',
+            kind: LayerKind.video,
+            startMs: 1000,
+            durationMs: 4000,
+            sourceInMs: 500,
+          ),
+        ],
+        selectedLayerId: 'video',
+      ),
+    );
+
+    expect(controller.trimLayerStart('video', 750), isTrue);
+    var layer = controller.document.layers.single;
+    expect(layer.startMs, 1750);
+    expect(layer.durationMs, 3250);
+    expect(layer.sourceInMs, 1250);
+    expect(layer.endMs, 5000);
+
+    // Extending the left edge cannot request media before source time zero.
+    expect(controller.trimLayerStart('video', -2000), isTrue);
+    layer = controller.document.layers.single;
+    expect(layer.startMs, 500);
+    expect(layer.durationMs, 4500);
+    expect(layer.sourceInMs, 0);
+    expect(layer.endMs, 5000);
+
+    controller.undo();
+    layer = controller.document.layers.single;
+    expect(layer.startMs, 1750);
+    expect(layer.sourceInMs, 1250);
+    controller.dispose();
+  });
+
+  test('timeline left and right trims clamp to composition and one frame minimum', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 5000,
+        layers: [
+          CompositionLayer(
+            id: 'audio',
+            name: 'Audio',
+            kind: LayerKind.audio,
+            startMs: 1000,
+            durationMs: 3000,
+            sourceInMs: 200,
+          ),
+        ],
+        selectedLayerId: 'audio',
+      ),
+    );
+
+    expect(controller.trimLayerStart('audio', 99999), isTrue);
+    var layer = controller.document.layers.single;
+    expect(layer.startMs, 3999);
+    expect(layer.durationMs, 1);
+    expect(layer.sourceInMs, 3199);
+
+    expect(controller.trimLayerEnd('audio', 99999), isTrue);
+    layer = controller.document.layers.single;
+    expect(layer.endMs, 5000);
+    expect(layer.durationMs, 1001);
+
+    expect(controller.moveLayerOnTimeline('audio', -99999), isTrue);
+    layer = controller.document.layers.single;
+    expect(layer.startMs, 0);
+    expect(layer.sourceInMs, 3199);
+    controller.dispose();
+  });
+
+  test('left trim is disabled for locked layers', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 5000,
+        layers: [
+          CompositionLayer(
+            id: 'locked',
+            name: 'Locked',
+            kind: LayerKind.video,
+            locked: true,
+            startMs: 1000,
+            durationMs: 2000,
+            sourceInMs: 300,
+          ),
+        ],
+        selectedLayerId: 'locked',
+      ),
+    );
+
+    expect(controller.trimLayerStart('locked', 250), isFalse);
+    final layer = controller.document.layers.single;
+    expect(layer.startMs, 1000);
+    expect(layer.durationMs, 2000);
+    expect(layer.sourceInMs, 300);
+    expect(controller.canUndo, isFalse);
+    controller.dispose();
+  });
+
+  test('renames a layer safely and can undo the name change', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(id: 'title', name: 'Old title', kind: LayerKind.text),
+        ],
+        selectedLayerId: 'title',
+      ),
+    );
+
+    expect(controller.renameLayer('title', '  Main Title  '), isTrue);
+    expect(controller.selectedLayer!.name, 'Main Title');
+    expect(controller.renameLayer('title', '   '), isFalse);
+    expect(controller.selectedLayer!.name, 'Main Title');
+
+    controller.undo();
+    expect(controller.selectedLayer!.name, 'Old title');
+    controller.dispose();
+  });
+
+  test('duplicates layers with independent effect and mask identities', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 5000,
+        layers: [
+          CompositionLayer(
+            id: 'source',
+            name: 'Title',
+            kind: LayerKind.text,
+            transform: LayerTransform(opacity: 65),
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'opacity',
+                keyframes: [ScalarKeyframe(timeMs: 0, value: 65)],
+              ),
+            ],
+            effects: [
+              EffectInstance(id: 'source-effect', effectId: 'glow', name: 'Glow'),
+            ],
+            masks: [
+              MaskModel(id: 'source-mask', name: 'Mask'),
+            ],
+          ),
+          CompositionLayer(
+            id: 'layer_3',
+            name: 'Existing layer',
+            kind: LayerKind.image,
+          ),
+        ],
+        selectedLayerId: 'source',
+      ),
+    );
+
+    expect(controller.duplicateLayer('source'), isTrue);
+    expect(controller.document.layers, hasLength(3));
+    final duplicate = controller.selectedLayer!;
+    expect(duplicate.id, isNot('layer_3'));
+    expect(duplicate.id, isNot('source'));
+    expect(duplicate.name, 'Title Copy');
+    expect(duplicate.transform.opacity, 65);
+    expect(duplicate.keyframeTracks.single.keyframes.single.value, 65);
+    expect(duplicate.effects.single.id, isNot('source-effect'));
+    expect(duplicate.masks.single.id, isNot('source-mask'));
+    final allIds = <String>[
+      for (final layer in controller.document.layers) layer.id,
+      for (final layer in controller.document.layers)
+        for (final effect in layer.effects) effect.id,
+      for (final layer in controller.document.layers)
+        for (final mask in layer.masks) mask.id,
+    ];
+    expect(allIds.toSet().length, allIds.length);
+
+    controller.undo();
+    expect(controller.document.layers, hasLength(2));
+    expect(controller.selectedLayer!.id, 'source');
+    controller.dispose();
+  });
+
+  test('empty interactive edit does not add a phantom undo entry', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(
+            id: 'clip',
+            name: 'Clip',
+            kind: LayerKind.video,
+          ),
+        ],
+        selectedLayerId: 'clip',
+      ),
+    );
+
+    controller.beginInteractiveEdit();
+    controller.endInteractiveEdit();
+    expect(controller.canUndo, isFalse);
+    expect(controller.undoHistoryLength, 0);
+    controller.dispose();
+  });
+
+  test('multiple left trims in one pointer gesture undo as one edit', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 8000,
+        layers: [
+          CompositionLayer(
+            id: 'clip',
+            name: 'Clip',
+            kind: LayerKind.video,
+            startMs: 2000,
+            durationMs: 4000,
+            sourceInMs: 1000,
+          ),
+        ],
+        selectedLayerId: 'clip',
+      ),
+    );
+
+    controller.beginInteractiveEdit();
+    controller.trimLayerStart('clip', 120);
+    controller.trimLayerStart('clip', 180);
+    controller.endInteractiveEdit();
+
+    final trimmed = controller.document.layers.single;
+    expect(trimmed.startMs, 2300);
+    expect(trimmed.durationMs, 3700);
+    expect(trimmed.sourceInMs, 1300);
+    expect(controller.undoHistoryLength, 1);
+
+    controller.undo();
+    final restored = controller.document.layers.single;
+    expect(restored.startMs, 2000);
+    expect(restored.durationMs, 4000);
+    expect(restored.sourceInMs, 1000);
+    controller.dispose();
+  });
+
+  test('reorders layer stack and can undo the order change', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(id: 'top', name: 'Top', kind: LayerKind.video),
+          CompositionLayer(id: 'middle', name: 'Middle', kind: LayerKind.text),
+          CompositionLayer(id: 'bottom', name: 'Bottom', kind: LayerKind.image),
+        ],
+        selectedLayerId: 'middle',
+      ),
+    );
+
+    controller.reorderLayer('bottom', 0);
+    expect(controller.document.layers.map((layer) => layer.id).toList(),
+        ['bottom', 'top', 'middle']);
+    expect(controller.selectedLayer!.id, 'middle');
+
+    controller.undo();
+    expect(controller.document.layers.map((layer) => layer.id).toList(),
+        ['top', 'middle', 'bottom']);
+    expect(controller.selectedLayer!.id, 'middle');
+    controller.dispose();
+  });
+
+  test('editing a disabled opacity track changes the base layer value', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(
+            id: 'clip',
+            name: 'Clip',
+            kind: LayerKind.video,
+            transform: LayerTransform(opacity: 80),
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'opacity',
+                enabled: false,
+                keyframes: [ScalarKeyframe(timeMs: 0, value: 25)],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'clip',
+      ),
+    );
+
+    controller.setTransformValue('opacity', 45);
+    final layer = controller.selectedLayer!;
+    expect(layer.transform.opacity, 45);
+    expect(layer.keyframeTracks.single.enabled, isFalse);
+    expect(layer.keyframeTracks.single.keyframes.single.value, 25);
+    controller.dispose();
+  });
+
+  test('add keyframe re-enables a disabled opacity track using its base value', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 3000,
+        playheadMs: 1200,
+        layers: [
+          CompositionLayer(
+            id: 'clip',
+            name: 'Clip',
+            kind: LayerKind.video,
+            transform: LayerTransform(opacity: 72),
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'opacity',
+                enabled: false,
+                keyframes: [ScalarKeyframe(timeMs: 0, value: 25)],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'clip',
+      ),
+    );
+
+    controller.addKeyframe('opacity');
+    final layer = controller.selectedLayer!;
+    final track = layer.keyframeTracks.single;
+    expect(track.enabled, isTrue);
+    expect(track.keyframes.length, 2);
+    expect(
+      track.keyframes.firstWhere((frame) => frame.timeMs == 1200).value,
+      72,
+    );
+    controller.dispose();
+  });
+
+  test('auto-key enables a disabled transform track while regular edits use its base', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 3000,
+        playheadMs: 1000,
+        layers: [
+          CompositionLayer(
+            id: 'clip',
+            name: 'Clip',
+            kind: LayerKind.video,
+            transform: LayerTransform(opacity: 80),
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'opacity',
+                enabled: false,
+                keyframes: [ScalarKeyframe(timeMs: 0, value: 20)],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'clip',
+      ),
+    );
+
+    controller.updateTransformValues({'opacity': 55});
+    expect(controller.selectedLayer!.transform.opacity, 55);
+    expect(controller.selectedLayer!.keyframeTracks.single.enabled, isFalse);
+
+    controller.updateTransformValues({'opacity': 35}, autoKey: true);
+    final track = controller.selectedLayer!.keyframeTracks.single;
+    expect(track.enabled, isTrue);
+    expect(
+      track.keyframes.firstWhere((frame) => frame.timeMs == 1000).value,
+      35,
+    );
+    controller.dispose();
+  });
+
+  test('editing interpolation does not re-enable a disabled transform track', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 3000,
+        playheadMs: 1000,
+        layers: [
+          CompositionLayer(
+            id: 'clip',
+            name: 'Clip',
+            kind: LayerKind.video,
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'opacity',
+                enabled: false,
+                keyframes: [
+                  ScalarKeyframe(timeMs: 0, value: 100),
+                  ScalarKeyframe(timeMs: 1000, value: 30),
+                ],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'clip',
+      ),
+    );
+
+    controller.setInterpolation(
+      'opacity',
+      Interpolation.linear,
+      timeMs: 1000,
+    );
+    final track = controller.selectedLayer!.keyframeTracks.single;
+    expect(track.enabled, isFalse);
+    expect(track.keyframes.last.interpolation, Interpolation.linear);
+    controller.dispose();
+  });
+
 }

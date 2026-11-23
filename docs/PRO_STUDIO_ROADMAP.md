@@ -314,6 +314,23 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 **Remaining colour work:** continuous real-time playback grading, a shared render graph for preview/export, GPU preview, scopes including curves/LUT/HDR pipeline output, animated curves, shot matching, LUT export/library management, scene-referred HDR input/output, 10/12-bit intermediate precision, chroma/gamut monitoring and HDR mastering metadata.
 
 
+## Implementation Update — After Effects-style 2D layer rendering (23 November 2026)
+
+- Added a dedicated shape-layer rasterizer for rectangle, rounded rectangle, ellipse, polygon, star and cubic Bézier path geometry. The renderer produces transparent PNG assets that flow through the same FFmpeg transform, mask, blend and native effect pipeline as other visual layers.
+- Animated Bézier path vertices are evaluated at each output frame and emitted as an image sequence for the layer duration. Static shapes use one PNG to avoid unnecessary frame generation. Shape exports are bounded by a 16-megapixel per-frame raster limit and a 36,000-frame animated-shape limit, and the export cancellation token is checked during frame generation.
+- Adjustment layers now run their supported native effect stack against the image accumulated below them and blend the processed result according to layer start/end time and animated opacity. This is a 2D adjustment pass, not a complete Photoshop/After Effects adjustment renderer; masks, complex mattes, colour-managed GPU effects and arbitrary third-party effects still need shared preview/export implementation.
+- Added rasterizer regression tests for transparent PNG output, animated path sampling and safe image-size limits.
+
+**Known boundary:** this increment does not add true extruded 3D text, arbitrary 3D layer planes with perspective rotation, complete PSD adjustment semantics, a unified GPU render graph or Adobe-native .aex effect parity. These remain explicit roadmap items and are not release-verified until Windows CI and render integration tests pass.
+
+### Camera-aware 3D text plane increment — 23 November 2026
+
+- Text layers can opt into a 3D plane mode. The editable text content and typography are rasterized with Flutter text shaping into a transparent PNG, decoded as a BLEND-mode texture and mapped onto a camera-facing quad.
+- The preview uses the software mesh renderer; final composition export prepares a per-frame transparent 3D plate using the same parent transform, camera and scene-light inputs used for imported mesh layers. The 3D plane mode is persisted in `.dvproj` and can be toggled in Typography.
+- Added texture-quad and portable project round-trip tests. The text remains an editable text layer; the generated mesh is not persisted as a destructive outline conversion.
+
+**Explicit limit:** extrusion side walls are generated from a bounded grid of raster alpha samples, not exact vector glyph contours. Bevels, per-letter material controls, text-on-path extrusion, per-character 3D animation and full GPU text rendering remain unfinished.
+
 ## Implementation Update — Extension manager and editing reliability (20 November 2026)
 
 - Added .dvext declarative package installation, local package registry, enable/disable and uninstall.

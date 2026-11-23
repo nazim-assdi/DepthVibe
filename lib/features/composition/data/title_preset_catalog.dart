@@ -83,6 +83,20 @@ class TitlePresetCatalog {
     TitlePresetDefinition(id:'outro_follow',name:'Follow for More',category:'Outro & CTA',description:'Closing follow callout.',sampleText:'FOLLOW FOR MORE',fontSize:84,fontWeight:800,textColor:'#FFFFD77A',motionPresetId:'pop_bounce'),
     TitlePresetDefinition(id:'outro_next',name:'Next Episode',category:'Outro & CTA',description:'End card teasing the next episode.',sampleText:'NEXT EPISODE',fontSize:88,fontWeight:800,letterSpacing:4,motionPresetId:'fade_slide_up'),
     TitlePresetDefinition(id:'outro_credits',name:'Credits Heading',category:'Outro & CTA',description:'Simple clean credit title.',sampleText:'CREDITS',fontSize:76,fontWeight:700,letterSpacing:8,motionPresetId:'fade_in'),
+
+    TitlePresetDefinition(id:'title_kinetic_center',name:'Kinetic Center',category:'Motion Titles',description:'Bold centred phrase with dimensional entrance.',sampleText:'MAKE IT MOVE',fontSize:104,fontWeight:900,letterSpacing:1,motionPresetId:'depth_push_in'),
+    TitlePresetDefinition(id:'title_minimal_tech',name:'Minimal Tech',category:'Motion Titles',description:'Clean wide-tracked technical heading.',sampleText:'CREATIVE SYSTEMS',fontSize:64,fontWeight:500,textColor:'#FF9DE7FF',letterSpacing:8,motionPresetId:'soft_zoom_fade'),
+    TitlePresetDefinition(id:'title_reel_hook',name:'Reel Hook',category:'Creator Titles',description:'A fast hook for vertical short-form edits.',sampleText:'WATCH THIS!',fontSize:120,fontWeight:900,textColor:'#FFFFD77A',letterSpacing:-1,motionPresetId:'rubber_band'),
+    TitlePresetDefinition(id:'title_education_lesson',name:'Lesson Heading',category:'Creator Titles',description:'An approachable heading for lessons and explainers.',sampleText:'LESSON 01',fontSize:86,fontWeight:800,textColor:'#FFB7E5D4',letterSpacing:2,motionPresetId:'soft_spring_up'),
+    TitlePresetDefinition(id:'title_editorial_big',name:'Editorial Hero',category:'Cinematic Titles',description:'Large editorial typography.',sampleText:'THE NEW ERA',fontSize:112,fontWeight:500,letterSpacing:6,motionPresetId:'ken_burns_push'),
+    TitlePresetDefinition(id:'title_quote_card',name:'Quote Card',category:'Typography',description:'Elegant quote title for interviews and stories.',sampleText:'“THINK BEYOND”',fontSize:74,fontWeight:500,textColor:'#FFE8D7B8',letterSpacing:1,motionPresetId:'fade_slide_up'),
+    TitlePresetDefinition(id:'title_feature_date',name:'Feature Date',category:'Cinematic Titles',description:'Dated film or event chapter card.',sampleText:'23 NOVEMBER 2026',fontSize:48,fontWeight:600,textColor:'#FFCFD7E8',letterSpacing:5,motionPresetId:'fade_in'),
+    TitlePresetDefinition(id:'title_sports_live',name:'Sports Match Day',category:'Broadcast & Events',description:'Energetic match-day heading.',sampleText:'MATCH DAY',fontSize:112,fontWeight:900,textColor:'#FFFFD16A',letterSpacing:1,motionPresetId:'tada'),
+    TitlePresetDefinition(id:'lower_host',name:'Host Name & Role',category:'Lower Thirds',description:'Two-line on-screen host identifier.',sampleText:'HOST NAME\nPRESENTER',fontSize:44,fontWeight:700,textAlign:'left',positionX:540,positionY:850,motionPresetId:'lower_third_rise'),
+    TitlePresetDefinition(id:'lower_brand',name:'Brand Partner',category:'Lower Thirds',description:'Sponsor title for interviews and events.',sampleText:'BRAND NAME\nOFFICIAL PARTNER',fontSize:40,fontWeight:700,textColor:'#FFBCE7FF',textAlign:'left',positionX:560,positionY:860,motionPresetId:'diagonal_swoop_in'),
+    TitlePresetDefinition(id:'outro_subscribe',name:'Subscribe End Card',category:'Outro & CTA',description:'Animated subscription call to action.',sampleText:'SUBSCRIBE FOR MORE',fontSize:76,fontWeight:900,textColor:'#FFFFD77A',letterSpacing:1,motionPresetId:'rubber_band'),
+    TitlePresetDefinition(id:'outro_original',name:'Original Production',category:'Outro & CTA',description:'Branded production end card.',sampleText:'A DEPTHVIBE ORIGINAL',fontSize:58,fontWeight:700,letterSpacing:5,motionPresetId:'depth_float'),
+
   ];
 
   static TitlePresetDefinition? find(String id) {

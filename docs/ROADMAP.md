@@ -34,7 +34,9 @@ Status describes working source paths, not release-ready feature parity. A model
 - [x] Per-frame parameter expressions for brightness, contrast, saturation and gamma.
 - [x] CPU multi-pass thresholded glow and alpha-derived drop shadow export.
 - [ ] Animated parameter expressions for all effects and GPU multi-pass nodes for high-end VFX.
-- [ ] Shape/text rasterization and Photoshop adjustment layer rendering.
+- [x] Text rasterization and editable vector shape export, including per-frame animated Bézier path vertices.
+- [x] Adjustment-layer effect compositing with active-range and animated-opacity blending for the supported native effect set.
+- [ ] Complete Photoshop adjustment-layer semantics and preview/export parity.
 - [ ] Bezier mask curve editor, animated masks, tracking masks and rotoscoping.
 - [ ] Render queue, proxy media, cache manager, waveform cache and deterministic realtime preview.
 - [x] Bounded compositor preview decode queue with per-layer latest-request tokens, shared in-flight source-frame caching, memory/disk cache, atomic frame writes, immediate exact-frame display and background one-second chunk lookahead.
@@ -51,7 +53,8 @@ Status describes working source paths, not release-ready feature parity. A model
 
 ## Stage 4 — 3D and tracking
 - [x] Camera and light layer data models and controls.
-- [ ] Cross-platform GLB/OBJ scene renderer integrated with composition preview and export.
+- [x] CPU GLB/OBJ scene renderer integrated with composition preview and export, including camera-aware 3D text meshes with adjustable raster-derived extrusion side walls.
+- [ ] GPU/PBR renderer parity, vector-outline/bevel text geometry, material batching and complete scene-render integration.
 - [ ] Camera projection, depth of field, environment maps, real lights and shadow maps.
 - [x] Basic 2D template matching from a manually entered ROI with translation keyframes for stabilization.
 - [ ] Optical-flow/planar tracking, perspective/rotation/scale solve, track-to-null, occlusion handling and 3D camera solve.

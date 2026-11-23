@@ -1,8 +1,101 @@
+import 'package:depthvibe/features/composition/data/effect_catalog.dart';
 import 'package:depthvibe/features/composition/domain/composition_models.dart';
 import 'package:depthvibe/features/composition/engine/ffmpeg_filter_compiler.dart';
+import 'package:depthvibe/features/composition/engine/ffmpeg_compositing_effect_compiler.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+
+  test('every built-in effect has a native FFmpeg or compositing render path', () {
+    const compiler = FfmpegFilterCompiler();
+    const compositeCompiler = FfmpegCompositingEffectCompiler();
+
+    for (final definition in EffectCatalog.all) {
+      final parameters = <String, double>{
+        for (final parameter in definition.parameters)
+          parameter.id: parameter.defaultValue,
+      };
+      final layer = CompositionLayer(
+        id: 'catalog-' + definition.id,
+        name: definition.name,
+        kind: LayerKind.video,
+        effects: [
+          EffectInstance(
+            id: 'effect-' + definition.id,
+            effectId: definition.id,
+            name: definition.name,
+            parameters: parameters,
+            assetUri: definition.id == 'color_lut'
+                ? '/tmp/depthvibe-test-identity.cube'
+                : null,
+          ),
+        ],
+      );
+
+      final nativeFilters = compiler.compileEffects(layer, timeMs: 0);
+      final compositeFilters = <String>[];
+      compositeCompiler.compile(
+        filters: compositeFilters,
+        inputLabel: 'source',
+        layer: layer,
+        index: 0,
+      );
+
+      expect(
+        nativeFilters.isNotEmpty || compositeFilters.isNotEmpty,
+        isTrue,
+        reason: definition.id + ' does not have a render path',
+      );
+    }
+  });
+
+  test('Transform effect compiles animated scale and rotation with transparent edges', () {
+    const layer = CompositionLayer(
+      id: 'animated-transform',
+      name: 'Animated Transform',
+      kind: LayerKind.video,
+      effects: [
+        EffectInstance(
+          id: 'transform-1',
+          effectId: 'transform',
+          name: 'Transform',
+          parameters: {'scale': 100, 'rotation': 0},
+          keyframeTracks: [
+            KeyframeTrack(
+              property: 'scale',
+              keyframes: [
+                ScalarKeyframe(timeMs: 0, value: 70),
+                ScalarKeyframe(timeMs: 1000, value: 125),
+              ],
+            ),
+            KeyframeTrack(
+              property: 'rotation',
+              keyframes: [
+                ScalarKeyframe(timeMs: 0, value: -15),
+                ScalarKeyframe(timeMs: 1000, value: 25),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final filters = const FfmpegFilterCompiler().compileEffects(
+      layer,
+      timeMs: 0,
+    );
+
+    expect(filters, hasLength(1));
+    expect(filters.single, contains('format=rgba'));
+    expect(filters.single, contains('scale=w='));
+    expect(filters.single, contains('eval=frame'));
+    expect(filters.single, contains('rotate=angle='));
+    expect(filters.single, contains('rotw('));
+    expect(filters.single, contains('roth('));
+    expect(filters.single, contains('black@0'));
+    expect(filters.single, contains('T'));
+  });
+
   test('exports animated brightness as a frame-evaluated FFmpeg expression', () {
     const compiler = FfmpegFilterCompiler();
     const layer = CompositionLayer(
@@ -457,6 +550,28 @@ void main() {
     expect(filter, contains('if(lt(T,'));
     expect(filter, contains("a='alpha(X,Y)'"));
     expect(filter, contains(':eval=frame'));
+  });
+
+
+  test('compiles the expanded original effects into FFmpeg filter strings', () {
+    const compiler=FfmpegFilterCompiler();
+    final cases=<String,Map<String,double>>{
+      'solarize':{'threshold':174},
+      'color_temperature':{'temperature':0.25,'tint':0.04,'intensity':0.8},
+      'soft_focus':{'radius':1.8,'brightness':0.04},
+      'ripple_warp':{'amount':6,'wavelength':88,'speed':1.2},
+      'zoom_warp':{'amount':0.12,'center_x':0.5,'center_y':0.5},
+      'color_key':{'similarity':0.3,'blend':0.12},
+      'high_pass_sharpen':{'amount':1.4},
+      'chroma_smear':{'shift':3.5},
+    };
+    for(final entry in cases.entries){
+      final filters=compiler.compileEffects(CompositionLayer(
+        id:entry.key,name:entry.key,kind:LayerKind.video,
+        effects:[EffectInstance(id:'fx-'+entry.key,effectId:entry.key,name:entry.key,parameters:entry.value)],
+      ),timeMs:0);
+      expect(filters,isNotEmpty,reason:entry.key);
+    }
   });
 
   test('skips disabled effects', () {

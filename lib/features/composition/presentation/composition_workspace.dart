@@ -50,10 +50,13 @@ import '../engine/composition_project_service.dart';
 import '../engine/composition_recovery_service.dart';
 import '../engine/obj_mesh_loader.dart';
 import '../engine/scene_mesh_loader.dart';
+import '../engine/text_plane_mesh_builder.dart';
+import '../engine/software_3d_mesh_view.dart';
 import '../engine/software_3d_renderer.dart';
 import '../engine/gpu_3d_mesh_view.dart';
 import '../engine/audio_waveform_service.dart';
 import '../engine/color_grade_preview.dart';
+import '../engine/adjustment_preview_compiler.dart';
 import '../engine/cube_lut_validator.dart';
 import '../engine/motion_tracking_service.dart';
 import '../engine/transition_frame_validator.dart';
@@ -99,6 +102,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       LinkedHashMap<String, Future<FileStat>>();
   final Map<String, Future<img.Image?>> _scopeImageJobs = {};
   final Map<String, Future<ObjMesh>> _meshJobs = {};
+  final LinkedHashMap<String, Future<ObjMesh>> _textPlaneMeshJobs =
+      LinkedHashMap<String, Future<ObjMesh>>();
   final Map<String, Future<void>> _previewChunkJobs = {};
   Future<void> _previewChunkTail = Future<void>.value();
   final PreviewProxyService _previewProxyService = PreviewProxyService();
@@ -129,6 +134,137 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   Future<ObjMesh> _meshFor(String path) =>
       _meshJobs.putIfAbsent(path, () => const SceneMeshLoader().load(path));
+
+  Future<ObjMesh> _textPlaneMeshFor(CompositionLayer layer) {
+    final fontManager = FontManagerService.instance;
+    final key = Object.hash(
+      fontManager.activeFamily,
+      fontManager.activeFontPath,
+      Object.hashAll(fontManager.fallbackFamilies),
+      layer.id,
+      layer.textContent,
+      layer.textExtrusionDepth,
+      layer.textColor,
+      layer.textFontFamily,
+      layer.textFontAssetUri,
+      layer.textFontSize,
+      layer.textFontWeight,
+      layer.textItalic,
+      layer.textColor,
+      layer.textLetterSpacing,
+      layer.textLineHeight,
+      layer.textAlign,
+      layer.textBoxWidth,
+      Object.hashAll(layer.textFontFallback),
+    ).toString();
+    final existing = _textPlaneMeshJobs.remove(key);
+    if (existing != null) {
+      _textPlaneMeshJobs[key] = existing;
+      return existing;
+    }
+    final job = _buildTextPlaneMesh(layer);
+    _textPlaneMeshJobs[key] = job;
+    while (_textPlaneMeshJobs.length > 64) {
+      _textPlaneMeshJobs.remove(_textPlaneMeshJobs.keys.first);
+    }
+    return job;
+  }
+
+  Future<ObjMesh> _buildTextPlaneMesh(CompositionLayer layer) async {
+    final fontManager = FontManagerService.instance;
+    final family = layer.textFontFamily ?? fontManager.activeFamily;
+    final fontPath = layer.textFontAssetUri ??
+        (layer.textFontFamily == null ? fontManager.activeFontPath : null);
+    try {
+      await fontManager.ensureFontsLoaded(
+        family: family,
+        path: fontPath,
+        fallbackFamilies: [
+          ...layer.textFontFallback,
+          ...fontManager.fallbackFamilies,
+        ],
+      );
+    } catch (_) {}
+
+    final content = layer.textContent ?? layer.name;
+    final rawColor = layer.textColor.replaceFirst('#', '');
+    final parsedColor = int.tryParse(rawColor, radix: 16);
+    final color = parsedColor == null
+        ? const Color(0xFFFFFFFF)
+        : Color(rawColor.length == 6 ? 0xFF000000 | parsedColor : parsedColor);
+    final weightIndex = ((layer.textFontWeight.clamp(100, 900) / 100)
+                .round() - 1)
+            .clamp(0, 8)
+            .toInt();
+    final textDirection = RegExp(r'[\u0590-\u08FF\uFB1D-\uFEFF]')
+            .hasMatch(content)
+        ? TextDirection.rtl
+        : TextDirection.ltr;
+    final alignment = switch (layer.textAlign) {
+      'center' => TextAlign.center,
+      'right' => TextAlign.right,
+      'justify' => TextAlign.justify,
+      _ => TextAlign.left,
+    };
+    final painter = TextPainter(
+      text: TextSpan(
+        text: content,
+        style: TextStyle(
+          color: color,
+          fontFamily: family,
+          fontFamilyFallback: [
+            ...layer.textFontFallback,
+            ...fontManager.fallbackFamilies,
+          ],
+          fontSize: layer.textFontSize.clamp(1.0, 2000.0).toDouble(),
+          fontWeight: FontWeight.values[weightIndex],
+          fontStyle: layer.textItalic ? FontStyle.italic : FontStyle.normal,
+          letterSpacing: layer.textLetterSpacing.clamp(-100.0, 500.0).toDouble(),
+          height: layer.textLineHeight.clamp(0.1, 10.0).toDouble(),
+          shadows: layer.is3dText
+              ? const []
+              : const [Shadow(color: Color(0xDD000000), blurRadius: 8)],
+        ),
+      ),
+      textAlign: alignment,
+      textDirection: textDirection,
+    );
+    painter.layout(
+      maxWidth: layer.textBoxWidth.clamp(1.0, 20000.0).toDouble(),
+    );
+    const padding = 8;
+    final width = math.max(1, painter.width.ceil() + padding * 2).toInt();
+    final height = math.max(1, painter.height.ceil() + padding * 2).toInt();
+    if (width > 8192 || height > 8192 || width * height > 16 * 1024 * 1024) {
+      painter.dispose();
+      throw StateError('3D text layer exceeds the safe 16-megapixel raster limit.');
+    }
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(
+      recorder,
+      ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+    );
+    painter.paint(canvas, ui.Offset(padding.toDouble(), padding.toDouble()));
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(width, height);
+    picture.dispose();
+    painter.dispose();
+    try {
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) throw StateError('Could not rasterize 3D text layer.');
+      final bytes = data.buffer.asUint8List(
+        data.offsetInBytes,
+        data.lengthInBytes,
+      );
+      return const TextPlaneMeshBuilder().fromPngBytes(
+        bytes,
+        extrusionDepth: layer.textExtrusionDepth / 100,
+        sideColor: layer.textColor,
+      );
+    } finally {
+      image.dispose();
+    }
+  }
 
   String _quoteFfmpeg(String value) =>
       "'" + value.replaceAll("'", "'\\''") + "'";
@@ -2894,8 +3030,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ),
         ),
         Expanded(
-          child: ListView.builder(
+          child: ReorderableListView.builder(
+            buildDefaultDragHandles: false,
             itemCount: layers.length,
+            onReorder: (oldIndex, newIndex) {
+              if (newIndex > oldIndex) newIndex--;
+              _controller.reorderLayer(layers[oldIndex].id, newIndex);
+            },
             itemBuilder: (context, index) {
               final layer = layers[index];
               final selected = layer.id == document.selectedLayerId;
@@ -2920,6 +3061,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   'Adjustment ${layer.photoshopAdjustmentKey}',
               ];
               return ListTile(
+                key: ValueKey<String>('project-layer-${layer.id}'),
                 dense: true,
                 contentPadding: EdgeInsets.only(
                   left: 8 + depth * 12,
@@ -2927,12 +3069,26 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 ),
                 selected: selected,
                 selectedTileColor: palette.accentSoft,
-                leading: Icon(
-                  layer.kind == LayerKind.precomposition
-                      ? Icons.folder_open
-                      : _iconFor(layer.kind),
-                  size: 16,
-                  color: selected ? palette.accent : palette.secondaryText,
+                leading: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ReorderableDragStartListener(
+                      index: index,
+                      child: Icon(
+                        Icons.drag_indicator,
+                        size: 14,
+                        color: palette.secondaryText,
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    Icon(
+                      layer.kind == LayerKind.precomposition
+                          ? Icons.folder_open
+                          : _iconFor(layer.kind),
+                      size: 16,
+                      color: selected ? palette.accent : palette.secondaryText,
+                    ),
+                  ],
                 ),
                 title: Text(
                   layer.name,
@@ -2947,11 +3103,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   style: const TextStyle(fontSize: 8),
                 ),
                 trailing: SizedBox(
-                  width: 54,
+                  width: 94,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
+                        padding: EdgeInsets.zero,
                         visualDensity: VisualDensity.compact,
                         tooltip: layer.enabled ? 'Hide layer' : 'Show layer',
                         onPressed: () => _controller.setLayerEnabled(
@@ -2964,6 +3121,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                         ),
                       ),
                       IconButton(
+                        padding: EdgeInsets.zero,
                         visualDensity: VisualDensity.compact,
                         tooltip: layer.locked ? 'Unlock layer' : 'Lock layer',
                         onPressed: () => _controller.setLayerLocked(
@@ -2974,6 +3132,62 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                           layer.locked ? Icons.lock : Icons.lock_open,
                           size: 14,
                         ),
+                      ),
+                      PopupMenuButton<String>(
+                        padding: EdgeInsets.zero,
+                        tooltip: 'Edit layer',
+                        iconSize: 16,
+                        onSelected: (action) {
+                          if (action == 'rename') {
+                            unawaited(_renameLayerDialog(layer));
+                            return;
+                          }
+                          if (action == 'duplicate') {
+                            final duplicated = _controller.duplicateLayer(layer.id);
+                            if (mounted && duplicated) {
+                              setState(() => _notice = 'Duplicated "${layer.name}".');
+                            }
+                            return;
+                          }
+                          if (action == 'delete') {
+                            final deleted = _controller.removeLayer(layer.id);
+                            if (mounted && deleted) {
+                              setState(() => _notice = 'Deleted "${layer.name}". Use Undo to restore it.');
+                            }
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(
+                            value: 'rename',
+                            child: Row(
+                              children: [
+                                Icon(Icons.drive_file_rename_outline, size: 16),
+                                SizedBox(width: 8),
+                                Text('Rename layer'),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'duplicate',
+                            child: Row(
+                              children: [
+                                Icon(Icons.copy_outlined, size: 16),
+                                SizedBox(width: 8),
+                                Text('Duplicate layer'),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete_outline, size: 16),
+                                SizedBox(width: 8),
+                                Text('Delete layer'),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -4767,6 +4981,108 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     });
   }
 
+  Widget _applyAdjustmentOperation(
+    Widget source,
+    EffectInstance effect,
+    int timeMs,
+  ) {
+    if (effect.effectId == 'color_grade') {
+      final filter = ColorGradePreview.filterFor(effect, timeMs);
+      return filter == null
+          ? source
+          : ColorFiltered(colorFilter: filter, child: source);
+    }
+
+    final operation =
+        const AdjustmentPreviewCompiler().compile(effect, timeMs);
+    if (operation == null) return source;
+    switch (operation.kind) {
+      case AdjustmentPreviewKind.colorMatrix:
+        return ColorFiltered(
+          colorFilter: ColorFilter.matrix(operation.colorMatrix),
+          child: source,
+        );
+      case AdjustmentPreviewKind.gaussianBlur:
+        if (operation.amount <= 0) return source;
+        return ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(
+            sigmaX: operation.amount,
+            sigmaY: operation.amount,
+          ),
+          child: source,
+        );
+      case AdjustmentPreviewKind.boxBlur:
+        if (operation.amount <= 0) return source;
+        final sigma = operation.amount * 0.58;
+        return ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(
+            sigmaX: sigma,
+            sigmaY: sigma,
+          ),
+          child: source,
+        );
+      case AdjustmentPreviewKind.horizontalFlip:
+        return Transform.flip(flipX: true, child: source);
+      case AdjustmentPreviewKind.verticalFlip:
+        return Transform.flip(flipY: true, child: source);
+      case AdjustmentPreviewKind.vignette:
+        final stop = (0.88 - operation.amount * 0.28)
+            .clamp(0.4, 0.86)
+            .toDouble();
+        return ShaderMask(
+          blendMode: BlendMode.multiply,
+          shaderCallback: (bounds) => RadialGradient(
+            colors: const [Colors.white, Colors.black],
+            stops: [stop, 1],
+          ).createShader(bounds),
+          child: source,
+        );
+    }
+  }
+
+  Widget _applyAdjustmentLayerPreview(
+    Widget composite,
+    CompositionLayer layer,
+    int timeMs,
+    ResolvedLayerTransform? resolvedTransform,
+  ) {
+    if (resolvedTransform == null || !resolvedTransform.enabled) {
+      return composite;
+    }
+    if (timeMs < layer.startMs || timeMs >= layer.endMs) return composite;
+    final opacity = (resolvedTransform.opacity / 100)
+        .clamp(0.0, 1.0)
+        .toDouble();
+    if (opacity <= 0) return composite;
+
+    // Run the effect stack sequentially, then blend the complete processed
+    // result once. Blending after every effect would change the strength and
+    // order of multi-effect adjustment layers.
+    Widget adjusted = composite;
+    for (final effect in layer.effects) {
+      adjusted = _applyAdjustmentOperation(adjusted, effect, timeMs);
+    }
+
+    final activeMasks = layer.masks.where((mask) => mask.enabled).toList();
+    if (activeMasks.isNotEmpty) {
+      adjusted = ClipPath(
+        clipper: _AnimatedMaskClipper(
+          masks: activeMasks,
+          timeMs: timeMs,
+        ),
+        child: adjusted,
+      );
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        composite,
+        Opacity(opacity: opacity, child: adjusted),
+      ],
+    );
+  }
+
   Widget _buildCanvas(CompositionDocument doc, CompositionLayer? selected) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     final resolvedTransforms = const ParentTransformResolver().resolveAll(
@@ -4796,7 +5112,51 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   builder: (context, constraints) {
                     final canvasWidth = constraints.maxWidth;
                     final canvasHeight = constraints.maxHeight;
-                    final ordered = doc.layers.reversed.where((item) => item.enabled);
+                    final ordered = doc.layers.reversed
+                        .where((item) => item.enabled)
+                        .toList(growable: false);
+                    Widget composite = const SizedBox.expand();
+                    final pendingVisualLayers = <Widget>[];
+                    for (final layer in ordered) {
+                      if (layer.kind == LayerKind.adjustment) {
+                        if (pendingVisualLayers.isNotEmpty) {
+                          composite = Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              composite,
+                              ...pendingVisualLayers,
+                            ],
+                          );
+                          pendingVisualLayers.clear();
+                        }
+                        composite = _applyAdjustmentLayerPreview(
+                          composite,
+                          layer,
+                          doc.playheadMs,
+                          resolvedTransforms[layer.id],
+                        );
+                      } else {
+                        pendingVisualLayers.add(
+                          _buildLayerVisual(
+                            layer,
+                            doc,
+                            Size(canvasWidth, canvasHeight),
+                            resolvedTransforms: resolvedTransforms,
+                            cameraLayer: cameraLayer,
+                            cameraTransform: cameraTransform,
+                          ),
+                        );
+                      }
+                    }
+                    if (pendingVisualLayers.isNotEmpty) {
+                      composite = Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          composite,
+                          ...pendingVisualLayers,
+                        ],
+                      );
+                    }
                     return Container(
                       clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
@@ -4820,17 +5180,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                if (_showCanvasGrid)
-                            const CustomPaint(painter: _CanvasGridPainter()),
-                          for (final layer in ordered)
-                            _buildLayerVisual(
-                              layer,
-                              doc,
-                              Size(canvasWidth, canvasHeight),
-                              resolvedTransforms: resolvedTransforms,
-                              cameraLayer: cameraLayer,
-                              cameraTransform: cameraTransform,
-                            ),
+                                Positioned.fill(child: composite),
                           if (_showMotionPaths)
                             _buildMotionPathOverlay(
                               selected,
@@ -5331,7 +5681,67 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               );
         break;
       case LayerKind.text:
-        baseWidth = layer.textBoxWidth;
+        if (layer.is3dText) {
+          baseWidth = 760;
+          baseHeight = 760;
+          final meshCamera = cameraTransform != null && cameraTransform.enabled
+              ? cameraTransform
+              : const ResolvedLayerTransform(
+                  position: Vector3(0, 0, 0),
+                  scale: Vector3(100, 100, 100),
+                  rotation: Vector3(0, 0, 0),
+                  opacity: 100,
+                  enabled: true,
+                );
+          final meshCameraSettings =
+              cameraTransform != null && cameraTransform.enabled
+                  ? cameraLayer?.camera ?? const CameraSettings()
+                  : const CameraSettings();
+          final meshLights = <SceneLight>[
+            for (final item in doc.layers.where(
+              (candidate) =>
+                  candidate.kind == LayerKind.light && candidate.enabled,
+            ))
+              SceneLight(
+                transform: resolvedTransforms[item.id]!,
+                settings: item.light ?? const LightSettings(),
+              ),
+          ];
+          visual = FutureBuilder<ObjMesh>(
+            future: _textPlaneMeshFor(layer),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Center(
+                  child: Icon(Icons.broken_image_outlined,
+                      color: Color(0xFFFF8E8E), size: 38),
+                );
+              }
+              final mesh = snapshot.data;
+              if (mesh == null) {
+                return const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                );
+              }
+              return Software3dMeshView(
+                mesh: mesh,
+                timeMs: math.max(0, timeMs - layer.startMs).toInt(),
+                modelTransform: resolved,
+                cameraTransform: meshCamera,
+                cameraSettings: meshCameraSettings,
+                lights: meshLights,
+                compositionWidth: doc.width.toDouble(),
+                compositionHeight: doc.height.toDouble(),
+                maximumPreviewDimension: DepthVibeSettingsService
+                    .instance.performanceMode.maximumPreviewDimension,
+              );
+            },
+          );
+        } else {
+          baseWidth = layer.textBoxWidth;
         final content = layer.textContent ?? layer.name;
         final approximateCharactersPerLine =
             (baseWidth / (layer.textFontSize * 0.52))
@@ -5393,6 +5803,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ),
           ),
         );
+        }
         break;
       case LayerKind.nullObject:
         visual = const Icon(Icons.control_camera, color: Color(0xFFB5A4FF), size: 30);
@@ -5490,7 +5901,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         break;
     }
 
-    final isMeshLayer = layer.kind == LayerKind.threeDModel;
+    final isMeshLayer = layer.kind == LayerKind.threeDModel ||
+        (layer.kind == LayerKind.text && layer.is3dText);
     final meshCameraScaleX = projected != null && resolved.scale.x.abs() > 0.0001
         ? projected.scale.x.abs() / resolved.scale.x.abs()
         : 1.0;
@@ -7282,7 +7694,38 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _panelHeader('SELECTED LAYER', _iconFor(layer.kind)),
-        Text(layer.textContent ?? layer.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+        Text(layer.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+        if (layer.kind == LayerKind.text && layer.textContent != null) ...[
+          const SizedBox(height: 3),
+          Text(
+            layer.textContent!,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 10, color: Color(0xFF9BAAC1)),
+          ),
+        ],
+        const SizedBox(height: 7),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => _renameLayerDialog(layer),
+              icon: const Icon(Icons.drive_file_rename_outline, size: 14),
+              label: const Text('Rename'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () {
+                final duplicated = _controller.duplicateLayer(layer.id);
+                if (mounted && duplicated) {
+                  setState(() => _notice = 'Duplicated "${layer.name}".');
+                }
+              },
+              icon: const Icon(Icons.copy_outlined, size: 14),
+              label: const Text('Duplicate'),
+            ),
+          ],
+        ),
         const SizedBox(height: 5),
         Text(layer.kind.name, style: const TextStyle(fontSize: 11, color: Color(0xFF9DABC3))),
         const SizedBox(height: 12),
@@ -7389,6 +7832,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           onSave: (value) =>
               _controller.updateTextLayer(textContent: value),
         ),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('3D Text Plane'),
+          subtitle: const Text(
+            'Camera-aware mesh text with editable front, back and side depth.',
+            style: TextStyle(fontSize: 10),
+          ),
+          value: layer.is3dText,
+          onChanged: (value) =>
+              _controller.updateTextLayer(is3dText: value),
+        ),
         const SizedBox(height: 10),
         OutlinedButton.icon(
           onPressed: () => _chooseLayerFont(layer),
@@ -7440,6 +7895,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 textBoxWidth: value.clamp(1, 20000).toDouble(),
               ),
             ),
+            if (layer.is3dText)
+              numericField(
+                'Extrusion depth (%)',
+                layer.textExtrusionDepth,
+                (value) => _controller.updateTextLayer(
+                  textExtrusionDepth: value.clamp(0, 100).toDouble(),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 8),
@@ -7572,7 +8035,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           style: const TextStyle(fontSize: 11, color: Color(0xFF9BAAC1)),
         ),
         const Text(
-          'Drag the clip body in the timeline to move it. Drag its right edge to change duration. Source In trims the media before timeline placement.',
+          'Drag the clip body to move it. Drag the left edge to trim the start (video/audio advance Source In); drag the right edge to trim the end. Source In can also be edited directly.',
           style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
         ),
       ],
@@ -7687,6 +8150,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         layer.keyframeTracks.where((item) => item.property == property);
     final keyframes =
         matchingTracks.isEmpty ? 0 : matchingTracks.first.keyframes.length;
+    final trackEnabled =
+        matchingTracks.isNotEmpty && matchingTracks.first.enabled;
     ScalarKeyframe? activeKeyframe;
     if (matchingTracks.isNotEmpty) {
       for (final frame in matchingTracks.first.keyframes) {
@@ -7702,22 +8167,43 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         Row(
           children: [
             Expanded(child: Text(label, style: const TextStyle(fontSize: 11))),
+            if (keyframes > 0)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: trackEnabled
+                    ? 'Disable animation track'
+                    : 'Enable animation track',
+                onPressed: layer.locked
+                    ? null
+                    : () => _controller.setTransformTrackEnabled(
+                          property,
+                          !trackEnabled,
+                        ),
+                icon: Icon(
+                  trackEnabled ? Icons.visibility : Icons.visibility_off,
+                  size: 15,
+                  color: trackEnabled
+                      ? const Color(0xFFB6A5FF)
+                      : const Color(0xFF8A98B0),
+                ),
+              ),
             IconButton(
               visualDensity: VisualDensity.compact,
               tooltip: 'Add keyframe at current playhead',
-              onPressed: () => _addKeyframe(property),
+              onPressed: layer.locked ? null : () => _addKeyframe(property),
               icon: Icon(
                 Icons.diamond,
                 size: 16,
-                color: keyframes > 0
+                color: trackEnabled
                     ? const Color(0xFFB6A5FF)
                     : const Color(0xFF8A98B0),
               ),
             ),
-            if (keyframes > 0)
+            if (keyframes > 0 && trackEnabled)
               PopupMenuButton<Interpolation>(
                 tooltip: 'Set keyframe interpolation at playhead',
                 icon: const Icon(Icons.linear_scale, size: 16),
+                enabled: !layer.locked,
                 onSelected: (value) =>
                     _controller.setInterpolation(property, value),
                 itemBuilder: (_) => Interpolation.values
@@ -7732,10 +8218,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 visualDensity: VisualDensity.compact,
                 tooltip: 'Edit Bezier graph',
                 icon: const Icon(Icons.timeline, size: 16),
-                onPressed: () => _editBezierCurve(
-                  property,
-                  activeKeyframe!.bezier,
-                ),
+                onPressed: layer.locked
+                    ? null
+                    : () => _editBezierCurve(
+                          property,
+                          activeKeyframe!.bezier,
+                        ),
               ),
             SizedBox(
               width: 54,
@@ -7751,12 +8239,24 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           min: min,
           max: max,
           value: value.clamp(min, max).toDouble(),
-          onChanged: (next) => _controller.setTransformValue(property, next),
-          onChangeEnd: (next) {
-            if (keyframes > 0) {
-              _controller.setTransformValue(property, next, keyframe: true);
-            }
-          },
+          onChangeStart: layer.locked
+              ? null
+              : (_) => _controller.beginInteractiveEdit(),
+          onChanged: layer.locked
+              ? null
+              : (next) => _controller.setTransformValue(
+                    property,
+                    next,
+                  ),
+          onChangeEnd: layer.locked
+              ? null
+              : (next) {
+                  _controller.setTransformValue(
+                    property,
+                    next,
+                  );
+                  _controller.endInteractiveEdit();
+                },
         ),
       ],
     );
@@ -10786,6 +11286,48 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     });
   }
 
+  Future<void> _renameLayerDialog(CompositionLayer layer) async {
+    final nameController = TextEditingController(text: layer.name);
+    try {
+      final nextName = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('RENAME LAYER'),
+          content: TextField(
+            controller: nameController,
+            autofocus: true,
+            maxLength: 120,
+            decoration: const InputDecoration(
+              labelText: 'Layer name',
+              hintText: 'Enter a descriptive name',
+            ),
+            onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('CANCEL'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext)
+                  .pop(nameController.text),
+              child: const Text('SAVE'),
+            ),
+          ],
+        ),
+      );
+      if (nextName == null || !mounted) return;
+      final renamed = _controller.renameLayer(layer.id, nextName);
+      setState(() {
+        _notice = renamed
+            ? 'Layer renamed to "${nextName.trim()}".'
+            : 'Layer name cannot be empty and must be 120 characters or fewer.';
+      });
+    } finally {
+      nameController.dispose();
+    }
+  }
+
   void _deleteSelectedLayer() {
     final selected = _selected;
     if (selected == null) return;
@@ -11584,17 +12126,23 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   top: 3,
                   bottom: 3,
                   child: GestureDetector(
+                    onHorizontalDragStart: layer.locked
+                        ? null
+                        : (_) => _controller.beginInteractiveEdit(),
                     onHorizontalDragUpdate: layer.locked
                         ? null
                         : (details) {
                             final delta = (details.delta.dx / width *
                                     safeDuration)
                                 .round();
-                            _controller.setLayerTiming(
-                              layer.id,
-                              startMs: layer.startMs + delta,
-                            );
+                            _controller.moveLayerOnTimeline(layer.id, delta);
                           },
+                    onHorizontalDragEnd: layer.locked
+                        ? null
+                        : (_) => _controller.endInteractiveEdit(),
+                    onHorizontalDragCancel: layer.locked
+                        ? null
+                        : _controller.endInteractiveEdit,
                     child: Container(
                       decoration: BoxDecoration(
                         color: color,
@@ -11647,19 +12195,58 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             ),
                           ),
                           Align(
-                            alignment: Alignment.centerRight,
+                            alignment: Alignment.centerLeft,
                             child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onHorizontalDragStart: layer.locked
+                                  ? null
+                                  : (_) => _controller.beginInteractiveEdit(),
                               onHorizontalDragUpdate: layer.locked
                                   ? null
                                   : (details) {
                                       final delta = (details.delta.dx /
                                               width * safeDuration)
                                           .round();
-                                      _controller.setLayerTiming(
-                                        layer.id,
-                                        durationMs: layer.durationMs + delta,
-                                      );
+                                      _controller.trimLayerStart(layer.id, delta);
                                     },
+                              onHorizontalDragEnd: layer.locked
+                                  ? null
+                                  : (_) => _controller.endInteractiveEdit(),
+                              onHorizontalDragCancel: layer.locked
+                                  ? null
+                                  : _controller.endInteractiveEdit,
+                              child: Container(
+                                width: 9,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFB8C8FF),
+                                  borderRadius: BorderRadius.horizontal(
+                                    left: Radius.circular(4),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onHorizontalDragStart: layer.locked
+                                  ? null
+                                  : (_) => _controller.beginInteractiveEdit(),
+                              onHorizontalDragUpdate: layer.locked
+                                  ? null
+                                  : (details) {
+                                      final delta = (details.delta.dx /
+                                              width * safeDuration)
+                                          .round();
+                                      _controller.trimLayerEnd(layer.id, delta);
+                                    },
+                              onHorizontalDragEnd: layer.locked
+                                  ? null
+                                  : (_) => _controller.endInteractiveEdit(),
+                              onHorizontalDragCancel: layer.locked
+                                  ? null
+                                  : _controller.endInteractiveEdit,
                               child: Container(
                                 width: 9,
                                 decoration: const BoxDecoration(

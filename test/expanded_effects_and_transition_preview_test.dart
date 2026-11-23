@@ -36,6 +36,8 @@ void main() {
       'bleach_bypass',
       'sepia',
       'edge_glow',
+      'solarize', 'color_temperature', 'soft_focus', 'ripple_warp',
+      'zoom_warp', 'color_key', 'high_pass_sharpen', 'chroma_smear',
     ];
 
     for (final id in addedEffects) {
@@ -55,10 +57,11 @@ void main() {
 
   test('motion preset catalog contains the expanded editable recipes', () {
     final ids = MotionPresetCatalog.all.map((preset) => preset.id).toSet();
-    expect(MotionPresetCatalog.all.length, 54);
+    expect(MotionPresetCatalog.all.length, 81);
     expect(ids.length, MotionPresetCatalog.all.length);
     expect(ids, containsAll([
-      'fade_slide_up',
+      'tilt_3d_in', 'depth_push_in', 'ken_burns_push', 'rubber_band', 'tada',
+      'soft_spring_up', 'fade_slide_up',
       'drop_in',
       'zoom_bounce',
       'overshoot_left',
@@ -74,7 +77,7 @@ void main() {
 
   test('original effect looks contain only safe registered native effects', () {
     final ids = EffectPresetCatalog.all.map((preset) => preset.id).toList();
-    expect(ids.length, 39);
+    expect(ids.length, 59);
     expect(ids.toSet().length, ids.length);
 
     for (final preset in EffectPresetCatalog.all) {
@@ -117,8 +120,10 @@ void main() {
 
   test('pro transition recipes map to registered transition kinds', () {
     final ids = TransitionPresetCatalog.all.map((preset) => preset.id).toList();
-    expect(ids.length, 38);
+    expect(ids.length, 64);
     expect(ids.toSet().length, ids.length);
+    expect(TransitionPresetCatalog.all.map((preset) => preset.kind).toSet(),
+        TransitionCatalog.all.toSet());
     for (final preset in TransitionPresetCatalog.all) {
       expect(TransitionCatalog.all, contains(preset.kind));
       expect(preset.durationMs, inInclusiveRange(150, 2000));

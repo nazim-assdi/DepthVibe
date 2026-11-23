@@ -48,7 +48,7 @@ void main() {
   });
 
   test('title and lower-third recipes reference installed motion tracks', () {
-    expect(TitlePresetCatalog.all.length, 39);
+    expect(TitlePresetCatalog.all.length, 51);
     final ids = TitlePresetCatalog.all.map((item) => item.id).toSet();
     expect(ids.length, TitlePresetCatalog.all.length);
 

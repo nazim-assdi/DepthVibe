@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../domain/composition_models.dart';
 
 class ResolvedLayerTransform {
@@ -36,78 +38,103 @@ class ParentTransformResolver {
     required int timeMs,
     required List<CompositionLayer> layers,
   }) {
-    final byId = {for (final item in layers) item.id: item};
-    final visited = <String>{layer.id};
+    final byId = <String, CompositionLayer>{
+      for (final item in layers) item.id: item,
+    };
 
-    var position = Vector3(
-      layer.valueAt('position.x', timeMs),
-      layer.valueAt('position.y', timeMs),
-      layer.valueAt('position.z', timeMs),
-    );
-    var scale = Vector3(
-      layer.valueAt('scale.x', timeMs),
-      layer.valueAt('scale.y', timeMs),
-      layer.valueAt('scale.z', timeMs),
-    );
-    var rotation = Vector3(
-      layer.valueAt('rotation.x', timeMs),
-      layer.valueAt('rotation.y', timeMs),
-      layer.valueAt('rotation.z', timeMs),
-    );
-    var opacity = layer.valueAt('opacity', timeMs) / 100;
-    var enabled = layer.enabled;
-
-    var parentId = layer.parentId;
-    while (parentId != null) {
-      if (!visited.add(parentId)) {
-        throw StateError('Parent cycle detected while resolving layer ${layer.id}.');
+    ResolvedLayerTransform resolveOne(
+      CompositionLayer current,
+      Set<String> visiting,
+    ) {
+      if (!visiting.add(current.id)) {
+        throw StateError(
+          'Parent cycle detected while resolving layer ${current.id}.',
+        );
       }
-      final parent = byId[parentId];
-      if (parent == null) break;
 
-      final parentPosition = Vector3(
-        parent.valueAt('position.x', timeMs),
-        parent.valueAt('position.y', timeMs),
-        parent.valueAt('position.z', timeMs),
+      var position = Vector3(
+        current.valueAt('position.x', timeMs),
+        current.valueAt('position.y', timeMs),
+        current.valueAt('position.z', timeMs),
       );
-      final parentScale = Vector3(
-        parent.valueAt('scale.x', timeMs),
-        parent.valueAt('scale.y', timeMs),
-        parent.valueAt('scale.z', timeMs),
+      var scale = Vector3(
+        current.valueAt('scale.x', timeMs),
+        current.valueAt('scale.y', timeMs),
+        current.valueAt('scale.z', timeMs),
       );
-      final parentRotation = Vector3(
-        parent.valueAt('rotation.x', timeMs),
-        parent.valueAt('rotation.y', timeMs),
-        parent.valueAt('rotation.z', timeMs),
+      var rotation = Vector3(
+        current.valueAt('rotation.x', timeMs),
+        current.valueAt('rotation.y', timeMs),
+        current.valueAt('rotation.z', timeMs),
       );
-      final parentOpacity = parent.valueAt('opacity', timeMs) / 100;
-      enabled = enabled && parent.enabled;
+      var opacity = current.valueAt('opacity', timeMs);
+      var enabled = current.enabled;
 
-      position = Vector3(
-        parentPosition.x + position.x * parentScale.x / 100,
-        parentPosition.y + position.y * parentScale.y / 100,
-        parentPosition.z + position.z * parentScale.z / 100,
+      final parentId = current.parentId;
+      final parent = parentId == null ? null : byId[parentId];
+      if (parent != null) {
+        final inherited = resolveOne(parent, visiting);
+        final scaledOffset = Vector3(
+          position.x * inherited.scale.x / 100,
+          position.y * inherited.scale.y / 100,
+          position.z * inherited.scale.z / 100,
+        );
+        final rotatedOffset = _rotateByEuler(scaledOffset, inherited.rotation);
+        position = Vector3(
+          inherited.position.x + rotatedOffset.x,
+          inherited.position.y + rotatedOffset.y,
+          inherited.position.z + rotatedOffset.z,
+        );
+        scale = Vector3(
+          scale.x * inherited.scale.x / 100,
+          scale.y * inherited.scale.y / 100,
+          scale.z * inherited.scale.z / 100,
+        );
+        rotation = Vector3(
+          rotation.x + inherited.rotation.x,
+          rotation.y + inherited.rotation.y,
+          rotation.z + inherited.rotation.z,
+        );
+        opacity = opacity * inherited.opacity / 100;
+        enabled = enabled && inherited.enabled;
+      }
+
+      visiting.remove(current.id);
+      return ResolvedLayerTransform(
+        position: position,
+        scale: scale,
+        rotation: rotation,
+        opacity: opacity.clamp(0, 100).toDouble(),
+        enabled: enabled,
       );
-      scale = Vector3(
-        scale.x * parentScale.x / 100,
-        scale.y * parentScale.y / 100,
-        scale.z * parentScale.z / 100,
-      );
-      rotation = Vector3(
-        rotation.x + parentRotation.x,
-        rotation.y + parentRotation.y,
-        rotation.z + parentRotation.z,
-      );
-      opacity *= parentOpacity;
-      parentId = parent.parentId;
     }
 
-    return ResolvedLayerTransform(
-      position: position,
-      scale: scale,
-      rotation: rotation,
-      opacity: (opacity * 100).clamp(0, 100).toDouble(),
-      enabled: enabled,
+    return resolveOne(layer, <String>{});
+  }
+
+  /// Applies parent Euler rotation in X, then Y, then Z order to a
+  /// child-space offset. Parent scale is applied before this rotation.
+  Vector3 _rotateByEuler(Vector3 offset, Vector3 rotationDegrees) {
+    final rx = rotationDegrees.x * math.pi / 180;
+    final ry = rotationDegrees.y * math.pi / 180;
+    final rz = rotationDegrees.z * math.pi / 180;
+
+    final cosX = math.cos(rx);
+    final sinX = math.sin(rx);
+    final y1 = offset.y * cosX - offset.z * sinX;
+    final z1 = offset.y * sinX + offset.z * cosX;
+
+    final cosY = math.cos(ry);
+    final sinY = math.sin(ry);
+    final x2 = offset.x * cosY + z1 * sinY;
+    final z2 = -offset.x * sinY + z1 * cosY;
+
+    final cosZ = math.cos(rz);
+    final sinZ = math.sin(rz);
+    return Vector3(
+      x2 * cosZ - y1 * sinZ,
+      x2 * sinZ + y1 * cosZ,
+      z2,
     );
   }
 
@@ -157,10 +184,16 @@ class ParentTransformResolver {
       final parent = parentId == null ? null : byId[parentId];
       if (parent != null) {
         final inherited = resolveOne(parent, visiting);
+        final scaledOffset = Vector3(
+          position.x * inherited.scale.x / 100,
+          position.y * inherited.scale.y / 100,
+          position.z * inherited.scale.z / 100,
+        );
+        final rotatedOffset = _rotateByEuler(scaledOffset, inherited.rotation);
         position = Vector3(
-          inherited.position.x + position.x * inherited.scale.x / 100,
-          inherited.position.y + position.y * inherited.scale.y / 100,
-          inherited.position.z + position.z * inherited.scale.z / 100,
+          inherited.position.x + rotatedOffset.x,
+          inherited.position.y + rotatedOffset.y,
+          inherited.position.z + rotatedOffset.z,
         );
         scale = Vector3(
           scale.x * inherited.scale.x / 100,

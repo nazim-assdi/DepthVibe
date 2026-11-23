@@ -1,27 +1,28 @@
-# DepthVibe Bridge — Adobe CEP compatibility panel
+# DepthVibe Motion Tools for After Effects
 
-This folder contains the legacy CEP panel adapter. It is a compatibility route for After Effects releases where CEP remains enabled and older Premiere workflows.
+This is an original ExtendScript / ScriptUI palette for After Effects. It is not a repackaged Motion Bro or Mister Horse extension and does not include commercial scripts, plug-in binaries, .ffx files or .mogrt templates.
 
-## Manual development install
+## Install and run
 
-1. Copy the complete after-effects-cep folder to the CEP extension directory.
-   - Windows per-user: %APPDATA%/Adobe/CEP/extensions/
-   - macOS per-user: ~/Library/Application Support/Adobe/CEP/extensions/
-2. Enable CEP debug mode only for local unsigned development. Restart the Adobe application.
-3. Open Window > Extensions (Legacy) > DepthVibe Bridge (Legacy CEP).
-4. Open DepthVibe > Extension Manager > Adobe Integration, then enter the one-time pairing code.
+1. Open After Effects and a project with an active composition.
+2. Choose File > Scripts > Run Script File.
+3. Select DepthVibe_Motion_Tools.jsx.
+4. Use the palette buttons. Every action is explicit and grouped into an After Effects undo step.
 
-For signed production ZXP distribution, a publisher must use an Adobe-compatible certificate and signing process. This repository does not contain a publisher private key or signed ZXP installer.
+## Included tools
 
-## Migration direction
+- 3D Null creation and parenting selected layers to a Null controller
+- Adjustment Layer, Camera Rig, editable Shape, editable 3D Text and Lower Third creation
+- Native AE effect actions in separate EFFECTS and VFX tabs: Gaussian/Box/Directional Blur, Glow, Drop Shadow, Tint, Sharpen, Posterize Time, Hue/Saturation, Curves, Levels, Lumetri, Vibrance, Exposure, Fractal Noise, Turbulent Displace, Wave Warp, Displacement Map, Optics Compensation, Echo, Pixel Motion Blur, Linear/Radial Wipe, Block Dissolve, 4-Color Gradient and CC Light Sweep
+- Editable keyframe presets: Fade In/Out, Fade + Pop, Slide Up/Down/Left/Right, Spin In, Bounce In, Scale Punch, Zoom In, Elastic Pop, Text Rise, Pulse and Whip In
+- Timeline tools: sequence selected layers at the playhead with configurable gap, trim in/out to playhead, split selected layers at playhead, add composition/layer markers
+- 2D layout tools: centre the visible bounds and distribute visible centres horizontally/vertically for unparented 2D layers
+- Layer staggering and Easy Ease for selected transform keys
 
-CEP is a compatibility route only. Premiere's modern plugin API is UXP. After Effects has a public UXP beta; new integrations should migrate to that host's UXP quick starter as its beta APIs stabilise. Keep CEP for existing projects and older releases only.
+Effects are added using After Effects' native effect registry. If an effect match name is not available in the installed After Effects version, the script reports the layer/effect error instead of pretending it was added.
 
-The CEP panel does not load AEX or PRM native effects into DepthVibe.
+## Compatibility and safety
 
+This script targets the ExtendScript host available in After Effects desktop versions. It does not silently execute imported JSX/JSXBIN files, bypass licensing, modify system directories or run third-party presets. Test it on a duplicate project before applying it to production work.
 
-## Active composition capture
-
-Choose **Capture active After Effects composition** in the panel. The host-side ExtendScript adapter reads the active CompItem and layer metadata (dimensions, duration, frame rate, layer timing, visibility/solo/lock flags, 3D/adjustment/null state and parent links) through the Adobe CEP host. The snapshot is sent through the authenticated DepthVibe localhost bridge and shown in Extension Manager > Adobe Integration.
-
-Only a metadata snapshot is sent. The project path is not transmitted (only the project filename is included); footage bytes, third-party effect binaries, expressions and complete animated effect property graphs are not copied. This snapshot is read-only and is not a lossless AEP converter or automatic editable-layer import.
+The separate CEP bridge is a metadata-oriented compatibility bridge, not a lossless AEP converter or a full Premiere Pro extension.

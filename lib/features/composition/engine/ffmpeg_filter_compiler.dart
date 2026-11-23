@@ -61,6 +61,20 @@ class FfmpegFilterCompiler {
       );
     }
 
+    if (id == 'transform') {
+      final scale = parameterExpression('scale');
+      final rotation = parameterExpression('rotation');
+      final safeScale = 'max(0.001,min(400,(' + scale + ')))';
+      final safeRotation = 'max(-360,min(360,(' + rotation + ')))';
+      final angle = '(' + safeRotation + ')*PI/180';
+      return 'format=rgba,scale=w='
+          "'max(1,iw*(" + safeScale + ")/100)':"
+          "h='max(1,ih*(" + safeScale + ")/100)':eval=frame,"
+          'rotate=angle=' + "'" + angle + "'" +
+          ":ow='rotw(" + angle + ")':"
+          "oh='roth(" + angle + ")':c=black@0";
+    }
+
     if (id == 'color_lut') {
       final path = effect.assetUri;
       if (path == null || path.trim().isEmpty) return null;
@@ -278,6 +292,21 @@ class FfmpegFilterCompiler {
       return "rotate=angle='sin(t*$speed)*$amplitude*PI/180':"
           'ow=iw:oh=ih:c=black';
     }
+
+    if (id == 'ripple_warp') {
+      final amount=number(p['amount']??5), wavelength=number(p['wavelength']??84), speed=number(p['speed']??1.1);
+      final dx='(sin(Y/max(1,$wavelength)+T*$speed)*$amount)';
+      final dy='(cos(X/max(1,$wavelength)-T*$speed)*$amount*0.35)';
+      return 'format=rgba,geq='
+          "r='r(X+$dx,Y+$dy)':g='g(X+$dx,Y+$dy)':b='b(X+$dx,Y+$dy)':a='alpha(X,Y)'";
+    }
+    if (id == 'zoom_warp') {
+      final amount=number((p['amount']??0.08).clamp(-0.45,0.45));
+      final cx=number((p['center_x']??0.5).clamp(0,1)),cy=number((p['center_y']??0.5).clamp(0,1));
+      final sx='($cx*W+(X-$cx*W)*(1+$amount))',sy='($cy*H+(Y-$cy*H)*(1+$amount))';
+      return 'format=rgba,geq='
+          "r='r($sx,$sy)':g='g($sx,$sy)':b='b($sx,$sy)':a='alpha(X,Y)'";
+    }
     return switch (id) {
       'brightness' => 'eq=brightness=${number(p['value'] ?? 0)}',
       'contrast' => 'eq=contrast=${number(p['value'] ?? 1)}',
@@ -360,6 +389,18 @@ class FfmpegFilterCompiler {
           'gr=0.349:gg=0.686:gb=0.168:br=0.272:bg=0.534:bb=0.131',
       'edge_glow' => 'edgedetect=mode=colormix,gblur=sigma=${number(p['radius'] ?? 8)},'
           'eq=brightness=${number(p['brightness'] ?? 0.4)}',
+
+      'solarize' => 'format=rgba,lutrgb='
+          "r='if(gte(val," + number(p['threshold']??128) + "),255-val,val)':"
+          "g='if(gte(val," + number(p['threshold']??128) + "),255-val,val)':"
+          "b='if(gte(val," + number(p['threshold']??128) + "),255-val,val)':a=val",
+      'color_temperature' => 'colorbalance=rs=' + number((p['temperature']??0)*(p['intensity']??1)*0.6) +
+          ':gs=' + number((p['tint']??0)*(p['intensity']??1)*0.3) +
+          ':bs=' + number(-(p['temperature']??0)*(p['intensity']??1)*0.6) + ':pl=1',
+      'soft_focus' => 'gblur=sigma=' + number(p['radius']??2) + ',eq=brightness=' + number(p['brightness']??0.03),
+      'color_key' => 'colorkey=0x00FF00:' + number(p['similarity']??0.3) + ':' + number(p['blend']??0.1),
+      'high_pass_sharpen' => 'unsharp=7:7:' + number(p['amount']??1.2) + ':5:5:0',
+      'chroma_smear' => 'chromashift=cbh=' + number(p['shift']??3) + ':crh=-' + number(p['shift']??3),
       _ => null,
     };
   }

@@ -23,6 +23,8 @@ class CompositionController extends ChangeNotifier {
   static const maxUndoHistory = 80;
   final List<CompositionDocument> _undoHistory = [];
   final List<CompositionDocument> _redoHistory = [];
+  bool _interactiveEditActive = false;
+  bool _interactiveEditHasHistorySnapshot = false;
 
   CompositionDocument get document => _document;
   ValueListenable<int> get playhead => playheadListenable;
@@ -32,6 +34,8 @@ class CompositionController extends ChangeNotifier {
   int get undoHistoryLength => _undoHistory.length;
 
   void undo() {
+    _interactiveEditActive = false;
+    _interactiveEditHasHistorySnapshot = false;
     if (_undoHistory.isEmpty) return;
     _redoHistory.add(_document);
     _document = _undoHistory.removeLast();
@@ -40,6 +44,8 @@ class CompositionController extends ChangeNotifier {
   }
 
   void redo() {
+    _interactiveEditActive = false;
+    _interactiveEditHasHistorySnapshot = false;
     if (_redoHistory.isEmpty) return;
     _undoHistory.add(_document);
     if (_undoHistory.length > maxUndoHistory) {
@@ -50,7 +56,24 @@ class CompositionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  String _id(String prefix) => '${prefix}_${_nextId++}';
+  String _id(String prefix) {
+    String candidate;
+    bool exists(String value) {
+      if (_document.layers.any((layer) =>
+          layer.id == value ||
+          layer.effects.any((effect) => effect.id == value) ||
+          layer.masks.any((mask) => mask.id == value))) {
+        return true;
+      }
+      return _document.transitions.any((item) => item.id == value) ||
+          _document.audioBuses.any((item) => item.id == value);
+    }
+
+    do {
+      candidate = '${prefix}_${_nextId++}';
+    } while (exists(candidate));
+    return candidate;
+  }
   int _frameAlignedTransitionStart(int milliseconds) {
     final fps = _document.frameRate;
     if (fps <= 0) return milliseconds.clamp(0, _document.durationMs - 1);
@@ -69,17 +92,39 @@ class CompositionController extends ChangeNotifier {
       );
 
 
+  void _recordUndoSnapshot() {
+    _undoHistory.add(_document);
+    if (_undoHistory.length > maxUndoHistory) {
+      _undoHistory.removeAt(0);
+    }
+    _redoHistory.clear();
+  }
+
+  /// Groups a continuous pointer/slider gesture into one undo step.
+  void beginInteractiveEdit() {
+    if (_interactiveEditActive) return;
+    _interactiveEditActive = true;
+    _interactiveEditHasHistorySnapshot = false;
+  }
+
+  /// Ends the current continuous edit transaction.
+  void endInteractiveEdit() {
+    _interactiveEditActive = false;
+    _interactiveEditHasHistorySnapshot = false;
+  }
+
   void _set(
     CompositionDocument next, {
     bool recordHistory = true,
   }) {
     if (identical(next, _document)) return;
     if (recordHistory) {
-      _undoHistory.add(_document);
-      if (_undoHistory.length > maxUndoHistory) {
-        _undoHistory.removeAt(0);
+      if (!_interactiveEditActive || !_interactiveEditHasHistorySnapshot) {
+        _recordUndoSnapshot();
+        if (_interactiveEditActive) {
+          _interactiveEditHasHistorySnapshot = true;
+        }
       }
-      _redoHistory.clear();
     }
     _document = next;
     if (playheadListenable.value != next.playheadMs) {
@@ -341,6 +386,8 @@ class CompositionController extends ChangeNotifier {
 
   void updateTextLayer({
     String? textContent,
+    bool? is3dText,
+    double? textExtrusionDepth,
     String? textFontFamily,
     String? textFontAssetUri,
     List<String>? textFontFallback,
@@ -359,6 +406,8 @@ class CompositionController extends ChangeNotifier {
     if (layer == null || layer.kind != LayerKind.text) return;
     _replace(layer.copyWith(
       textContent: textContent,
+      is3dText: is3dText,
+      textExtrusionDepth: textExtrusionDepth?.clamp(0, 100).toDouble(),
       textFontFamily: textFontFamily,
       textFontAssetUri: textFontAssetUri,
       textFontFallback: textFontFallback,
@@ -386,20 +435,64 @@ class CompositionController extends ChangeNotifier {
   void removeSelectedLayer() {
     final selected = selectedLayer;
     if (selected == null) return;
+    removeLayer(selected.id);
+  }
+
+  bool removeLayer(String id) {
+    final selected = _find(id);
+    if (selected == null) return false;
     final remaining = _document.layers
         .where((layer) => layer.id != selected.id)
         .map((layer) => layer.parentId == selected.id
             ? layer.copyWith(clearParent: true)
             : layer)
         .toList();
+    final nextSelectedId = _document.selectedLayerId == id
+        ? (remaining.isEmpty ? null : remaining.first.id)
+        : _document.selectedLayerId;
     _set(_document.copyWith(
       layers: remaining,
-      selectedLayerId: remaining.isEmpty ? null : remaining.first.id,
+      selectedLayerId: nextSelectedId,
       transitions: _document.transitions
           .where((item) =>
               item.fromLayerId != selected.id && item.toLayerId != selected.id)
           .toList(),
     ));
+    return true;
+  }
+
+  bool renameLayer(String id, String name) {
+    final layer = _find(id);
+    final cleanName = name.trim();
+    if (layer == null || cleanName.isEmpty || cleanName.length > 120) {
+      return false;
+    }
+    if (layer.name == cleanName) return true;
+    _replace(layer.copyWith(name: cleanName));
+    return true;
+  }
+
+  bool duplicateLayer(String id) {
+    final layer = _find(id);
+    if (layer == null) return false;
+    final duplicate = layer.copyWith(
+      id: _id('layer'),
+      name: '${layer.name} Copy',
+      effects: layer.effects
+          .map((effect) => effect.copyWith(id: _id('effect')))
+          .toList(growable: false),
+      masks: layer.masks
+          .map((mask) => mask.copyWith(id: _id('mask')))
+          .toList(growable: false),
+    );
+    final index = _document.layers.indexWhere((item) => item.id == id);
+    if (index < 0) return false;
+    final layers = [..._document.layers]..insert(index, duplicate);
+    _set(_document.copyWith(
+      layers: layers,
+      selectedLayerId: duplicate.id,
+    ));
+    return true;
   }
 
   /// Splits the selected clip at the composition playhead.
@@ -1406,19 +1499,25 @@ class CompositionController extends ChangeNotifier {
 
   void addKeyframe(String property, {double? value}) {
     final layer = selectedLayer;
-    if (layer == null) return;
-    final currentValue = value ?? layer.transform.valueFor(property);
+    if (layer == null || layer.locked) return;
+    final currentValue =
+        value ?? layer.valueAt(property, _document.playheadMs);
     final index = layer.keyframeTracks.indexWhere(
       (track) => track.property == property,
     );
     final track = index < 0
         ? KeyframeTrack(property: property)
         : layer.keyframeTracks[index];
-    final updated = track.upsert(ScalarKeyframe(
+    final keyed = track.upsert(ScalarKeyframe(
       timeMs: _document.playheadMs,
       value: currentValue,
       interpolation: Interpolation.easeInOut,
     ));
+    final updated = KeyframeTrack(
+      property: property,
+      keyframes: keyed.keyframes,
+      enabled: true,
+    );
     final tracks = [...layer.keyframeTracks];
     if (index < 0) {
       tracks.add(updated);
@@ -1426,6 +1525,22 @@ class CompositionController extends ChangeNotifier {
       tracks[index] = updated;
     }
     _replace(layer.copyWith(keyframeTracks: tracks));
+  }
+
+  void setTransformTrackEnabled(String property, bool enabled) {
+    final layer = selectedLayer;
+    if (layer == null || layer.locked) return;
+    var changed = false;
+    final tracks = layer.keyframeTracks.map((track) {
+      if (track.property != property || track.enabled == enabled) return track;
+      changed = true;
+      return KeyframeTrack(
+        property: track.property,
+        keyframes: track.keyframes,
+        enabled: enabled,
+      );
+    }).toList();
+    if (changed) _replace(layer.copyWith(keyframeTracks: tracks));
   }
 
   /// Updates several transform channels as one undoable document operation.
@@ -1447,7 +1562,8 @@ class CompositionController extends ChangeNotifier {
     for (final entry in values.entries) {
       if (!entry.value.isFinite) continue;
       final trackIndex = tracks.indexWhere((track) => track.property == entry.key);
-      final shouldKeyframe = autoKey || trackIndex >= 0;
+      final shouldKeyframe = autoKey ||
+          (trackIndex >= 0 && tracks[trackIndex].enabled);
       if (!shouldKeyframe) {
         transform = transform.withValue(entry.key, entry.value);
         continue;
@@ -1455,7 +1571,7 @@ class CompositionController extends ChangeNotifier {
       final track = trackIndex < 0 ? KeyframeTrack(property: entry.key) : tracks[trackIndex];
       final existingIndex = track.keyframes.indexWhere((item) => item.timeMs == targetTimeMs);
       final existing = existingIndex < 0 ? null : track.keyframes[existingIndex];
-      final updated = track.upsert(ScalarKeyframe(
+      final keyed = track.upsert(ScalarKeyframe(
         timeMs: targetTimeMs,
         value: entry.value,
         interpolation: existing?.interpolation ?? Interpolation.easeInOut,
@@ -1464,6 +1580,13 @@ class CompositionController extends ChangeNotifier {
         bezier: existing?.bezier ?? const BezierCurve(),
         metadata: existing?.metadata ?? const {},
       ));
+      final updated = autoKey && !track.enabled
+          ? KeyframeTrack(
+              property: track.property,
+              keyframes: keyed.keyframes,
+              enabled: true,
+            )
+          : keyed;
       if (trackIndex < 0) {
         tracks.add(updated);
       } else {
@@ -1483,32 +1606,59 @@ class CompositionController extends ChangeNotifier {
     );
   }
 
-  void setTransformValue(String property, double value, {bool keyframe = false}) {
+  void setTransformValue(
+    String property,
+    double value, {
+    bool keyframe = false,
+    bool recordHistory = true,
+  }) {
     final layer = selectedLayer;
-    if (layer == null) return;
-    if (keyframe) {
-      final trackIndex = layer.keyframeTracks.indexWhere(
-        (track) => track.property == property,
-      );
+    if (layer == null || layer.locked || !value.isFinite) return;
+    final trackIndex = layer.keyframeTracks.indexWhere(
+      (track) => track.property == property,
+    );
+    // Once a property is animated, editing its value at the playhead must
+    // update/create a keyframe instead of silently changing the hidden base.
+    final writeKeyframe = keyframe ||
+        (trackIndex >= 0 && layer.keyframeTracks[trackIndex].enabled);
+    if (writeKeyframe) {
       final track = trackIndex < 0
           ? KeyframeTrack(property: property)
           : layer.keyframeTracks[trackIndex];
-      final updated = track.upsert(ScalarKeyframe(
+      final existing = track.keyframes
+          .where((frame) => frame.timeMs == _document.playheadMs)
+          .firstOrNull;
+      final keyed = track.upsert(ScalarKeyframe(
         timeMs: _document.playheadMs,
         value: value,
-        interpolation: Interpolation.easeInOut,
+        interpolation: existing?.interpolation ?? Interpolation.easeInOut,
+        inTangent: existing?.inTangent ?? 0,
+        outTangent: existing?.outTangent ?? 0,
+        bezier: existing?.bezier ?? const BezierCurve(),
+        metadata: existing?.metadata ?? const {},
       ));
+      final updated = keyframe && !track.enabled
+          ? KeyframeTrack(
+              property: track.property,
+              keyframes: keyed.keyframes,
+              enabled: true,
+            )
+          : keyed;
       final tracks = [...layer.keyframeTracks];
       if (trackIndex < 0) {
         tracks.add(updated);
       } else {
         tracks[trackIndex] = updated;
       }
-      _replace(layer.copyWith(keyframeTracks: tracks));
+      _replace(
+        layer.copyWith(keyframeTracks: tracks),
+        recordHistory: recordHistory,
+      );
     } else {
-      _replace(layer.copyWith(
-        transform: layer.transform.withValue(property, value),
-      ));
+      _replace(
+        layer.copyWith(transform: layer.transform.withValue(property, value)),
+        recordHistory: recordHistory,
+      );
     }
   }
 
@@ -1674,7 +1824,11 @@ class CompositionController extends ChangeNotifier {
         outTangent: old.outTangent,
         bezier: old.bezier,
       );
-      return KeyframeTrack(property: track.property, keyframes: frames);
+      return KeyframeTrack(
+        property: track.property,
+        keyframes: frames,
+        enabled: track.enabled,
+      );
     }
 
     final tracks = layer.keyframeTracks.map(update).toList();
@@ -1834,6 +1988,58 @@ class CompositionController extends ChangeNotifier {
       durationMs: nextDuration,
       sourceInMs: nextSourceIn,
     ));
+  }
+
+  /// Trims a layer from its left edge while keeping its timeline out-point fixed.
+  /// Moving the edge right advances the source in-point for video/audio; moving
+  /// it left restores media only while earlier source frames remain available.
+  bool trimLayerStart(String id, int deltaMs) {
+    final layer = _find(id);
+    if (layer == null || layer.locked || deltaMs == 0) return false;
+    final sourceBacked = layer.kind == LayerKind.video ||
+        layer.kind == LayerKind.audio;
+    final minimumDelta = sourceBacked
+        ? -math.min(layer.sourceInMs, layer.startMs)
+        : -layer.startMs;
+    final safeDelta = deltaMs
+        .clamp(minimumDelta, layer.durationMs - 1)
+        .toInt();
+    if (safeDelta == 0) return false;
+    final nextStart = layer.startMs + safeDelta;
+    final nextDuration = layer.durationMs - safeDelta;
+    final nextSourceIn = sourceBacked
+        ? layer.sourceInMs + safeDelta
+        : layer.sourceInMs;
+    _replace(layer.copyWith(
+      startMs: nextStart,
+      durationMs: nextDuration,
+      sourceInMs: nextSourceIn,
+    ));
+    return true;
+  }
+
+  /// Resizes the right edge using the latest layer state on every drag update.
+  bool trimLayerEnd(String id, int deltaMs) {
+    final layer = _find(id);
+    if (layer == null || layer.locked || deltaMs == 0) return false;
+    final maximum = _document.durationMs - layer.startMs;
+    final nextDuration = (layer.durationMs + deltaMs)
+        .clamp(1, maximum)
+        .toInt();
+    if (nextDuration == layer.durationMs) return false;
+    _replace(layer.copyWith(durationMs: nextDuration));
+    return true;
+  }
+
+  /// Moves a layer without altering its source in-point or duration.
+  bool moveLayerOnTimeline(String id, int deltaMs) {
+    final layer = _find(id);
+    if (layer == null || layer.locked || deltaMs == 0) return false;
+    final maximum = _document.durationMs - layer.durationMs;
+    final nextStart = (layer.startMs + deltaMs).clamp(0, maximum).toInt();
+    if (nextStart == layer.startMs) return false;
+    _replace(layer.copyWith(startMs: nextStart));
+    return true;
   }
 
   void setLayerEnabled(String id, bool enabled) {

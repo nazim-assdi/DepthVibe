@@ -22,6 +22,8 @@ import 'obj_mesh_loader.dart';
 import 'scene_mesh_loader.dart';
 import 'software_3d_renderer.dart';
 import 'software_3d_png_encoder.dart';
+import 'shape_layer_rasterizer.dart';
+import 'text_plane_mesh_builder.dart';
 
 typedef CompositionExportProgress = void Function(double value);
 
@@ -112,6 +114,7 @@ class CompositionExportService {
       LayerKind.photoshopLayer,
       LayerKind.threeDModel,
       LayerKind.text,
+      LayerKind.shape,
     };
     final anySolo = document.layers.any((layer) =>
         layer.enabled &&
@@ -130,7 +133,7 @@ class CompositionExportService {
 
     for (final layer in enabled) {
       cancellation?.throwIfCancelled();
-      if (layer.kind == LayerKind.text) {
+      if (layer.kind == LayerKind.text || layer.kind == LayerKind.shape) {
         visualLayers.add(layer);
       } else if (visualKinds.contains(layer.kind)) {
         final path = layer.sourceUri;
@@ -188,20 +191,46 @@ class CompositionExportService {
       outputDirectory.path + Platform.pathSeparator + '.text-render-' +
       DateTime.now().microsecondsSinceEpoch.toString(),
     );
+    final shapeTempDirectory = Directory(
+      outputDirectory.path + Platform.pathSeparator + '.shape-render-' +
+      DateTime.now().microsecondsSinceEpoch.toString(),
+    );
 
     try {
-      final meshVideoPaths = await _prepareMeshLayerVideos(
-        document,
-        visualLayers.where((layer) => layer.kind == LayerKind.threeDModel).toList(),
-        meshTempDirectory,
-        onProgress: onProgress,
-        cancellation: cancellation,
-      );
-      cancellation?.throwIfCancelled();
       final textImagePaths = await _prepareTextLayerImages(
         document,
         visualLayers.where((layer) => layer.kind == LayerKind.text).toList(),
         textTempDirectory,
+        cancellation: cancellation,
+      );
+      cancellation?.throwIfCancelled();
+      final threeDTextLayers = visualLayers.where(
+        (layer) => layer.kind == LayerKind.text && layer.is3dText,
+      ).toList();
+      final textPlaneMeshes = await _prepareTextPlaneMeshes(
+        threeDTextLayers,
+        textImagePaths,
+        cancellation: cancellation,
+      );
+      cancellation?.throwIfCancelled();
+      final meshRenderLayers = visualLayers.where(
+        (layer) =>
+            layer.kind == LayerKind.threeDModel ||
+            (layer.kind == LayerKind.text && layer.is3dText),
+      ).toList();
+      final meshVideoPaths = await _prepareMeshLayerVideos(
+        document,
+        meshRenderLayers,
+        meshTempDirectory,
+        preloadedMeshes: textPlaneMeshes,
+        onProgress: onProgress,
+        cancellation: cancellation,
+      );
+      cancellation?.throwIfCancelled();
+      final shapeImagePaths = await _prepareShapeLayerImages(
+        document,
+        visualLayers.where((layer) => layer.kind == LayerKind.shape).toList(),
+        shapeTempDirectory,
         cancellation: cancellation,
       );
       cancellation?.throwIfCancelled();
@@ -212,6 +241,7 @@ class CompositionExportService {
         output.path,
         meshVideoPaths: meshVideoPaths,
         textImagePaths: textImagePaths,
+        shapeImagePaths: shapeImagePaths,
       );
       final completion = Completer<void>();
       final start = FFmpegKit.executeAsync(
@@ -256,6 +286,9 @@ class CompositionExportService {
       if (await textTempDirectory.exists()) {
         await textTempDirectory.delete(recursive: true);
       }
+      if (await shapeTempDirectory.exists()) {
+        await shapeTempDirectory.delete(recursive: true);
+      }
       onProgress?.call(1);
       return CompositionExportResult(
         file: output,
@@ -270,6 +303,9 @@ class CompositionExportService {
       if (await textTempDirectory.exists()) {
         await textTempDirectory.delete(recursive: true);
       }
+      if (await shapeTempDirectory.exists()) {
+        await shapeTempDirectory.delete(recursive: true);
+      }
       rethrow;
     } finally {
       cancellation?.clearCancelHandler();
@@ -282,6 +318,7 @@ class CompositionExportService {
     Directory tempDirectory, {
     CompositionExportProgress? onProgress,
     CompositionExportCancellation? cancellation,
+    Map<String, ObjMesh> preloadedMeshes = const {},
   }) async {
     if (meshLayers.isEmpty) return const {};
     await tempDirectory.create(recursive: true);
@@ -297,10 +334,12 @@ class CompositionExportService {
       cancellation?.throwIfCancelled();
       final layer = meshLayers[layerIndex];
       final sourcePath = layer.sourceUri;
-      if (sourcePath == null || sourcePath.isEmpty) {
-        throw StateError('3D mesh layer \${layer.name} has no local mesh source.');
+      final preloadedMesh = preloadedMeshes[layer.id];
+      if (preloadedMesh == null && (sourcePath == null || sourcePath.isEmpty)) {
+        throw StateError('3D layer has no local mesh source.');
       }
-      final mesh = await const SceneMeshLoader().load(sourcePath);
+      final mesh = preloadedMesh ??
+          await const SceneMeshLoader().load(sourcePath!);
       cancellation?.throwIfCancelled();
       final frameDirectory = Directory(
         tempDirectory.path + Platform.pathSeparator + layer.id,
@@ -474,6 +513,107 @@ class CompositionExportService {
   }
 
 
+  Future<Map<String, ObjMesh>> _prepareTextPlaneMeshes(
+    List<CompositionLayer> layers,
+    Map<String, String> textImagePaths, {
+    CompositionExportCancellation? cancellation,
+  }) async {
+    if (layers.isEmpty) return const <String, ObjMesh>{};
+    const builder = TextPlaneMeshBuilder();
+    final result = <String, ObjMesh>{};
+    for (final layer in layers) {
+      cancellation?.throwIfCancelled();
+      final path = textImagePaths[layer.id];
+      if (path == null) {
+        throw StateError('3D text layer has no rasterized text image.');
+      }
+      final file = File(path);
+      if (!await file.exists()) {
+        throw StateError('3D text raster is missing.');
+      }
+      result[layer.id] = await builder.fromPngBytes(
+        await file.readAsBytes(),
+        extrusionDepth: layer.textExtrusionDepth / 100,
+        sideColor: layer.textColor,
+      );
+    }
+    return Map.unmodifiable(result);
+  }
+
+  Future<Map<String, String>> _prepareShapeLayerImages(
+    CompositionDocument document,
+    List<CompositionLayer> shapeLayers,
+    Directory directory, {
+    CompositionExportCancellation? cancellation,
+  }) async {
+    if (shapeLayers.isEmpty) return const <String, String>{};
+    await directory.create(recursive: true);
+    const rasterizer = ShapeLayerRasterizer();
+    final result = <String, String>{};
+
+    for (var index = 0; index < shapeLayers.length; index++) {
+      cancellation?.throwIfCancelled();
+      final layer = shapeLayers[index];
+      final style = layer.shapeStyle ?? const ShapeStyle();
+      // Primitive shapes use the same 160x120 local canvas as the editor.
+      // Pen paths occupy composition space, matching their preview bounds.
+      final width = style.primitive == ShapePrimitive.path ? document.width : 160;
+      final height = style.primitive == ShapePrimitive.path ? document.height : 120;
+      final hasAnimatedPath = layer.keyframeTracks.any(
+        (track) => track.enabled && track.property.startsWith('shape.vertex.'),
+      );
+      final layerDirectory = Directory(
+        directory.path + Platform.pathSeparator +
+            'shape_' + index.toString().padLeft(4, '0'),
+      );
+
+      if (hasAnimatedPath) {
+        final frameCount = math.max(
+          1,
+          (layer.durationMs * document.frameRate / 1000).ceil(),
+        ).toInt();
+        if (frameCount > 36000) {
+          throw StateError(
+            'Animated shape layer ${layer.name} exceeds the 36,000-frame export limit.',
+          );
+        }
+        await layerDirectory.create(recursive: true);
+        for (var frameIndex = 0; frameIndex < frameCount; frameIndex++) {
+          cancellation?.throwIfCancelled();
+          final compositionTimeMs = layer.startMs +
+              (frameIndex * 1000 / document.frameRate).round();
+          final png = await rasterizer.rasterize(
+            layer,
+            width: width,
+            height: height,
+            timeMs: compositionTimeMs,
+          );
+          final frameFile = File(
+            layerDirectory.path + Platform.pathSeparator +
+                'frame_' + frameIndex.toString().padLeft(6, '0') + '.png',
+          );
+          await frameFile.writeAsBytes(png, flush: true);
+        }
+        result[layer.id] = layerDirectory.path +
+            Platform.pathSeparator + 'frame_%06d.png';
+      } else {
+        final png = await rasterizer.rasterize(
+          layer,
+          width: width,
+          height: height,
+          timeMs: layer.startMs,
+        );
+        final file = File(
+          directory.path + Platform.pathSeparator +
+              'shape_' + index.toString().padLeft(4, '0') + '.png',
+        );
+        await file.writeAsBytes(png, flush: true);
+        result[layer.id] = file.path;
+      }
+    }
+    return result;
+  }
+
   Future<Map<String, String>> _prepareTextLayerImages(
     CompositionDocument document,
     List<CompositionLayer> textLayers,
@@ -542,9 +682,9 @@ class CompositionExportService {
             fontStyle: layer.textItalic ? FontStyle.italic : FontStyle.normal,
             letterSpacing: layer.textLetterSpacing.clamp(-100.0, 500.0).toDouble(),
             height: layer.textLineHeight.clamp(0.1, 10.0).toDouble(),
-            shadows: const [
-              Shadow(color: Color(0xDD000000), blurRadius: 8),
-            ],
+            shadows: layer.is3dText
+                ? const []
+                : const [Shadow(color: Color(0xDD000000), blurRadius: 8)],
           ),
         ),
         textAlign: alignment,
@@ -605,6 +745,7 @@ class CompositionExportService {
     String outputPath, {
     required Map<String, String> meshVideoPaths,
     required Map<String, String> textImagePaths,
+    required Map<String, String> shapeImagePaths,
   }) async {
     final total = (document.durationMs / 1000).toStringAsFixed(3);
     final width = document.width;
@@ -618,7 +759,8 @@ class CompositionExportService {
             layer.kind == LayerKind.image ||
             layer.kind == LayerKind.photoshopLayer ||
             layer.kind == LayerKind.threeDModel ||
-            layer.kind == LayerKind.text)
+            layer.kind == LayerKind.text ||
+            layer.kind == LayerKind.shape)
         .toList();
     final mediaInputIndices = <String, int>{
       for (var index = 0; index < mediaLayers.length; index++)
@@ -663,15 +805,32 @@ class CompositionExportService {
     buffer.write(' ');
 
     for (final layer in mediaLayers) {
-      if (layer.kind == LayerKind.threeDModel) {
+      if (layer.kind == LayerKind.threeDModel ||
+          (layer.kind == LayerKind.text && layer.is3dText)) {
         final meshVideo = meshVideoPaths[layer.id];
         if (meshVideo == null) {
-          throw StateError('3D mesh layer ${layer.name} has no rendered frame source.');
+          throw StateError('3D layer has no rendered frame source.');
         }
         buffer.write('-i ' + _quote(meshVideo) + ' ');
         continue;
       }
       final duration = (layer.durationMs / 1000).toStringAsFixed(3);
+      if (layer.kind == LayerKind.shape) {
+        final shapeImage = shapeImagePaths[layer.id];
+        if (shapeImage == null) {
+          throw StateError('Shape layer ' + layer.name + ' has no rasterized shape image.');
+        }
+        final hasAnimatedPath = layer.keyframeTracks.any(
+          (track) => track.enabled && track.property.startsWith('shape.vertex.'),
+        );
+        if (hasAnimatedPath) {
+          buffer.write('-framerate ' + document.frameRate.toString() +
+              ' -start_number 0 -i ' + _quote(shapeImage) + ' ');
+        } else {
+          buffer.write('-loop 1 -t ' + duration + ' -i ' + _quote(shapeImage) + ' ');
+        }
+        continue;
+      }
       if (layer.kind == LayerKind.text) {
         final textImage = textImagePaths[layer.id];
         if (textImage == null) {
@@ -703,12 +862,23 @@ class CompositionExportService {
     for (var index = 0; index < visualLayers.length; index++) {
       final layer = visualLayers[index];
       if (layer.kind == LayerKind.adjustment) {
+        final adjustmentTransform = parentTransformResolver.resolve(
+          layer: layer,
+          layers: document.layers,
+        );
+        if (!adjustmentTransform.enabled) continue;
         final adjustmentEffects = filterCompiler.compileEffects(
           layer,
           timeMs: document.playheadMs,
           animationCompiler: animationCompiler,
         );
-        var adjusted = previous;
+        if (adjustmentEffects.isEmpty) continue;
+
+        final baseLabel = 'adjustmentBase' + index.toString();
+        var adjusted = 'adjustmentWork' + index.toString();
+        filters.add(
+          '[' + previous + ']split=2[' + baseLabel + '][' + adjusted + ']',
+        );
         for (var effectIndex = 0;
             effectIndex < adjustmentEffects.length;
             effectIndex++) {
@@ -720,7 +890,24 @@ class CompositionExportService {
           );
           adjusted = outputLabel;
         }
-        previous = adjusted;
+
+        final start = (layer.startMs / 1000).toStringAsFixed(6);
+        final end = (layer.endMs / 1000).toStringAsFixed(6);
+        final opacity = adjustmentTransform.opacity;
+        final maskAlpha = animationCompiler.maskAlphaExpression(
+          layer.masks,
+          timeVariable: 'T',
+        );
+        final mixAlpha = '(min(1,max(0,(' + opacity + ')/100))*(' +
+            maskAlpha + '))';
+        final mix = 'if(gte(T,' + start + ')*lt(T,' + end +
+            '),A*(1-' + mixAlpha + ')+B*' + mixAlpha + ',A)';
+        final next = 'base' + (index + 1).toString();
+        filters.add(
+          '[' + baseLabel + '][' + adjusted + ']blend=all_expr=' +
+              _quote(mix) + ':shortest=1,format=rgba[' + next + ']',
+        );
+        previous = next;
         continue;
       }
       final inputIndex = mediaInputIndices[layer.id]!;
@@ -732,7 +919,8 @@ class CompositionExportService {
       );
       if (!localTransform.enabled) continue;
       final cameraSettings = cameraLayer?.camera;
-      final isMeshLayer = layer.kind == LayerKind.threeDModel;
+      final isMeshLayer = layer.kind == LayerKind.threeDModel ||
+          (layer.kind == LayerKind.text && layer.is3dText);
       final projectedTransform = !isMeshLayer &&
               cameraLayer != null &&
               resolvedCamera != null &&
