@@ -2,10 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert/strict");
 
-const scriptPath = path.join(
-  __dirname,
-  "DepthVibe_Motion_Tools.jsx"
-);
+const scriptPath = path.join(__dirname, "DepthVibe_Motion_Tools.jsx");
 const source = fs.readFileSync(scriptPath, "utf8");
 
 const requiredFunctions = [
@@ -39,9 +36,8 @@ const requiredControls = [
 ];
 
 for (const name of requiredFunctions) {
-  assert.match(
-    source,
-    new RegExp("function\\s+" + name + "\\s*\\("),
+  assert.ok(
+    source.includes("function " + name + "("),
     "Missing After Effects utility: " + name
   );
 }
@@ -53,7 +49,7 @@ for (const label of requiredControls) {
   );
 }
 
-const undoGroups = (source.match(/app\\.beginUndoGroup\\(/g) || []).length;
+const undoGroups = source.split("app.beginUndoGroup(").length - 1;
 assert.ok(undoGroups >= 1, "Actions must be grouped into native AE undo steps");
 
 console.log(
