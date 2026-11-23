@@ -1579,4 +1579,37 @@ void main() {
     controller.dispose();
   });
 
+
+  test('adds a drawable Shape Layer with frame bounds and editable style', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        width: 1280,
+        height: 720,
+      ),
+    );
+    final id = controller.addShapeLayer(
+      name: 'Ellipse',
+      style: const ShapeStyle(
+        primitive: ShapePrimitive.ellipse,
+        fillColor: '#FF225588',
+      ),
+      position: const Vector3(440, 320, 0),
+      width: 360,
+      height: 180,
+    );
+    final layer = controller.document.selectedLayer!;
+    expect(layer.id, id);
+    expect(layer.kind, LayerKind.shape);
+    expect(layer.name, 'Ellipse');
+    expect(layer.shapeStyle!.primitive, ShapePrimitive.ellipse);
+    expect(layer.shapeStyle!.fillColor, '#FF225588');
+    expect(layer.transform.position.x, 440);
+    expect(layer.transform.position.y, 320);
+    expect(layer.transform.scale.x, closeTo(225, 0.0001));
+    expect(layer.transform.scale.y, closeTo(150, 0.0001));
+    controller.undo();
+    expect(controller.document.layers, isEmpty);
+    controller.dispose();
+  });
+
 }

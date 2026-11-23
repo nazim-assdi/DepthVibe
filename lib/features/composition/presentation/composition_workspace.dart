@@ -779,6 +779,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   bool _showMotionPaths = true;
   double _previewZoom = 1;
   Offset _previewPanOffset = Offset.zero;
+  Offset? _previewShapeDrawStart;
+  Offset? _previewShapeDrawCurrent;
+  ShapePrimitive? _previewShapeDrawPrimitive;
   String _activePreviewTool = 'Select';
   String? _previewMoveLayerId;
   Offset _previewMoveLastGlobal = Offset.zero;
@@ -2953,6 +2956,101 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  ShapePrimitive? _shapePrimitiveForTool(String tool) => switch (tool) {
+        'DrawRectangle' => ShapePrimitive.rectangle,
+        'DrawRoundedRectangle' => ShapePrimitive.roundedRectangle,
+        'DrawEllipse' => ShapePrimitive.ellipse,
+        'DrawPolygon' => ShapePrimitive.polygon,
+        'DrawStar' => ShapePrimitive.star,
+        _ => null,
+      };
+
+  void _beginPreviewShapeDraw(
+    ShapePrimitive primitive,
+    Offset position,
+  ) {
+    _pausePreviewPlayback();
+    setState(() {
+      _previewShapeDrawPrimitive = primitive;
+      _previewShapeDrawStart = position;
+      _previewShapeDrawCurrent = position;
+    });
+  }
+
+  void _updatePreviewShapeDraw(Offset position) {
+    if (_previewShapeDrawStart == null) return;
+    setState(() => _previewShapeDrawCurrent = position);
+  }
+
+  void _cancelPreviewShapeDraw() {
+    setState(() {
+      _previewShapeDrawStart = null;
+      _previewShapeDrawCurrent = null;
+      _previewShapeDrawPrimitive = null;
+      _activePreviewTool = 'Select';
+    });
+  }
+
+  void _finishPreviewShapeDraw(
+    Size canvasSize,
+    CompositionDocument document,
+  ) {
+    final start = _previewShapeDrawStart;
+    final current = _previewShapeDrawCurrent;
+    final primitive = _previewShapeDrawPrimitive;
+    if (start == null || current == null || primitive == null) return;
+
+    final left = math.min(start.dx, current.dx);
+    final top = math.min(start.dy, current.dy);
+    final screenWidth = (current.dx - start.dx).abs();
+    final screenHeight = (current.dy - start.dy).abs();
+    final width = math.max(2.0, screenWidth / math.max(1, canvasSize.width) * document.width);
+    final height = math.max(2.0, screenHeight / math.max(1, canvasSize.height) * document.height);
+    final centerX = (left + screenWidth / 2) /
+        math.max(1, canvasSize.width) * document.width;
+    final centerY = (top + screenHeight / 2) /
+        math.max(1, canvasSize.height) * document.height;
+    if (screenWidth < 2 || screenHeight < 2) {
+      _cancelPreviewShapeDraw();
+      return;
+    }
+
+    final style = ShapeStyle(
+      primitive: primitive,
+      fillColor: '#7C8CFF',
+      strokeColor: '#FFFFFF',
+      strokeWidth: 0,
+      cornerRadius: primitive == ShapePrimitive.roundedRectangle
+          ? math.min(width, height) * 0.12
+          : 0,
+      points: 5,
+    );
+    final name = switch (primitive) {
+      ShapePrimitive.rectangle => 'Rectangle',
+      ShapePrimitive.roundedRectangle => 'Rounded Rectangle',
+      ShapePrimitive.ellipse => 'Ellipse',
+      ShapePrimitive.polygon => 'Polygon',
+      ShapePrimitive.star => 'Star',
+      ShapePrimitive.path => 'Bezier Shape',
+    };
+    _controller.addShapeLayer(
+      style: style,
+      position: Vector3(centerX, centerY, 0),
+      width: width,
+      height: height,
+      name: name,
+    );
+
+    setState(() {
+      _previewShapeDrawStart = null;
+      _previewShapeDrawCurrent = null;
+      _previewShapeDrawPrimitive = null;
+      _activePreviewTool = 'Select';
+      _panel = 'Shape';
+      _notice = '$name created as an editable Shape Layer.';
+    });
+  }
+
   void _addPreviewTransformKeyframes() {
     final layer = _controller.selectedLayer;
     if (layer == null || layer.locked) return;
@@ -4438,6 +4536,50 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                 ),
                               ),
                             ),
+                          if (_shapePrimitiveForTool(_activePreviewTool) != null)
+                            Positioned.fill(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onPanStart: (details) {
+                                  final primitive =
+                                      _shapePrimitiveForTool(_activePreviewTool);
+                                  if (primitive != null) {
+                                    _beginPreviewShapeDraw(
+                                      primitive,
+                                      details.localPosition,
+                                    );
+                                  }
+                                },
+                                onPanUpdate: (details) =>
+                                    _updatePreviewShapeDraw(details.localPosition),
+                                onPanEnd: (_) => _finishPreviewShapeDraw(
+                                  Size(canvasWidth, canvasHeight),
+                                  doc,
+                                ),
+                                onPanCancel: _cancelPreviewShapeDraw,
+                                child: IgnorePointer(
+                                  child: CustomPaint(
+                                    painter: _PreviewShapeDraftPainter(
+                                      rect: _previewShapeDrawStart == null ||
+                                              _previewShapeDrawCurrent == null
+                                          ? Rect.zero
+                                          : Rect.fromPoints(
+                                              _previewShapeDrawStart!,
+                                              _previewShapeDrawCurrent!,
+                                            ),
+                                      style: ShapeStyle(
+                                        primitive: _previewShapeDrawPrimitive ??
+                                            ShapePrimitive.rectangle,
+                                        fillColor: 'transparent',
+                                        strokeColor: '#B6C4FF',
+                                        strokeWidth: 2,
+                                        cornerRadius: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           if (selected != null)
                             Positioned(
                               right: 10,
@@ -4491,6 +4633,36 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 Icons.pan_tool_alt,
                 _activePreviewTool == 'Hand',
                 onTap: () => setState(() => _activePreviewTool = 'Hand'),
+              ),
+              _toolChip(
+                'Rectangle',
+                Icons.rectangle_outlined,
+                _activePreviewTool == 'DrawRectangle',
+                onTap: () => setState(() => _activePreviewTool = 'DrawRectangle'),
+              ),
+              _toolChip(
+                'Rounded Rect',
+                Icons.rounded_corner,
+                _activePreviewTool == 'DrawRoundedRectangle',
+                onTap: () => setState(() => _activePreviewTool = 'DrawRoundedRectangle'),
+              ),
+              _toolChip(
+                'Ellipse',
+                Icons.circle_outlined,
+                _activePreviewTool == 'DrawEllipse',
+                onTap: () => setState(() => _activePreviewTool = 'DrawEllipse'),
+              ),
+              _toolChip(
+                'Polygon',
+                Icons.pentagon_outlined,
+                _activePreviewTool == 'DrawPolygon',
+                onTap: () => setState(() => _activePreviewTool = 'DrawPolygon'),
+              ),
+              _toolChip(
+                'Star',
+                Icons.star_outline,
+                _activePreviewTool == 'DrawStar',
+                onTap: () => setState(() => _activePreviewTool = 'DrawStar'),
               ),
               _toolChip(
                 'Mask',
@@ -11445,6 +11617,29 @@ class _KeyframeGraphPainter extends CustomPainter {
       oldDelegate.keyframeColor != keyframeColor ||
       oldDelegate.playheadColor != playheadColor ||
       oldDelegate.textColor != textColor;
+}
+
+class _PreviewShapeDraftPainter extends CustomPainter {
+  const _PreviewShapeDraftPainter({
+    required this.rect,
+    required this.style,
+  });
+
+  final Rect rect;
+  final ShapeStyle style;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (rect.width < 1 || rect.height < 1) return;
+    canvas.save();
+    canvas.translate(rect.left, rect.top);
+    _ShapeLayerPainter(style).paint(canvas, rect.size);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _PreviewShapeDraftPainter oldDelegate) =>
+      oldDelegate.rect != rect || oldDelegate.style != style;
 }
 
 class _PreviewShapePathPainter extends CustomPainter {

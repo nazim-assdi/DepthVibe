@@ -160,6 +160,43 @@ class CompositionController extends ChangeNotifier {
     );
   }
 
+  String addShapeLayer({
+    required ShapeStyle style,
+    required Vector3 position,
+    required double width,
+    required double height,
+    String? name,
+  }) {
+    final safeWidth = width.clamp(2.0, 100000.0).toDouble();
+    final safeHeight = height.clamp(2.0, 100000.0).toDouble();
+    final layer = _defaultLayer(
+      LayerKind.shape,
+      name: name ?? switch (style.primitive) {
+        ShapePrimitive.rectangle => 'Rectangle',
+        ShapePrimitive.roundedRectangle => 'Rounded Rectangle',
+        ShapePrimitive.ellipse => 'Ellipse',
+        ShapePrimitive.polygon => 'Polygon',
+        ShapePrimitive.star => 'Star',
+        ShapePrimitive.path => 'Bezier Shape',
+      },
+    ).copyWith(
+      shapeStyle: style,
+      transform: LayerTransform(
+        position: position,
+        scale: Vector3(
+          safeWidth / 160 * 100,
+          safeHeight / 120 * 100,
+          100,
+        ),
+      ),
+    );
+    _set(_document.copyWith(
+      layers: [layer, ..._document.layers],
+      selectedLayerId: layer.id,
+    ));
+    return layer.id;
+  }
+
   String addLayer(
     LayerKind kind, {
     String? name,
