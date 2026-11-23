@@ -8150,6 +8150,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         layer.keyframeTracks.where((item) => item.property == property);
     final keyframes =
         matchingTracks.isEmpty ? 0 : matchingTracks.first.keyframes.length;
+    final trackEnabled =
+        matchingTracks.isNotEmpty && matchingTracks.first.enabled;
     ScalarKeyframe? activeKeyframe;
     if (matchingTracks.isNotEmpty) {
       for (final frame in matchingTracks.first.keyframes) {
@@ -8165,6 +8167,26 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         Row(
           children: [
             Expanded(child: Text(label, style: const TextStyle(fontSize: 11))),
+            if (keyframes > 0)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: trackEnabled
+                    ? 'Disable animation track'
+                    : 'Enable animation track',
+                onPressed: layer.locked
+                    ? null
+                    : () => _controller.setTransformTrackEnabled(
+                          property,
+                          !trackEnabled,
+                        ),
+                icon: Icon(
+                  trackEnabled ? Icons.visibility : Icons.visibility_off,
+                  size: 15,
+                  color: trackEnabled
+                      ? const Color(0xFFB6A5FF)
+                      : const Color(0xFF8A98B0),
+                ),
+              ),
             IconButton(
               visualDensity: VisualDensity.compact,
               tooltip: 'Add keyframe at current playhead',
@@ -8172,12 +8194,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               icon: Icon(
                 Icons.diamond,
                 size: 16,
-                color: keyframes > 0
+                color: trackEnabled
                     ? const Color(0xFFB6A5FF)
                     : const Color(0xFF8A98B0),
               ),
             ),
-            if (keyframes > 0)
+            if (keyframes > 0 && trackEnabled)
               PopupMenuButton<Interpolation>(
                 tooltip: 'Set keyframe interpolation at playhead',
                 icon: const Icon(Icons.linear_scale, size: 16),

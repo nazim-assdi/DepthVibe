@@ -1499,19 +1499,25 @@ class CompositionController extends ChangeNotifier {
 
   void addKeyframe(String property, {double? value}) {
     final layer = selectedLayer;
-    if (layer == null) return;
-    final currentValue = value ?? layer.transform.valueFor(property);
+    if (layer == null || layer.locked) return;
+    final currentValue =
+        value ?? layer.valueAt(property, _document.playheadMs);
     final index = layer.keyframeTracks.indexWhere(
       (track) => track.property == property,
     );
     final track = index < 0
         ? KeyframeTrack(property: property)
         : layer.keyframeTracks[index];
-    final updated = track.upsert(ScalarKeyframe(
+    final keyed = track.upsert(ScalarKeyframe(
       timeMs: _document.playheadMs,
       value: currentValue,
       interpolation: Interpolation.easeInOut,
     ));
+    final updated = KeyframeTrack(
+      property: property,
+      keyframes: keyed.keyframes,
+      enabled: true,
+    );
     final tracks = [...layer.keyframeTracks];
     if (index < 0) {
       tracks.add(updated);
@@ -1519,6 +1525,22 @@ class CompositionController extends ChangeNotifier {
       tracks[index] = updated;
     }
     _replace(layer.copyWith(keyframeTracks: tracks));
+  }
+
+  void setTransformTrackEnabled(String property, bool enabled) {
+    final layer = selectedLayer;
+    if (layer == null || layer.locked) return;
+    var changed = false;
+    final tracks = layer.keyframeTracks.map((track) {
+      if (track.property != property || track.enabled == enabled) return track;
+      changed = true;
+      return KeyframeTrack(
+        property: track.property,
+        keyframes: track.keyframes,
+        enabled: enabled,
+      );
+    }).toList();
+    if (changed) _replace(layer.copyWith(keyframeTracks: tracks));
   }
 
   /// Updates several transform channels as one undoable document operation.
@@ -1540,7 +1562,8 @@ class CompositionController extends ChangeNotifier {
     for (final entry in values.entries) {
       if (!entry.value.isFinite) continue;
       final trackIndex = tracks.indexWhere((track) => track.property == entry.key);
-      final shouldKeyframe = autoKey || trackIndex >= 0;
+      final shouldKeyframe = autoKey ||
+          (trackIndex >= 0 && tracks[trackIndex].enabled);
       if (!shouldKeyframe) {
         transform = transform.withValue(entry.key, entry.value);
         continue;
@@ -1548,7 +1571,7 @@ class CompositionController extends ChangeNotifier {
       final track = trackIndex < 0 ? KeyframeTrack(property: entry.key) : tracks[trackIndex];
       final existingIndex = track.keyframes.indexWhere((item) => item.timeMs == targetTimeMs);
       final existing = existingIndex < 0 ? null : track.keyframes[existingIndex];
-      final updated = track.upsert(ScalarKeyframe(
+      final keyed = track.upsert(ScalarKeyframe(
         timeMs: targetTimeMs,
         value: entry.value,
         interpolation: existing?.interpolation ?? Interpolation.easeInOut,
@@ -1557,6 +1580,13 @@ class CompositionController extends ChangeNotifier {
         bezier: existing?.bezier ?? const BezierCurve(),
         metadata: existing?.metadata ?? const {},
       ));
+      final updated = autoKey && !track.enabled
+          ? KeyframeTrack(
+              property: track.property,
+              keyframes: keyed.keyframes,
+              enabled: true,
+            )
+          : keyed;
       if (trackIndex < 0) {
         tracks.add(updated);
       } else {
@@ -1598,7 +1628,7 @@ class CompositionController extends ChangeNotifier {
       final existing = track.keyframes
           .where((frame) => frame.timeMs == _document.playheadMs)
           .firstOrNull;
-      final updated = track.upsert(ScalarKeyframe(
+      final keyed = track.upsert(ScalarKeyframe(
         timeMs: _document.playheadMs,
         value: value,
         interpolation: existing?.interpolation ?? Interpolation.easeInOut,
@@ -1607,6 +1637,13 @@ class CompositionController extends ChangeNotifier {
         bezier: existing?.bezier ?? const BezierCurve(),
         metadata: existing?.metadata ?? const {},
       ));
+      final updated = keyframe && !track.enabled
+          ? KeyframeTrack(
+              property: track.property,
+              keyframes: keyed.keyframes,
+              enabled: true,
+            )
+          : keyed;
       final tracks = [...layer.keyframeTracks];
       if (trackIndex < 0) {
         tracks.add(updated);
@@ -1787,7 +1824,11 @@ class CompositionController extends ChangeNotifier {
         outTangent: old.outTangent,
         bezier: old.bezier,
       );
-      return KeyframeTrack(property: track.property, keyframes: frames);
+      return KeyframeTrack(
+        property: track.property,
+        keyframes: frames,
+        enabled: track.enabled,
+      );
     }
 
     final tracks = layer.keyframeTracks.map(update).toList();

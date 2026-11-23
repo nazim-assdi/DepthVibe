@@ -2019,4 +2019,115 @@ void main() {
     controller.dispose();
   });
 
+  test('add keyframe re-enables a disabled opacity track using its base value', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 3000,
+        playheadMs: 1200,
+        layers: [
+          CompositionLayer(
+            id: 'clip',
+            name: 'Clip',
+            kind: LayerKind.video,
+            transform: LayerTransform(opacity: 72),
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'opacity',
+                enabled: false,
+                keyframes: [ScalarKeyframe(timeMs: 0, value: 25)],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'clip',
+      ),
+    );
+
+    controller.addKeyframe('opacity');
+    final layer = controller.selectedLayer!;
+    final track = layer.keyframeTracks.single;
+    expect(track.enabled, isTrue);
+    expect(track.keyframes.length, 2);
+    expect(
+      track.keyframes.firstWhere((frame) => frame.timeMs == 1200).value,
+      72,
+    );
+    controller.dispose();
+  });
+
+  test('auto-key enables a disabled transform track while regular edits use its base', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 3000,
+        playheadMs: 1000,
+        layers: [
+          CompositionLayer(
+            id: 'clip',
+            name: 'Clip',
+            kind: LayerKind.video,
+            transform: LayerTransform(opacity: 80),
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'opacity',
+                enabled: false,
+                keyframes: [ScalarKeyframe(timeMs: 0, value: 20)],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'clip',
+      ),
+    );
+
+    controller.updateTransformValues({'opacity': 55});
+    expect(controller.selectedLayer!.transform.opacity, 55);
+    expect(controller.selectedLayer!.keyframeTracks.single.enabled, isFalse);
+
+    controller.updateTransformValues({'opacity': 35}, autoKey: true);
+    final track = controller.selectedLayer!.keyframeTracks.single;
+    expect(track.enabled, isTrue);
+    expect(
+      track.keyframes.firstWhere((frame) => frame.timeMs == 1000).value,
+      35,
+    );
+    controller.dispose();
+  });
+
+  test('editing interpolation does not re-enable a disabled transform track', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 3000,
+        playheadMs: 1000,
+        layers: [
+          CompositionLayer(
+            id: 'clip',
+            name: 'Clip',
+            kind: LayerKind.video,
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'opacity',
+                enabled: false,
+                keyframes: [
+                  ScalarKeyframe(timeMs: 0, value: 100),
+                  ScalarKeyframe(timeMs: 1000, value: 30),
+                ],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'clip',
+      ),
+    );
+
+    controller.setInterpolation(
+      'opacity',
+      Interpolation.linear,
+      timeMs: 1000,
+    );
+    final track = controller.selectedLayer!.keyframeTracks.single;
+    expect(track.enabled, isFalse);
+    expect(track.keyframes.last.interpolation, Interpolation.linear);
+    controller.dispose();
+  });
+
 }
