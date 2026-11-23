@@ -913,6 +913,7 @@ class CompositionLayer {
     this.interchangeMetadata = const {},
     this.textContent,
     this.is3dText = false,
+    this.textExtrusionDepth = 12,
     this.textFontFamily,
     this.textFontAssetUri,
     this.textFontFallback = const [],
@@ -966,6 +967,8 @@ class CompositionLayer {
   final String? textContent;
   /// Render this text as a camera-aware 3D plane rather than a flat 2D layer.
   final bool is3dText;
+  /// Glyph extrusion depth as a percentage of text plane width (0-100).
+  final double textExtrusionDepth;
   final String? textFontFamily;
   final String? textFontAssetUri;
   final List<String> textFontFallback;
@@ -1029,6 +1032,7 @@ class CompositionLayer {
     Map<String, Object?>? interchangeMetadata,
     String? textContent,
     bool? is3dText,
+    double? textExtrusionDepth,
     String? textFontFamily,
     String? textFontAssetUri,
     List<String>? textFontFallback,
@@ -1084,6 +1088,7 @@ class CompositionLayer {
         interchangeMetadata: interchangeMetadata ?? this.interchangeMetadata,
         textContent: textContent ?? this.textContent,
         is3dText: is3dText ?? this.is3dText,
+        textExtrusionDepth: textExtrusionDepth ?? this.textExtrusionDepth,
         textFontFamily: clearTextFont ? null : (textFontFamily ?? this.textFontFamily),
         textFontAssetUri: clearTextFont || clearTextFontAsset
             ? null
