@@ -1,9 +1,27 @@
+import 'package:depthvibe/features/composition/data/effect_catalog.dart';
 import 'package:depthvibe/features/composition/domain/composition_models.dart';
 import 'package:depthvibe/features/composition/engine/live_effect_preview.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('every built-in effect has a registered live preview renderer', () {
+    expect(EffectCatalog.all.length, 68);
+    expect(LiveEffectPreview.builtInEffectCount, 68);
+    for (final effect in EffectCatalog.all) {
+      expect(
+        LiveEffectPreview.supports(effect.id),
+        isTrue,
+        reason: '${effect.name} (${effect.id}) must have a live preview route',
+      );
+      expect(
+        effect.parameters.length,
+        lessThanOrEqualTo(24),
+        reason: '${effect.id} exceeds the GPU preview uniform limit',
+      );
+    }
+  });
+
   test('recognises effect types with a live Flutter preview implementation', () {
     expect(LiveEffectPreview.supports('brightness'), isTrue);
     expect(LiveEffectPreview.supports('gaussian_blur'), isTrue);
