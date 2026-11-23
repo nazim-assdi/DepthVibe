@@ -129,7 +129,8 @@ void main() {
     uv = 0.5 + (uv-0.5)*(1.0-strength*0.10);
   }
 
-  vec4 c = sampleAt(uv);
+  vec4 raw = sampleAt(uv);
+  vec4 c = vec4(raw.a > 0.00001 ? raw.rgb / raw.a : vec3(0.0), raw.a);
   vec2 q = uv - 0.5;
   float r = length(q);
 
@@ -137,33 +138,41 @@ void main() {
   else if (type == 2.0) c.rgb = (c.rgb-0.5)*u_p0+0.5;          // Contrast
   else if (type == 3.0) c.rgb = saturation(c.rgb,u_p0);        // Saturation
   else if (type == 4.0) c.rgb = pow(max(c.rgb,vec3(0.0)),vec3(1.0/max(0.2,u_p0))); // Gamma
-  else if (type == 5.0 || type == 6.0 || type == 37.0 || type == 38.0 || type == 48.0 || type == 54.0 || type == 55.0 || type == 56.0) {
-    float rad = max(0.5, type == 5.0 ? u_p0 : type == 6.0 ? u_p0 : type == 37.0 ? u_p1 : type == 38.0 ? u_p1 : type == 48.0 ? u_p0 : type == 54.0 ? u_p0 : type == 55.0 ? u_p0 : u_p0) * max(px.x,px.y);
+  else if (type == 5.0 || type == 6.0 || type == 22.0 || type == 36.0 || type == 37.0 || type == 38.0 || type == 44.0 || type == 47.0 || type == 48.0 || type == 54.0 || type == 55.0 || type == 57.0) {
+    float amount = type == 38.0 ? u_p1 : type == 48.0 ? u_p2 : type == 36.0 || type == 47.0 ? u_p1 : u_p0;
+    float rad = max(0.5, amount) * max(px.x,px.y);
+    float angle = type == 36.0 ? u_p0*0.0174532925 : 0.0;
+    vec2 dir = type == 36.0 ? vec2(cos(angle),sin(angle)) : type == 47.0 ? normalize(uv-0.5) : vec2(1.0,0.0);
     vec3 total = c.rgb * 0.28;
-    total += sampleAt(uv+vec2(rad,0)).rgb*0.12;
-    total += sampleAt(uv-vec2(rad,0)).rgb*0.12;
+    total += sampleAt(uv+dir*rad).rgb*0.12;
+    total += sampleAt(uv-dir*rad).rgb*0.12;
     total += sampleAt(uv+vec2(0,rad)).rgb*0.12;
     total += sampleAt(uv-vec2(0,rad)).rgb*0.12;
+    total += sampleAt(uv+dir*rad*2.0).rgb*0.06;
+    total += sampleAt(uv-dir*rad*2.0).rgb*0.06;
     total += sampleAt(uv+vec2(rad,rad)).rgb*0.06;
     total += sampleAt(uv-vec2(rad,rad)).rgb*0.06;
-    total += sampleAt(uv+vec2(rad,-rad)).rgb*0.06;
-    total += sampleAt(uv+vec2(-rad,rad)).rgb*0.06;
-    if (type == 6.0 || type == 48.0) c.rgb = clamp(c.rgb + (c.rgb-total)*max(0.0,type == 6.0 ? u_p0 : u_p0),0.0,1.0);
-    else c.rgb = mix(c.rgb,total,type == 37.0 ? 0.65 : type == 38.0 ? 0.25 : type == 55.0 ? 0.45 : type == 56.0 ? 0.2 : 0.78);
+    float mixAmount = type == 38.0 ? 0.24 : type == 54.0 ? 0.45 : type == 55.0 ? 0.38 : type == 57.0 ? 0.3 : 0.72;
+    c.rgb = mix(c.rgb,total,mixAmount);
   }
-  else if (type == 7.0) c.rgb *= 1.0-clamp(luminance(c.rgb)*0.0 + r*u_p0*0.9,0.0,0.9); // Vignette
+  else if (type == 7.0 || type == 53.0) {
+    vec3 blur=(sampleAt(uv+px*vec2(1,0)).rgb+sampleAt(uv-px*vec2(1,0)).rgb+
+               sampleAt(uv+px*vec2(0,1)).rgb+sampleAt(uv-px*vec2(0,1)).rgb)*0.25;
+    c.rgb=clamp(c.rgb+(c.rgb-blur)*u_p0,0.0,1.0);
+  }
+  else if (type == 8.0) c.rgb *= 1.0-clamp(r*u_p0*0.9,0.0,0.9); // Vignette
   else if (type == 8.0) { float n=hash21(uv*u_size+floor(t*24.0))-0.5; c.rgb=clamp(c.rgb+n*u_p0/255.0,0.0,1.0); }
-  else if (type == 9.0) { float l=luminance(c.rgb); c.rgb=vec3(step(u_p0/255.0,l)); }
-  else if (type == 11.0) c.rgb=1.0-c.rgb;
-  else if (type == 12.0) c.rgb=vec3(luminance(c.rgb));
-  else if (type == 13.0 || type == 42.0 || type == 45.0 || type == 65.0) {
+  else if (type == 11.0) { float l=luminance(c.rgb); c.rgb=vec3(step(u_p0/255.0,l)); }
+  else if (type == 12.0) c.rgb=1.0-c.rgb;
+  else if (type == 13.0) c.rgb=vec3(luminance(c.rgb));
+  else if (type == 14.0 || type == 42.0 || type == 45.0 || type == 65.0) {
     float amount = type==13.0 ? u_p0 : type==42.0 ? u_p0 : type==45.0 ? u_p0 : u_p0;
     float shift=amount*px.x;
     vec4 red=sampleAt(uv+vec2(shift,0));
     vec4 blue=sampleAt(uv-vec2(shift,0));
     c.rgb=vec3(red.r,c.g,blue.b);
   }
-  else if (type == 14.0 || type == 68.0) {
+  else if (type == 15.0 || type == 68.0) {
     float gx = luminance(sampleAt(uv+px*vec2(1,0)).rgb)-luminance(sampleAt(uv-px*vec2(1,0)).rgb);
     float gy = luminance(sampleAt(uv+px*vec2(0,1)).rgb)-luminance(sampleAt(uv-px*vec2(0,1)).rgb);
     float edge = clamp(length(vec2(gx,gy))*4.0,0.0,1.0);
@@ -229,26 +238,26 @@ void main() {
     vec3 blur=(sampleAt(uv+vec2(radius*px.x,0)).rgb+sampleAt(uv-vec2(radius*px.x,0)).rgb+sampleAt(uv+vec2(0,radius*px.y)).rgb+sampleAt(uv-vec2(0,radius*px.y)).rgb)*0.25;
     c.rgb=type==39.0 ? mix(c.rgb,vec3(luminance(blur)),0.25) : mix(c.rgb,blur,0.5);
   }
-  else if (type == 40.0) {                                    // Deband
+  else if (type == 39.0) {                                    // Deband
     float levels=max(8.0,1.0/max(0.00003,u_p0));
     float d=(hash21(gl_FragCoord.xy+floor(t*30.0))-0.5)/255.0;
     c.rgb=clamp(floor((c.rgb+d)*levels+0.5)/levels,0.0,1.0);
   }
-  else if (type == 41.0) {                                    // Deflicker approximation
+  else if (type == 40.0) {                                    // Deflicker approximation
     float pulse=sin(t*6.2831853*max(1.0,u_p0))*0.008;
     c.rgb=clamp(c.rgb-pulse,0.0,1.0);
   }
-  else if (type == 43.0) {                                    // Scanlines
+  else if (type == 41.0) {                                    // Scanlines
     float lines=mod(gl_FragCoord.y,max(2.0,u_p0));
     if (lines<u_p1) c.rgb*=1.0-clamp(u_p2,0.0,1.0);
   }
-  else if (type == 44.0) c.rgb=vec3(c.r,c.g,c.b);             // RGB split is handled by UV sampling path above
-  else if (type == 45.0) {                                    // Posterize time / held-frame cadence indicator
+  else if (type == 42.0) c.rgb=vec3(c.r,c.g,c.b);             // RGB split is handled by UV sampling path above
+  else if (type == 43.0) {                                    // Posterize time / held-frame cadence indicator
     float cadence=max(2.0,u_p0);
     float cadencePulse=step(0.92,fract(t*cadence));
     c.rgb=clamp(c.rgb*(1.0-cadencePulse*0.025),0.0,1.0);
   }
-  else if (type == 47.0 || type == 57.0) {                    // VHS / heat haze accent
+  else if (type == 45.0 || type == 65.0) {                    // VHS / analog tape accent
     float n=hash21(gl_FragCoord.xy+floor(t*18.0));
     if (n>0.995) c.rgb=vec3(1.0);
   }
@@ -257,40 +266,40 @@ void main() {
     vec3 avg=(sampleAt(uv+px).rgb+sampleAt(uv-px).rgb+sampleAt(uv+px*vec2(1,-1)).rgb+sampleAt(uv-px*vec2(1,-1)).rgb)*0.25;
     c.rgb=mix(c.rgb,avg,clamp(u_p2/12.0,0.05,0.8));
   }
-  else if (type == 51.0) {                                    // Vibrance
+  else if (type == 49.0) {                                    // Vibrance
     float l=luminance(c.rgb);
     float sat=max(max(c.r,c.g),c.b)-min(min(c.r,c.g),c.b);
     float boost=1.0+u_p0*(1.0-sat);
     c.rgb=clamp(mix(vec3(l),c.rgb,boost),0.0,1.0);
   }
-  else if (type == 52.0) {                                    // Color contrast
+  else if (type == 50.0) {                                    // Color contrast
     c.rgb=clamp((c.rgb-0.5)*(1.0+vec3(u_p0,u_p1,u_p2))+0.5,0.0,1.0);
   }
-  else if (type == 53.0) {                                    // Auto white balance approximation
+  else if (type == 51.0) {                                    // Auto white balance approximation
     float gray=(c.r+c.g+c.b)/3.0;
     c.rgb=clamp(c.rgb*(vec3(gray)/max(c.rgb,vec3(0.025))),0.0,1.0);
   }
-  else if (type == 54.0) {                                    // RGB channel mixer
+  else if (type == 52.0) {                                    // RGB channel mixer
     vec3 source=c.rgb;
     c.rgb=clamp(vec3(
       source.r*u_p0+source.g*u_p1+source.b*u_p2,
       source.r*u_p3+source.g*u_p4+source.b*u_p5,
       source.r*u_p6+source.g*u_p7+source.b*u_p8),0.0,1.0);
   }
-  else if (type == 55.0 || type == 56.0 || type == 57.0) {     // Adaptive sharpen / median / temporal median
+  else if (type == 54.0 || type == 55.0) {                    // Median / temporal median
     vec3 a=sampleAt(uv+px*vec2(1,0)).rgb;
     vec3 b=sampleAt(uv-px*vec2(1,0)).rgb;
     if (type==55.0) c.rgb=clamp(c.rgb+(c.rgb-(a+b)*0.5)*u_p0,0.0,1.0);
     else c.rgb=mix(c.rgb,(a+b)*0.5,0.28);
   }
-  else if (type == 58.0) {                                    // NL means approximation
+  else if (type == 56.0) {                                    // NL means approximation
     vec3 a=sampleAt(uv+px*2.0).rgb;
     vec3 b=sampleAt(uv-px*2.0).rgb;
     float wa=exp(-dot(a-c.rgb,a-c.rgb)*80.0);
     float wb=exp(-dot(b-c.rgb,b-c.rgb)*80.0);
     c.rgb=(c.rgb+a*wa+b*wb)/(1.0+wa+wb);
   }
-  else if (type == 59.0) {                                    // Frame blend spatial approximation
+  else if (type == 57.0) {                                    // Frame blend spatial approximation
     c.rgb=mix(c.rgb,(sampleAt(uv+px*vec2(1,0)).rgb+sampleAt(uv-px*vec2(1,0)).rgb)*0.5,0.3);
   }
   else if (type == 61.0) {                                    // Camera flash
@@ -334,7 +343,7 @@ void main() {
     c.rgb=clamp(c.rgb+dotMask*u_p2,0.0,1.0);
   }
   // Shared chromatic channel split.
-  if (type == 14.0 || type == 42.0 || type == 65.0) {
+  if (type == 14.0 || type == 42.0 || type == 45.0 || type == 65.0) {
     float shift=max(0.0,u_p0)*px.x;
     c.r=sampleAt(uv+vec2(shift,0)).r;
     c.b=sampleAt(uv-vec2(shift,0)).b;
