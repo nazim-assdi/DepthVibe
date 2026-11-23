@@ -7681,9 +7681,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             padding: const EdgeInsets.all(12),
                             child: _buildAssetLibraryPanel(null),
                           )
-                        : const Center(
-                            child: Text('Select a layer to edit'),
-                          )
+                        : _panel == 'Preview'
+                            ? SingleChildScrollView(
+                                padding: const EdgeInsets.all(10),
+                                child: _buildPreviewPanel(),
+                              )
+                            : const Center(
+                                child: Text('Select a layer to edit'),
+                              )
                 : SingleChildScrollView(
                     padding: const EdgeInsets.all(10),
                     child: _panelContent(layer),
