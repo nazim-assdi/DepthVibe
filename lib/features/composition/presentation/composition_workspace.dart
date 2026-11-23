@@ -10861,8 +10861,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             'CAMERA ORIENTATION',
             style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
           ),
-          _animatedPropertyRow(layer, 'Orbit X', 'rotation.x', -180, 180),
-          _animatedPropertyRow(layer, 'Orbit Y', 'rotation.y', -180, 180),
+          if (camera.cameraMode == 'oneNode') ...[
+            _animatedPropertyRow(layer, 'Orbit X', 'rotation.x', -180, 180),
+            _animatedPropertyRow(layer, 'Orbit Y', 'rotation.y', -180, 180),
+          ],
           _animatedPropertyRow(layer, 'Roll Z', 'rotation.z', -180, 180),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
