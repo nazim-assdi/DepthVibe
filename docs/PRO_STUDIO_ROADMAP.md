@@ -329,7 +329,7 @@ Polygon and cubic Bezier masks now support keyframes for every vertex anchor and
 - The preview uses the software mesh renderer; final composition export prepares a per-frame transparent 3D plate using the same parent transform, camera and scene-light inputs used for imported mesh layers. The 3D plane mode is persisted in `.dvproj` and can be toggled in Typography.
 - Added texture-quad and portable project round-trip tests. The text remains an editable text layer; the generated mesh is not persisted as a destructive outline conversion.
 
-**Explicit limit:** this is a flat camera-aware 3D text plane, not true extruded glyph geometry. Bevel/depth/material controls for individual letters, text-on-path extrusion, per-character 3D animation and full GPU text rendering remain unfinished.
+**Explicit limit:** extrusion side walls are generated from a bounded grid of raster alpha samples, not exact vector glyph contours. Bevels, per-letter material controls, text-on-path extrusion, per-character 3D animation and full GPU text rendering remain unfinished.
 
 ## Implementation Update — Extension manager and editing reliability (20 November 2026)
 
