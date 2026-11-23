@@ -43,6 +43,7 @@ class CompositionProjectCodec {
         'interchangeMetadata': layer.interchangeMetadata,
         'textContent': layer.textContent,
         'is3dText': layer.is3dText,
+        'textExtrusionDepth': layer.textExtrusionDepth,
         'textFontFamily': layer.textFontFamily,
         'textFontAssetUri': asset(layer.textFontAssetUri),
         'textFontFallback': layer.textFontFallback,
@@ -168,6 +169,7 @@ class CompositionProjectCodec {
         interchangeMetadata: _safeMetadata(item['interchangeMetadata']),
         textContent: _optionalString(item['textContent']),
         is3dText: _boolean(item['is3dText'], false),
+        textExtrusionDepth: _number(item['textExtrusionDepth'], 12).clamp(0, 100).toDouble(),
         textFontFamily: _optionalString(item['textFontFamily']),
         textFontAssetUri: asset(_optionalString(item['textFontAssetUri'])),
         textFontFallback: (item['textFontFallback'] as List? ?? const [])
