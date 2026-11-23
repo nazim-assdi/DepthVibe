@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:depthvibe/features/composition/application/composition_controller.dart';
@@ -83,9 +85,13 @@ void main() {
       final mesh = loader.parse(
         PrimitiveObjFactory.objFor('cylinder_hollow'),
       );
-      final xValues = mesh.vertices.map((vertex) => vertex.x.abs()).toList();
-      expect(xValues.reduce((a, b) => a > b ? a : b), closeTo(0.5, 0.001));
-      expect(xValues.reduce((a, b) => a < b ? a : b), closeTo(0.0, 0.001));
+      final radii = mesh.vertices
+          .map((vertex) => math.sqrt(
+                vertex.x * vertex.x + vertex.z * vertex.z,
+              ))
+          .toList();
+      expect(radii.reduce((a, b) => a > b ? a : b), closeTo(0.5, 0.001));
+      expect(radii.reduce((a, b) => a < b ? a : b), closeTo(0.27, 0.001));
       expect(mesh.triangles, isNotEmpty);
     });
   });
