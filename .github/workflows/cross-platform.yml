@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, feature/ae-shape-layer-render]
+    branches: [main, feature/ae-shape-layer-render, feat/ae-layer-primitives-v2]
   workflow_dispatch:
 
 concurrency:

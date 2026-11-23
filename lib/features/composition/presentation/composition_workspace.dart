@@ -886,6 +886,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   CompositionExportCancellation? _renderCancellation;
   String _panel = 'Transform';
   String _leftPanel = 'Project';
+  String _projectSearch = '';
   String _leftEffectSearch = '';
   String _workspacePreset = 'After Effects';
   final List<String> _rightPanelOrder = [
@@ -895,6 +896,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     'Layers',
     'Timing',
     'Typography',
+    'Preview',
     'Shape',
     'Color',
     'Masks',
@@ -915,6 +917,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   bool _graphDragHistoryRecorded = false;
   bool _graphScrubbing = false;
   bool _showCanvasGrid = true;
+  bool _showSafeMargins = false;
+  bool _showCenterGuides = false;
+  bool _previewLoopPlayback = false;
   bool _autoKeyEnabled = false;
   bool _showLayerControls = true;
   bool _hideShyLayers = false;
@@ -962,6 +967,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   Size _previewPenLayerSize = Size.zero;
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
+  double _timelineHeight = 260;
+  double _compactPanelHeight = 285;
+  double _timelineZoom = 1.0;
+  double _timelineScrollRatio = 0.0;
   final Set<String> _expandedTimelineLayers = {};
   String _effectCategory = 'All';
   String _effectSearch = '';
@@ -1808,6 +1817,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ? 0
         : document.playheadMs;
     final stopwatch = Stopwatch()..start();
+    var playbackOriginMs = startTime;
     var lastTickMs = -1;
 
     setState(() {
@@ -1840,8 +1850,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         lastTickMs = elapsedMs;
 
         final duration = currentDocument.durationMs;
-        final nextTime = startTime + elapsedMs;
-        if (duration <= 0 || nextTime >= duration) {
+        final nextTime = playbackOriginMs + elapsedMs;
+        if (duration <= 0) {
+          _pausePreviewPlayback();
+          return;
+        }
+        if (nextTime >= duration) {
+          if (_previewLoopPlayback) {
+            playbackOriginMs = 0;
+            stopwatch.reset();
+            lastTickMs = -1;
+            _controller.setPlayhead(0);
+            return;
+          }
           _controller.setPlayhead(math.max(0, duration - 1));
           _pausePreviewPlayback();
           return;
@@ -2304,6 +2325,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           body: Column(
             children: [
               _buildWorkspaceMenuBar(),
+              _buildPreviewToolsToolbar(),
               _buildLayerToolbar(),
               Expanded(
                 child: LayoutBuilder(
@@ -2313,7 +2335,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       return Column(
                         children: [
                           Expanded(child: _buildPlayheadAwareCanvas()),
-                          SizedBox(height: 285, child: _buildActivePanel(layer)),
+                          _buildCompactPanelSplitter(),
+                          SizedBox(
+                            height: _compactPanelHeight,
+                            child: _buildActivePanel(layer),
+                          ),
                         ],
                       );
                     }
@@ -2338,7 +2364,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   },
                 ),
               ),
-              _buildPlayheadAwareTimeline(),
+              _buildTimelineSplitter(),
+              SizedBox(
+                height: _timelineHeight,
+                child: _buildPlayheadAwareTimeline(),
+              ),
               if (_rendering || _projectBusy)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -2434,6 +2464,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               'Layers',
               'Timing',
               'Typography',
+              'Preview',
               'Shape',
               'Color',
               'Masks',
@@ -2637,12 +2668,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           _workspaceMenuButton(
             'Window',
             const [
-              PopupMenuItem(value: 'Layers', child: Text('Project / Layers')),
-              PopupMenuItem(value: 'Transform', child: Text('Transform')),
+              PopupMenuItem(value: 'Project', child: Text('Project')),
+              PopupMenuItem(value: 'Effects & Presets', child: Text('Effects & Presets')),
+              PopupMenuItem(value: 'Transform', child: Text('Properties')),
               PopupMenuItem(value: 'Effects', child: Text('Effect Controls')),
-              PopupMenuItem(value: 'Animation', child: Text('Graph / Keyframe Editor')),
+              PopupMenuItem(value: 'Preview', child: Text('Preview')),
+              PopupMenuItem(value: 'Animation', child: Text('Graph Editor')),
               PopupMenuItem(value: 'Timing', child: Text('Timing')),
-              PopupMenuItem(value: 'Typography', child: Text('Character / Typography')),
+              PopupMenuItem(value: 'Typography', child: Text('Character')),
               PopupMenuItem(value: 'Shape', child: Text('Shape')),
               PopupMenuItem(value: 'Color', child: Text('Color')),
               PopupMenuItem(value: 'Audio', child: Text('Audio')),
@@ -2654,7 +2687,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               PopupMenuItem(value: 'Parent', child: Text('Parent & Link')),
               PopupMenuItem(value: '3D', child: Text('3D Controls')),
             ],
-            (panel) => setState(() => _panel = panel),
+            (panel) => setState(() {
+              if (panel == 'Project' || panel == 'Effects & Presets') {
+                _leftPanel = panel;
+              } else {
+                _panel = panel;
+              }
+            }),
           ),
           _workspaceMenuButton(
             'Workspace',
@@ -2680,6 +2719,213 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 letterSpacing: 0.8,
                 color: palette.secondaryText,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreviewToolsToolbar() {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return Container(
+      height: 42,
+      decoration: BoxDecoration(
+        color: palette.toolbar,
+        border: Border(bottom: BorderSide(color: palette.border)),
+      ),
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.build_outlined, size: 14, color: palette.accent),
+                const SizedBox(width: 6),
+                Text(
+                  'TOOLS',
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.7,
+                    color: palette.secondaryText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          VerticalDivider(width: 1, color: palette.border),
+          Expanded(
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              children: [
+                  _toolChip(
+                    'Select',
+                    Icons.mouse,
+                    _activePreviewTool == 'Select',
+                    onTap: () => setState(() => _activePreviewTool = 'Select'),
+                  ),
+                  _toolChip(
+                    'Hand',
+                    Icons.pan_tool_alt,
+                    _activePreviewTool == 'Hand',
+                    onTap: () => setState(() => _activePreviewTool = 'Hand'),
+                  ),
+                  _toolChip(
+                    'Rectangle',
+                    Icons.rectangle_outlined,
+                    _activePreviewTool == 'DrawRectangle',
+                    onTap: () => setState(() => _activePreviewTool = 'DrawRectangle'),
+                  ),
+                  _toolChip(
+                    'Rounded Rect',
+                    Icons.rounded_corner,
+                    _activePreviewTool == 'DrawRoundedRectangle',
+                    onTap: () => setState(() => _activePreviewTool = 'DrawRoundedRectangle'),
+                  ),
+                  _toolChip(
+                    'Ellipse',
+                    Icons.circle_outlined,
+                    _activePreviewTool == 'DrawEllipse',
+                    onTap: () => setState(() => _activePreviewTool = 'DrawEllipse'),
+                  ),
+                  _toolChip(
+                    'Polygon',
+                    Icons.pentagon_outlined,
+                    _activePreviewTool == 'DrawPolygon',
+                    onTap: () => setState(() => _activePreviewTool = 'DrawPolygon'),
+                  ),
+                  _toolChip(
+                    'Star',
+                    Icons.star_outline,
+                    _activePreviewTool == 'DrawStar',
+                    onTap: () => setState(() => _activePreviewTool = 'DrawStar'),
+                  ),
+                  _toolChip(
+                    'Mask',
+                    Icons.crop_free,
+                    _activePreviewTool == 'Mask',
+                    onTap: () {
+                      final layer = _controller.selectedLayer;
+                      if (layer == null || layer.locked) {
+                        setState(() => _notice = 'Select an unlocked layer before editing masks.');
+                        return;
+                      }
+                      if (layer.masks.isEmpty) {
+                        _controller.addMask(shape: MaskShape.rectangle);
+                      }
+                      setState(() {
+                        _panel = 'Masks';
+                        _activePreviewTool = 'Mask';
+                      });
+                    },
+                  ),
+                  _toolChip(
+                    'Path',
+                    Icons.edit,
+                    _activePreviewTool == 'Shape',
+                    onTap: () {
+                      if (_controller.selectedLayer?.kind == LayerKind.shape &&
+                          _controller.selectedLayer?.shapeStyle?.primitive ==
+                              ShapePrimitive.path) {
+                        setState(() => _activePreviewTool = 'Shape');
+                      } else {
+                        setState(() => _notice = 'Select a shape layer with a Bezier path first.');
+                      }
+                    },
+                  ),
+                  if (_controller.selectedLayer?.kind == LayerKind.shape &&
+                      _controller.selectedLayer?.shapeStyle?.primitive ==
+                          ShapePrimitive.path) ...[
+                    _toolChip(
+                      'Add Point',
+                      Icons.add_circle_outline,
+                      _activePreviewTool == 'AddVertex',
+                      onTap: () {
+                        final layer = _controller.selectedLayer!;
+                        if (_shapePathIsAnimated(layer)) {
+                          setState(() => _notice =
+                              'Add Point is disabled while path keyframes exist.');
+                        } else {
+                          setState(() {
+                            _activePreviewTool = 'AddVertex';
+                            _notice = 'Click a path segment to insert a vertex.';
+                          });
+                        }
+                      },
+                    ),
+                    _toolChip(
+                      'Delete',
+                      Icons.remove_circle_outline,
+                      _activePreviewTool == 'DeleteVertex',
+                      onTap: () => setState(() {
+                        _activePreviewTool = 'DeleteVertex';
+                        _notice = 'Click a path vertex to delete it.';
+                      }),
+                    ),
+                    _toolChip(
+                      'Corner / Smooth',
+                      Icons.account_tree_outlined,
+                      _activePreviewTool == 'ConvertVertex',
+                      onTap: () => setState(() {
+                        _activePreviewTool = 'ConvertVertex';
+                        _notice = 'Click a path vertex to toggle Corner / Smooth.';
+                      }),
+                    ),
+                  ],
+                  _toolChip(
+                    'Pen',
+                    Icons.gesture,
+                    _activePreviewTool == 'Pen',
+                    onTap: () {
+                      var layer = _controller.selectedLayer;
+                      if (layer == null) {
+                        _controller.addLayer(
+                          LayerKind.shape,
+                          name: 'Bezier Shape',
+                        );
+                        layer = _controller.selectedLayer;
+                      }
+                      if (layer == null || layer.locked) {
+                        setState(() => _notice = 'Select an unlocked layer before drawing a path.');
+                        return;
+                      }
+                      _beginPreviewPenPath(layer);
+                    },
+                  ),
+                  if (_activePreviewTool == 'Pen' &&
+                      _controller.selectedLayer?.kind == LayerKind.shape)
+                    _toolChip(
+                      _previewPenPathClosed ? 'Closed' : 'Open',
+                      _previewPenPathClosed ? Icons.check_box : Icons.check_box_outline_blank,
+                      _previewPenPathClosed,
+                      onTap: () => setState(
+                        () => _previewPenPathClosed = !_previewPenPathClosed,
+                      ),
+                    ),
+                  if (_activePreviewTool == 'Pen') ...[
+                    _toolChip(
+                      'Finish Path',
+                      Icons.check,
+                      false,
+                      onTap: _finishPreviewPenPath,
+                    ),
+                    _toolChip(
+                      'Cancel',
+                      Icons.close,
+                      false,
+                      onTap: _cancelPreviewPenPath,
+                    ),
+                  ],
+                  _toolChip(
+                    'Keyframe',
+                    Icons.key,
+                    false,
+                    onTap: _addPreviewTransformKeyframes,
+                  ),
+              ],
             ),
           ),
         ],
@@ -2740,8 +2986,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   ) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
-      height: 31,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: palette.toolbar,
         border: Border(bottom: BorderSide(color: palette.border)),
@@ -2766,80 +3012,90 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             hasCamera ? 'ACTIVE CAMERA' : 'ACTIVE VIEW',
             style: TextStyle(
               fontSize: 8,
-              letterSpacing: 0.55,
+              letterSpacing: 0.45,
               color: palette.secondaryText,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Text(
             '${document.width} × ${document.height}',
             style: TextStyle(fontSize: 8, color: palette.secondaryText),
           ),
+          const SizedBox(width: 7),
+          Text(
+            _time(document.playheadMs),
+            style: TextStyle(
+              fontSize: 8,
+              fontFeatures: const [ui.FontFeature.tabularFigures()],
+              color: palette.primaryText,
+            ),
+          ),
           IconButton(
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+            constraints: const BoxConstraints(minWidth: 25, minHeight: 26),
             tooltip: _autoKeyEnabled
                 ? 'Auto-Key enabled · preview transforms create keyframes'
                 : 'Auto-Key disabled · existing animated properties still update keys',
             onPressed: () => setState(() => _autoKeyEnabled = !_autoKeyEnabled),
             icon: Icon(
               Icons.diamond_outlined,
-              size: 15,
-              color: _autoKeyEnabled ? palette.accent : palette.secondaryText,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            'AUTO KEY',
-            style: TextStyle(
-              fontSize: 7,
-              fontWeight: FontWeight.w800,
+              size: 14,
               color: _autoKeyEnabled ? palette.accent : palette.secondaryText,
             ),
           ),
           PopupMenuButton<double>(
-            tooltip: 'Composition magnification · mouse wheel to zoom',
+            tooltip: 'Composition magnification',
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 26),
+            constraints: const BoxConstraints(minWidth: 42, minHeight: 26),
             initialValue: _previewZoom,
             onSelected: (value) => setState(() {
               _previewZoom = value;
               _previewPanOffset = Offset.zero;
             }),
             itemBuilder: (context) => const [
+              PopupMenuItem(value: 0.25, child: Text('25%')),
               PopupMenuItem(value: 0.5, child: Text('50%')),
               PopupMenuItem(value: 0.75, child: Text('75%')),
-              PopupMenuItem(value: 1, child: Text('Fit / 100%')),
+              PopupMenuItem(value: 1, child: Text('Fit')),
+              PopupMenuItem(value: 1.25, child: Text('125%')),
               PopupMenuItem(value: 1.5, child: Text('150%')),
               PopupMenuItem(value: 2, child: Text('200%')),
+              PopupMenuItem(value: 4, child: Text('400%')),
             ],
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Text(
-                _previewZoom == 1 ? 'FIT' : '${(_previewZoom * 100).round()}%',
+                _previewZoom == 1
+                    ? 'FIT'
+                    : '${(_previewZoom * 100).round()}%',
                 style: TextStyle(
                   fontSize: 8,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w900,
                   color: palette.accent,
                 ),
               ),
             ),
           ),
           PopupMenuButton<String>(
-            tooltip: 'Composition view options',
+            tooltip: 'Composition overlays and view options',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 24, minHeight: 26),
             icon: Icon(Icons.tune, size: 14, color: palette.secondaryText),
             onSelected: (value) {
               setState(() {
-                if (value == 'controls') {
-                  _showLayerControls = !_showLayerControls;
-                } else if (value == 'motion') {
-                  _showMotionPaths = !_showMotionPaths;
-                } else if (value == 'reset') {
-                  _previewZoom = 1;
-                  _previewPanOffset = Offset.zero;
+                switch (value) {
+                  case 'controls':
+                    _showLayerControls = !_showLayerControls;
+                  case 'motion':
+                    _showMotionPaths = !_showMotionPaths;
+                  case 'safe':
+                    _showSafeMargins = !_showSafeMargins;
+                  case 'center':
+                    _showCenterGuides = !_showCenterGuides;
+                  case 'reset':
+                    _previewZoom = 1;
+                    _previewPanOffset = Offset.zero;
                 }
               });
             },
@@ -2856,59 +3112,159 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   '${_showMotionPaths ? '✓' : '　'} Show Motion Paths',
                 ),
               ),
+              PopupMenuItem(
+                value: 'safe',
+                child: Text(
+                  '${_showSafeMargins ? '✓' : '　'} Title / Action Safe',
+                ),
+              ),
+              PopupMenuItem(
+                value: 'center',
+                child: Text(
+                  '${_showCenterGuides ? '✓' : '　'} Center Guides',
+                ),
+              ),
               const PopupMenuDivider(),
-              const PopupMenuItem(value: 'reset', child: Text('Reset View')),
+              const PopupMenuItem(value: 'reset', child: Text('Fit Composition / Reset View')),
             ],
           ),
-          const SizedBox(width: 5),
           IconButton(
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-            tooltip: _showCanvasGrid ? 'Hide transparency grid' : 'Show transparency grid',
+            tooltip: _showCanvasGrid
+                ? 'Hide transparency checkerboard'
+                : 'Show transparency checkerboard',
             onPressed: () => setState(() => _showCanvasGrid = !_showCanvasGrid),
             icon: Icon(
-              _showCanvasGrid ? Icons.grid_on : Icons.grid_off,
+              Icons.grid_on,
               size: 14,
               color: _showCanvasGrid ? palette.accent : palette.secondaryText,
             ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+            tooltip: 'Open Preview panel',
+            onPressed: () => setState(() => _panel = 'Preview'),
+            icon: Icon(Icons.play_circle_outline, size: 15, color: palette.secondaryText),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildWorkspaceSplitter({required bool left}) {
+  Widget _buildCompactPanelSplitter() {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return MouseRegion(
-      cursor: SystemMouseCursors.resizeColumn,
+      cursor: SystemMouseCursors.resizeRow,
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onHorizontalDragUpdate: (details) {
+        onVerticalDragUpdate: (details) {
           setState(() {
-            if (left) {
-              _leftPanelWidth = (_leftPanelWidth + details.delta.dx)
-                  .clamp(205.0, 420.0)
-                  .toDouble();
-            } else {
-              _rightPanelWidth = (_rightPanelWidth - details.delta.dx)
-                  .clamp(300.0, 560.0)
-                  .toDouble();
-            }
+            _compactPanelHeight =
+                (_compactPanelHeight - details.delta.dy)
+                    .clamp(150.0, 520.0)
+                    .toDouble();
           });
         },
-        onDoubleTap: () {
-          setState(() {
-            _leftPanelWidth = 270;
-            _rightPanelWidth = 340;
-          });
-        },
+        onDoubleTap: () => setState(() => _compactPanelHeight = 285),
         child: SizedBox(
-          width: 6,
+          height: 10,
           child: Center(
             child: Container(
-              width: 1,
-              color: palette.border,
+              width: 54,
+              height: 3,
+              decoration: BoxDecoration(
+                color: palette.secondaryText.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimelineSplitter() {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return Tooltip(
+      message: 'Drag to resize the Timeline and Composition Preview · double-click to reset',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.resizeRow,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onVerticalDragUpdate: (details) {
+            setState(() {
+              _timelineHeight =
+                  (_timelineHeight - details.delta.dy)
+                      .clamp(120.0, 680.0)
+                      .toDouble();
+            });
+          },
+          onDoubleTap: () => setState(() => _timelineHeight = 260),
+          child: SizedBox(
+            height: 10,
+            child: Center(
+              child: Container(
+                width: 70,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: palette.secondaryText.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWorkspaceSplitter({required bool left}) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return Tooltip(
+      message: left
+          ? 'Drag to resize Project / Effects dock · double-click to reset'
+          : 'Drag to resize Properties / Effects dock · double-click to reset',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.resizeColumn,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onHorizontalDragUpdate: (details) {
+            final availableWidth = MediaQuery.sizeOf(context).width;
+            setState(() {
+              if (left) {
+                final maxLeft =
+                    (availableWidth - _rightPanelWidth - 290).clamp(190.0, 520.0);
+                _leftPanelWidth =
+                    (_leftPanelWidth + details.delta.dx).clamp(165.0, maxLeft).toDouble();
+              } else {
+                final maxRight =
+                    (availableWidth - _leftPanelWidth - 290).clamp(220.0, 620.0);
+                _rightPanelWidth =
+                    (_rightPanelWidth - details.delta.dx).clamp(205.0, maxRight).toDouble();
+              }
+            });
+          },
+          onDoubleTap: () {
+            setState(() {
+              _leftPanelWidth = 270;
+              _rightPanelWidth = 340;
+            });
+          },
+          child: SizedBox(
+            width: 10,
+            child: Center(
+              child: Container(
+                width: 3,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: palette.secondaryText.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
             ),
           ),
         ),
@@ -2936,14 +3292,22 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             child: Row(
               children: [
                 Icon(
-                  _leftPanel == 'Project' ? Icons.folder_open : Icons.auto_awesome,
+                  _leftPanel == 'Project'
+                      ? Icons.folder_open
+                      : _leftPanel == 'Info'
+                          ? Icons.info_outline
+                          : Icons.auto_awesome,
                   size: 15,
                   color: palette.accent,
                 ),
                 const SizedBox(width: 7),
                 Expanded(
                   child: Text(
-                    _leftPanel == 'Project' ? 'PROJECT' : 'EFFECTS & PRESETS',
+                    _leftPanel == 'Project'
+                        ? 'PROJECT'
+                        : _leftPanel == 'Info'
+                            ? 'COMPOSITION INFO'
+                            : 'EFFECTS & PRESETS',
                     style: TextStyle(
                       fontSize: 10,
                       letterSpacing: 1,
@@ -2982,7 +3346,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ),
             child: Row(
               children: [
-                for (final tab in const ['Project', 'Effects & Presets', 'Info'])
+                for (final tab in const ['Project', 'Effects & Presets'])
                   Expanded(
                     child: InkWell(
                       onTap: () => setState(() => _leftPanel = tab),
@@ -3034,283 +3398,155 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     CompositionDocument document,
   ) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
-    final visibleLayers = _hideShyLayers
-        ? layers.where((layer) => !layer.shy).toList()
-        : layers;
-    return Column(
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: palette.border)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                document.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: palette.primaryText,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                '${document.width} × ${document.height}  ·  ${document.frameRate.toStringAsFixed(0)} fps  ·  ${_time(document.durationMs)}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 8, color: palette.secondaryText),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 7, 10, 5),
+    final query = _projectSearch.trim().toLowerCase();
+    final seenSources = <String>{};
+    final footage = <CompositionLayer>[];
+    for (final layer in layers) {
+      final source = layer.sourceUri;
+      if (source == null || source.isEmpty || !seenSources.add(source)) {
+        continue;
+      }
+      final sourceName = layer.externalSourceName ??
+          source.replaceAll('\\', '/').split('/').last;
+      final searchable =
+          '${layer.name} $sourceName ${layer.kind.name}'.toLowerCase();
+      if (query.isEmpty || searchable.contains(query)) {
+        footage.add(layer);
+      }
+    }
+    final showComposition = query.isEmpty ||
+        document.name.toLowerCase().contains(query) ||
+        'composition'.contains(query);
+
+    Widget sectionHeader(String title, int count) => Padding(
+          padding: const EdgeInsets.fromLTRB(10, 13, 10, 5),
           child: Row(
             children: [
-              Icon(Icons.layers_outlined, size: 13, color: palette.secondaryText),
-              const SizedBox(width: 6),
               Text(
-                'COMPOSITION LAYERS  (${layers.length})',
+                title.toUpperCase(),
                 style: TextStyle(
-                  fontSize: 8,
-                  letterSpacing: 0.7,
+                  fontSize: 9,
+                  letterSpacing: 0.8,
                   fontWeight: FontWeight.w900,
                   color: palette.secondaryText,
                 ),
               ),
-              const Spacer(),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                tooltip: _hideShyLayers ? 'Show Shy Layers' : 'Hide Shy Layers',
-                onPressed: () => setState(() => _hideShyLayers = !_hideShyLayers),
-                icon: Icon(
-                  _hideShyLayers ? Icons.filter_alt : Icons.filter_alt_outlined,
-                  size: 15,
-                  color: _hideShyLayers ? palette.accent : palette.secondaryText,
-                ),
+              const SizedBox(width: 6),
+              Text(
+                count.toString(),
+                style: TextStyle(fontSize: 8, color: palette.secondaryText),
               ),
             ],
           ),
+        );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(9, 8, 9, 5),
+          child: TextField(
+            onChanged: (value) => setState(() => _projectSearch = value),
+            decoration: const InputDecoration(
+              isDense: true,
+              prefixIcon: Icon(Icons.search, size: 16),
+              hintText: 'Search Project',
+              contentPadding: EdgeInsets.symmetric(vertical: 8),
+            ),
+          ),
         ),
         Expanded(
-          child: ReorderableListView.builder(
-            buildDefaultDragHandles: false,
-            itemCount: visibleLayers.length,
-            onReorder: (oldIndex, newIndex) {
-              if (newIndex > oldIndex) newIndex--;
-              final moving = visibleLayers[oldIndex];
-              final remainingVisible = [...visibleLayers]..removeAt(oldIndex);
-              final remainingAll = [...layers]
-                ..removeWhere((layer) => layer.id == moving.id);
-              final insertion = newIndex.clamp(0, remainingVisible.length).toInt();
-              final targetId = insertion < remainingVisible.length
-                  ? remainingVisible[insertion].id
-                  : null;
-              final globalIndex = targetId == null
-                  ? (remainingVisible.isEmpty
-                      ? remainingAll.length
-                      : remainingAll.indexWhere(
-                            (layer) => layer.id == remainingVisible.last.id,
-                          ) + 1)
-                  : remainingAll.indexWhere((layer) => layer.id == targetId);
-              _controller.reorderLayer(moving.id, globalIndex);
-            },
-            itemBuilder: (context, index) {
-              final layer = visibleLayers[index];
-              final selected = layer.id == document.selectedLayerId;
-              var depth = 0;
-              var ancestorId = layer.parentId;
-              while (ancestorId != null && depth <= layers.length) {
-                final parents = layers.where((item) => item.id == ancestorId);
-                if (parents.isEmpty) break;
-                ancestorId = parents.first.parentId;
-                depth++;
-              }
-              final metadata = <String>[
-                layer.kind == LayerKind.precomposition
-                    ? 'PSD group'
-                    : layer.kind.name,
-                if (layer.photoshopClipped)
-                  layer.clippingBaseLayerId == null
-                      ? 'clipped layer'
-                      : 'clipped to base',
-                if (layer.smartObjectResourceId != null) 'Smart Object',
-                if (layer.guideLayer) 'Guide',
-                if (layer.shy) 'Shy',
-                if (layer.solo) 'Solo',
-                if (layer.photoshopAdjustmentKey != null)
-                  'Adjustment ${layer.photoshopAdjustmentKey}',
-              ];
-              return ListTile(
-                key: ValueKey<String>('project-layer-${layer.id}'),
-                dense: true,
-                contentPadding: EdgeInsets.only(
-                  left: 8 + depth * 12,
-                  right: 4,
+          child: ListView(
+            padding: const EdgeInsets.only(bottom: 12),
+            children: [
+              if (showComposition) ...[
+                sectionHeader('Compositions', 1),
+                ListTile(
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  leading: Icon(
+                    Icons.movie_creation_outlined,
+                    size: 17,
+                    color: palette.accent,
+                  ),
+                  title: Text(
+                    document.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                  subtitle: Text(
+                    '${document.width} × ${document.height} · '
+                    '${document.frameRate.toStringAsFixed(0)} fps · '
+                    '${_time(document.durationMs)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 8, color: palette.secondaryText),
+                  ),
+                  onTap: document.selectedLayerId == null
+                      ? null
+                      : () => _controller.selectLayer(
+                            document.selectedLayerId!,
+                          ),
                 ),
-                selected: selected,
-                selectedTileColor: palette.accentSoft,
-                leading: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ReorderableDragStartListener(
-                      index: index,
-                      child: Icon(
-                        Icons.drag_indicator,
-                        size: 14,
+              ],
+              if (footage.isNotEmpty) ...[
+                sectionHeader('Footage', footage.length),
+                for (final layer in footage)
+                  ListTile(
+                    key: ValueKey<String>('project-footage-${layer.id}'),
+                    dense: true,
+                    visualDensity: VisualDensity.compact,
+                    leading: Icon(
+                      _iconFor(layer.kind),
+                      size: 17,
+                      color: palette.secondaryText,
+                    ),
+                    title: Text(
+                      layer.externalSourceName ??
+                          layer.sourceUri!
+                              .replaceAll('\\', '/')
+                              .split('/')
+                              .last,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10),
+                    ),
+                    subtitle: Text(
+                      layer.kind.name.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 8,
                         color: palette.secondaryText,
                       ),
                     ),
-                    const SizedBox(width: 3),
-                    Icon(
-                      layer.kind == LayerKind.precomposition
-                          ? Icons.folder_open
-                          : _iconFor(layer.kind),
-                      size: 16,
-                      color: selected ? palette.accent : palette.secondaryText,
-                    ),
-                  ],
-                ),
-                title: Text(
-                  layer.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10),
-                ),
-                subtitle: Text(
-                  metadata.join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 8),
-                ),
-                trailing: SizedBox(
-                  width: 160,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                    selected: layer.id == document.selectedLayerId,
+                    selectedTileColor: palette.accentSoft,
+                    onTap: () => _controller.selectLayer(layer.id),
+                  ),
+              ],
+              if (!showComposition && footage.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(22),
+                  child: Column(
                     children: [
-                      IconButton(
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                        tooltip: layer.enabled ? 'Hide layer' : 'Show layer',
-                        onPressed: () => _controller.setLayerEnabled(
-                          layer.id,
-                          !layer.enabled,
-                        ),
-                        icon: Icon(
-                          layer.enabled ? Icons.visibility : Icons.visibility_off,
-                          size: 14,
-                        ),
+                      Icon(
+                        Icons.search_off,
+                        size: 25,
+                        color: palette.secondaryText,
                       ),
-                      IconButton(
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                        tooltip: layer.solo ? 'Disable Solo' : 'Solo this layer',
-                        color: layer.solo ? palette.accent : null,
-                        onPressed: () => _controller.setLayerSolo(
-                          layer.id,
-                          !layer.solo,
+                      const SizedBox(height: 8),
+                      Text(
+                        'No project items match this search.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: palette.secondaryText,
                         ),
-                        icon: Icon(
-                          layer.solo ? Icons.headphones : Icons.headphones_outlined,
-                          size: 14,
-                        ),
-                      ),
-                      IconButton(
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                        tooltip: layer.locked ? 'Unlock layer' : 'Lock layer',
-                        onPressed: () => _controller.setLayerLocked(
-                          layer.id,
-                          !layer.locked,
-                        ),
-                        icon: Icon(
-                          layer.locked ? Icons.lock : Icons.lock_open,
-                          size: 14,
-                        ),
-                      ),
-                      PopupMenuButton<String>(
-                        padding: EdgeInsets.zero,
-                        tooltip: 'Edit layer',
-                        iconSize: 16,
-                        onSelected: (action) {
-                          if (action == 'rename') {
-                            unawaited(_renameLayerDialog(layer));
-                            return;
-                          }
-                          if (action == 'duplicate') {
-                            final duplicated = _controller.duplicateLayer(layer.id);
-                            if (mounted && duplicated) {
-                              setState(() => _notice = 'Duplicated "${layer.name}".');
-                            }
-                            return;
-                          }
-                          if (action == 'guide') {
-                            _controller.setLayerGuide(layer.id, !layer.guideLayer);
-                            return;
-                          }
-                          if (action == 'shy') {
-                            _controller.setLayerShy(layer.id, !layer.shy);
-                            return;
-                          }
-                          if (action == 'delete') {
-                            final deleted = _controller.removeLayer(layer.id);
-                            if (mounted && deleted) {
-                              setState(() => _notice = 'Deleted "${layer.name}". Use Undo to restore it.');
-                            }
-                          }
-                        },
-                        itemBuilder: (_) => [
-                          PopupMenuItem(
-                            value: 'rename',
-                            child: Row(
-                              children: [
-                                Icon(Icons.drive_file_rename_outline, size: 16),
-                                SizedBox(width: 8),
-                                Text('Rename layer'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'duplicate',
-                            child: Row(
-                              children: [
-                                Icon(Icons.copy_outlined, size: 16),
-                                SizedBox(width: 8),
-                                Text('Duplicate layer'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete_outline, size: 16),
-                                SizedBox(width: 8),
-                                Text('Delete layer'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'guide',
-                            child: Text(layer.guideLayer ? 'Disable Guide Layer' : 'Make Guide Layer'),
-                          ),
-                          PopupMenuItem(
-                            value: 'shy',
-                            child: Text(layer.shy ? 'Unmark Shy Layer' : 'Mark as Shy Layer'),
-                          ),
-                        ],
                       ),
                     ],
                   ),
                 ),
-                onTap: () => _controller.selectLayer(layer.id),
-              );
-            },
+            ],
           ),
         ),
       ],
@@ -5301,7 +5537,26 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
+                                if (_showCanvasGrid)
+                                  Positioned.fill(
+                                    child: IgnorePointer(
+                                      child: CustomPaint(
+                                        painter: _CanvasGridPainter(),
+                                      ),
+                                    ),
+                                  ),
                                 Positioned.fill(child: composite),
+                                if (_showSafeMargins || _showCenterGuides)
+                                  Positioned.fill(
+                                    child: IgnorePointer(
+                                      child: CustomPaint(
+                                        painter: _CompositionGuidesPainter(
+                                          showSafeMargins: _showSafeMargins,
+                                          showCenterGuides: _showCenterGuides,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                           if (_showMotionPaths)
                             _buildMotionPathOverlay(
                               selected,
@@ -5427,176 +5682,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              _toolChip(
-                'Select',
-                Icons.mouse,
-                _activePreviewTool == 'Select',
-                onTap: () => setState(() => _activePreviewTool = 'Select'),
-              ),
-              _toolChip(
-                'Hand',
-                Icons.pan_tool_alt,
-                _activePreviewTool == 'Hand',
-                onTap: () => setState(() => _activePreviewTool = 'Hand'),
-              ),
-              _toolChip(
-                'Rectangle',
-                Icons.rectangle_outlined,
-                _activePreviewTool == 'DrawRectangle',
-                onTap: () => setState(() => _activePreviewTool = 'DrawRectangle'),
-              ),
-              _toolChip(
-                'Rounded Rect',
-                Icons.rounded_corner,
-                _activePreviewTool == 'DrawRoundedRectangle',
-                onTap: () => setState(() => _activePreviewTool = 'DrawRoundedRectangle'),
-              ),
-              _toolChip(
-                'Ellipse',
-                Icons.circle_outlined,
-                _activePreviewTool == 'DrawEllipse',
-                onTap: () => setState(() => _activePreviewTool = 'DrawEllipse'),
-              ),
-              _toolChip(
-                'Polygon',
-                Icons.pentagon_outlined,
-                _activePreviewTool == 'DrawPolygon',
-                onTap: () => setState(() => _activePreviewTool = 'DrawPolygon'),
-              ),
-              _toolChip(
-                'Star',
-                Icons.star_outline,
-                _activePreviewTool == 'DrawStar',
-                onTap: () => setState(() => _activePreviewTool = 'DrawStar'),
-              ),
-              _toolChip(
-                'Mask',
-                Icons.crop_free,
-                _activePreviewTool == 'Mask',
-                onTap: () {
-                  final layer = _controller.selectedLayer;
-                  if (layer == null || layer.locked) {
-                    setState(() => _notice = 'Select an unlocked layer before editing masks.');
-                    return;
-                  }
-                  if (layer.masks.isEmpty) {
-                    _controller.addMask(shape: MaskShape.rectangle);
-                  }
-                  setState(() {
-                    _panel = 'Masks';
-                    _activePreviewTool = 'Mask';
-                  });
-                },
-              ),
-              _toolChip(
-                'Path',
-                Icons.edit,
-                _activePreviewTool == 'Shape',
-                onTap: () {
-                  if (_controller.selectedLayer?.kind == LayerKind.shape &&
-                      _controller.selectedLayer?.shapeStyle?.primitive ==
-                          ShapePrimitive.path) {
-                    setState(() => _activePreviewTool = 'Shape');
-                  } else {
-                    setState(() => _notice = 'Select a shape layer with a Bezier path first.');
-                  }
-                },
-              ),
-              if (_controller.selectedLayer?.kind == LayerKind.shape &&
-                  _controller.selectedLayer?.shapeStyle?.primitive ==
-                      ShapePrimitive.path) ...[
-                _toolChip(
-                  'Add Point',
-                  Icons.add_circle_outline,
-                  _activePreviewTool == 'AddVertex',
-                  onTap: () {
-                    final layer = _controller.selectedLayer!;
-                    if (_shapePathIsAnimated(layer)) {
-                      setState(() => _notice =
-                          'Add Point is disabled while path keyframes exist.');
-                    } else {
-                      setState(() {
-                        _activePreviewTool = 'AddVertex';
-                        _notice = 'Click a path segment to insert a vertex.';
-                      });
-                    }
-                  },
-                ),
-                _toolChip(
-                  'Delete',
-                  Icons.remove_circle_outline,
-                  _activePreviewTool == 'DeleteVertex',
-                  onTap: () => setState(() {
-                    _activePreviewTool = 'DeleteVertex';
-                    _notice = 'Click a path vertex to delete it.';
-                  }),
-                ),
-                _toolChip(
-                  'Corner / Smooth',
-                  Icons.account_tree_outlined,
-                  _activePreviewTool == 'ConvertVertex',
-                  onTap: () => setState(() {
-                    _activePreviewTool = 'ConvertVertex';
-                    _notice = 'Click a path vertex to toggle Corner / Smooth.';
-                  }),
-                ),
-              ],
-              _toolChip(
-                'Pen',
-                Icons.gesture,
-                _activePreviewTool == 'Pen',
-                onTap: () {
-                  var layer = _controller.selectedLayer;
-                  if (layer == null) {
-                    _controller.addLayer(
-                      LayerKind.shape,
-                      name: 'Bezier Shape',
-                    );
-                    layer = _controller.selectedLayer;
-                  }
-                  if (layer == null || layer.locked) {
-                    setState(() => _notice = 'Select an unlocked layer before drawing a path.');
-                    return;
-                  }
-                  _beginPreviewPenPath(layer);
-                },
-              ),
-              if (_activePreviewTool == 'Pen' &&
-                  _controller.selectedLayer?.kind == LayerKind.shape)
-                _toolChip(
-                  _previewPenPathClosed ? 'Closed' : 'Open',
-                  _previewPenPathClosed ? Icons.check_box : Icons.check_box_outline_blank,
-                  _previewPenPathClosed,
-                  onTap: () => setState(
-                    () => _previewPenPathClosed = !_previewPenPathClosed,
-                  ),
-                ),
-              if (_activePreviewTool == 'Pen') ...[
-                _toolChip(
-                  'Finish Path',
-                  Icons.check,
-                  false,
-                  onTap: _finishPreviewPenPath,
-                ),
-                _toolChip(
-                  'Cancel',
-                  Icons.close,
-                  false,
-                  onTap: _cancelPreviewPenPath,
-                ),
-              ],
-              _toolChip(
-                'Keyframe',
-                Icons.key,
-                false,
-                onTap: _addPreviewTransformKeyframes,
-              ),
-            ],
-          ),
+
         ],
       ),
     );
@@ -7586,23 +7672,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
-  void _reorderRightPanels(int oldIndex, int newIndex) {
-    if (newIndex > oldIndex) newIndex--;
-    setState(() {
-      final panel = _rightPanelOrder.removeAt(oldIndex);
-      _rightPanelOrder.insert(newIndex, panel);
-    });
-  }
 
-  Widget _buildActivePanel(CompositionLayer? layer) {
+
+    Widget _buildActivePanel(CompositionLayer? layer) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     const panels = <(String, String, IconData)>[
-      ('Transform', 'Transform', Icons.transform),
+      ('Transform', 'Properties', Icons.tune),
       ('Effects', 'Effect Controls', Icons.auto_awesome),
+      ('Typography', 'Character', Icons.text_fields),
+      ('Preview', 'Preview', Icons.play_circle_outline),
       ('Animation', 'Graph Editor', Icons.show_chart),
       ('Layers', 'Layer Info', Icons.layers_outlined),
       ('Timing', 'Timing', Icons.schedule),
-      ('Typography', 'Character', Icons.text_fields),
       ('Shape', 'Shape', Icons.category_outlined),
       ('Color', 'Color', Icons.color_lens_outlined),
       ('Masks', 'Masks', Icons.crop_free),
@@ -7615,11 +7696,60 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       ('Library', 'Libraries', Icons.video_library_outlined),
     ];
     final panelById = {for (final item in panels) item.$1: item};
-    final orderedPanels = _rightPanelOrder
-        .where(panelById.containsKey)
+    final active = panelById[_panel] ?? panels.first;
+    const primaryIds = {'Transform', 'Effects', 'Typography'};
+    final overflowPanels = _rightPanelOrder
+        .where((id) => panelById.containsKey(id) && !primaryIds.contains(id))
         .map((id) => panelById[id]!)
         .toList();
-    final active = panelById[_panel] ?? panels.first;
+
+    Widget dockTab((String, String, IconData) item) {
+      final selected = _panel == item.$1;
+      return Expanded(
+        child: InkWell(
+          onTap: () => setState(() => _panel = item.$1),
+          child: Container(
+            height: 35,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected ? palette.accentSoft : Colors.transparent,
+              border: Border(
+                bottom: BorderSide(
+                  color: selected ? palette.accent : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  item.$3,
+                  size: 13,
+                  color: selected ? palette.accent : palette.secondaryText,
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    item.$2.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 8,
+                      letterSpacing: 0.1,
+                      fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
+                      color: selected
+                          ? palette.primaryText
+                          : palette.secondaryText,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -7628,121 +7758,77 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       ),
       child: Column(
         children: [
-          SizedBox(
-            height: 39,
-            child: ReorderableListView.builder(
-              scrollDirection: Axis.horizontal,
-              buildDefaultDragHandles: true,
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-              itemCount: orderedPanels.length,
-              onReorder: _reorderRightPanels,
-              itemBuilder: (context, index) {
-                final item = orderedPanels[index];
-                final selected = _panel == item.$1;
-                return Tooltip(
-                  key: ValueKey<String>('dock-${item.$1}'),
-                  message: 'Drag to reorder · ${item.$2}',
-                  child: InkWell(
-                    onTap: () => setState(() => _panel = item.$1),
-                    child: Container(
-                      constraints: const BoxConstraints(minWidth: 76),
-                      padding: const EdgeInsets.symmetric(horizontal: 9),
-                      decoration: BoxDecoration(
-                        color: selected ? palette.accentSoft : Colors.transparent,
-                        border: Border(
-                          bottom: BorderSide(
-                            color: selected ? palette.accent : Colors.transparent,
-                            width: 2,
-                          ),
+          Row(
+            children: [
+              dockTab(panels[0]),
+              dockTab(panels[1]),
+              dockTab(panels[2]),
+              SizedBox(
+                width: 34,
+                child: PopupMenuButton<String>(
+                  tooltip: 'Open another panel',
+                  padding: EdgeInsets.zero,
+                  icon: Icon(Icons.more_horiz, size: 17, color: palette.secondaryText),
+                  onSelected: (value) {
+                    if (value == 'restore') {
+                      _applyWorkspacePreset('After Effects');
+                    } else {
+                      setState(() => _panel = value);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    for (final item in overflowPanels)
+                      PopupMenuItem<String>(
+                        value: item.$1,
+                        child: Row(
+                          children: [
+                            Icon(item.$3, size: 15),
+                            const SizedBox(width: 8),
+                            Text(item.$2),
+                          ],
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            item.$3,
-                            size: 13,
-                            color: selected
-                                ? palette.accent
-                                : palette.secondaryText,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            item.$2.toUpperCase(),
-                            maxLines: 1,
-                            style: TextStyle(
-                              fontSize: 8,
-                              letterSpacing: 0.25,
-                              fontWeight: selected
-                                  ? FontWeight.w900
-                                  : FontWeight.w600,
-                              color: selected
-                                  ? palette.primaryText
-                                  : palette.secondaryText,
-                            ),
-                          ),
-                        ],
-                      ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'restore',
+                      child: Text('Restore After Effects Workspace'),
                     ),
-                  ),
-                );
-              },
-            ),
+                  ],
+                ),
+              ),
+            ],
           ),
           Container(
-            height: 39,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
               color: palette.toolbar,
               border: Border(
-                top: BorderSide(color: palette.border),
                 bottom: BorderSide(color: palette.border),
               ),
             ),
             child: Row(
               children: [
-                Icon(active.$3, size: 15, color: palette.accent),
-                const SizedBox(width: 8),
+                Icon(active.$3, size: 14, color: palette.accent),
+                const SizedBox(width: 7),
                 Expanded(
                   child: Text(
                     active.$2.toUpperCase(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 10,
-                      letterSpacing: 1,
+                      fontSize: 9,
+                      letterSpacing: 0.7,
                       fontWeight: FontWeight.w900,
                       color: palette.primaryText,
                     ),
                   ),
                 ),
                 Text(
-                  layer == null ? 'NO LAYER SELECTED' : layer.name,
+                  layer == null ? 'NO LAYER' : layer.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 8,
-                    color: palette.secondaryText,
-                  ),
-                ),
-                const SizedBox(width: 5),
-                PopupMenuButton<String>(
-                  tooltip: 'Restore After Effects workspace',
-                  onSelected: (_) => _applyWorkspacePreset('After Effects'),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
-                      value: 'restore',
-                      child: Text('Restore Default Panel Layout'),
-                    ),
-                  ],
-                  child: Padding(
-                    padding: const EdgeInsets.all(5),
-                    child: Icon(
-                      Icons.more_horiz,
-                      size: 17,
-                      color: palette.secondaryText,
-                    ),
-                  ),
+                  style: TextStyle(fontSize: 8, color: palette.secondaryText),
                 ),
               ],
             ),
@@ -7759,11 +7845,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             padding: const EdgeInsets.all(12),
                             child: _buildAssetLibraryPanel(null),
                           )
-                        : const Center(
-                            child: Text('Select a layer to edit'),
-                          )
+                        : _panel == 'Preview'
+                            ? SingleChildScrollView(
+                                padding: const EdgeInsets.all(10),
+                                child: _buildPreviewPanel(),
+                              )
+                            : const Center(
+                                child: Text('Select a layer to edit'),
+                              )
                 : SingleChildScrollView(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     child: _panelContent(layer),
                   ),
           ),
@@ -7773,7 +7864,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
 
-  Widget _panelContent(CompositionLayer layer) {
+
+    Widget _panelContent(CompositionLayer layer) {
     switch (_panel) {
       case 'Typography':
         return _buildTypographyPanel(layer);
@@ -7781,6 +7873,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         return _buildTimingPanel(layer);
       case 'Transform':
         return _buildTransformPanel(layer);
+      case 'Preview':
+        return _buildPreviewPanel();
       case 'Color':
         return _buildColorPanel(layer);
       case 'Animation':
@@ -7808,6 +7902,218 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       default:
         return _buildLayerInfo(layer);
     }
+  }
+
+  Widget _buildPreviewPanel() {
+    final document = _controller.document;
+    final frameStep =
+        (1000 / math.max(1, document.frameRate)).round().clamp(1, 1000).toInt();
+    final duration = math.max(1, document.durationMs);
+    final currentFrame =
+        (document.playheadMs * document.frameRate / 1000).floor();
+    final totalFrames =
+        (document.durationMs * document.frameRate / 1000).ceil();
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+
+    void jumpTo(int timeMs) {
+      _pausePreviewPlayback();
+      _controller.setPlayhead(timeMs);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _panelHeader('PREVIEW', Icons.play_circle_outline),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                document.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+              decoration: BoxDecoration(
+                color: palette.panelRaised,
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: palette.border),
+              ),
+              child: Text(
+                '${document.frameRate.toStringAsFixed(2)} FPS',
+                style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                  color: palette.accent,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${document.width} × ${document.height}  ·  ${_time(document.durationMs)}',
+          style: TextStyle(fontSize: 9, color: palette.secondaryText),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 7),
+          decoration: BoxDecoration(
+            color: palette.panelRaised,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: palette.border),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              IconButton(
+                tooltip: 'Go to beginning',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => jumpTo(0),
+                icon: const Icon(Icons.first_page, size: 19),
+              ),
+              IconButton(
+                tooltip: 'Step back one frame',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => jumpTo(document.playheadMs - frameStep),
+                icon: const Icon(Icons.skip_previous, size: 19),
+              ),
+              IconButton(
+                tooltip: _previewPlaying ? 'Pause preview' : 'Play preview',
+                visualDensity: VisualDensity.compact,
+                iconSize: 31,
+                onPressed: _togglePreviewPlayback,
+                icon: Icon(
+                  _previewPlaying
+                      ? Icons.pause_circle_filled
+                      : Icons.play_circle_fill,
+                  color: palette.accent,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Step forward one frame',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => jumpTo(document.playheadMs + frameStep),
+                icon: const Icon(Icons.skip_next, size: 19),
+              ),
+              IconButton(
+                tooltip: 'Go to end',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => jumpTo(math.max(0, document.durationMs - frameStep)),
+                icon: const Icon(Icons.last_page, size: 19),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'CURRENT TIME',
+              style: TextStyle(
+                fontSize: 8,
+                letterSpacing: 0.65,
+                fontWeight: FontWeight.w900,
+                color: palette.secondaryText,
+              ),
+            ),
+            Text(
+              '${_time(document.playheadMs)} / ${_time(document.durationMs)}',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: palette.primaryText,
+                fontFeatures: const [ui.FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          min: 0,
+          max: duration.toDouble(),
+          value: document.playheadMs.clamp(0, duration).toDouble(),
+          onChanged: (value) {
+            _pausePreviewPlayback();
+            _controller.setPlayhead(value.round());
+          },
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'FRAME ${currentFrame.toString().padLeft(4, '0')} / ${totalFrames.toString().padLeft(4, '0')}',
+              style: TextStyle(
+                fontSize: 8,
+                fontWeight: FontWeight.w800,
+                color: palette.secondaryText,
+              ),
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: _previewLoopPlayback
+                      ? 'Disable loop playback'
+                      : 'Enable loop playback',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  onPressed: () => setState(
+                    () => _previewLoopPlayback = !_previewLoopPlayback,
+                  ),
+                  icon: Icon(
+                    Icons.repeat,
+                    size: 16,
+                    color: _previewLoopPlayback
+                        ? palette.accent
+                        : palette.secondaryText,
+                  ),
+                ),
+                Text(
+                  'LOOP',
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                    color: _previewLoopPlayback
+                        ? palette.accent
+                        : palette.secondaryText,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Icon(
+              _previewPlaying ? Icons.play_arrow_rounded : Icons.stop_rounded,
+              size: 13,
+              color: _previewPlaying ? palette.accent : palette.secondaryText,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              _previewPlaying ? 'PREVIEW PLAYING' : 'PREVIEW STOPPED',
+              style: TextStyle(
+                fontSize: 8,
+                letterSpacing: 0.45,
+                fontWeight: FontWeight.w900,
+                color: _previewPlaying ? palette.accent : palette.secondaryText,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '${document.width} × ${document.height}',
+              style: TextStyle(fontSize: 8, color: palette.secondaryText),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   Widget _buildLayerInfo(CompositionLayer layer) {
@@ -8247,6 +8553,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ('Position X', 'position.x', 0.0, 1920.0),
           ('Position Y', 'position.y', 0.0, 1080.0),
           ('Position Z', 'position.z', -2000.0, 2000.0),
+          ('Anchor X', 'anchor.x', -2000.0, 2000.0),
+          ('Anchor Y', 'anchor.y', -2000.0, 2000.0),
+          ('Anchor Z', 'anchor.z', -2000.0, 2000.0),
           ('Scale X', 'scale.x', 0.0, 400.0),
           ('Scale Y', 'scale.y', 0.0, 400.0),
           ('Scale Z', 'scale.z', 0.0, 400.0),
@@ -11831,149 +12140,436 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
-      height: 260,
-      padding: const EdgeInsets.all(10),
+      height: _timelineHeight,
+      padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
       decoration: BoxDecoration(
         color: palette.toolbar,
         border: Border(top: BorderSide(color: palette.border)),
       ),
       child: Column(
         children: [
-          Row(
-            children: [
-              const Icon(Icons.timeline, size: 16),
-              const SizedBox(width: 8),
-              Text(
-                'TIMELINE  ·  ${_controller.document.name.toUpperCase()}',
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
-                ),
-              ),
-              const Spacer(),
-              Text(_time(playhead), style: const TextStyle(fontSize: 10, color: Color(0xFFB7C4DC))),
-              Builder(
-                builder: (context) {
-                  final stats = _previewFrameService.stats;
-                  final decodeText = stats.averageDecodeMs <= 0
-                      ? 'decode warming'
-                      : '${stats.averageDecodeMs.round()} ms decode';
-                  final uiText = stats.averageUiFrameMs <= 0
-                      ? 'UI warming'
-                      : '${stats.averageUiFrameMs.round()} ms UI';
-                  final queueText = stats.averageQueueWaitMs <= 0
-                      ? 'queue ready'
-                      : '${stats.averageQueueWaitMs.round()} ms queue';
-                  return Text(
-                    '${stats.effectivePreviewWidth}px · '
-                    '${stats.effectivePreviewFrameRate} FPS · '
-                    '$decodeText · $queueText · $uiText · '
-                    '${stats.droppedRequests} skipped',
+          SizedBox(
+            height: 34,
+            child: Row(
+              children: [
+                const Icon(Icons.movie_filter_outlined, size: 16),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    'SEQUENCE  ·  ${_controller.document.name.toUpperCase()}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 8,
-                      color: Color(0xFF8D9CB3),
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.8,
                     ),
-                  );
-                },
-              ),
-              IconButton(
-                tooltip: _previewPlaying ? 'Pause realtime preview' : 'Play realtime preview',
-                onPressed: duration <= 0 ? null : _togglePreviewPlayback,
-                icon: Icon(
-                  _previewPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
-                  size: 21,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0D1927),
+                    border: Border.all(color: const Color(0xFF2F4967)),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    _time(playhead),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF71B6FF),
+                      fontFeatures: [ui.FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${_controller.document.frameRate.toStringAsFixed(0)} FPS',
+                  style: TextStyle(fontSize: 8, color: palette.secondaryText),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Hide Shy Tracks',
+                  onPressed: () => setState(() => _hideShyLayers = !_hideShyLayers),
+                  icon: Icon(
+                    Icons.filter_alt_outlined,
+                    size: 15,
+                    color: _hideShyLayers ? palette.accent : palette.secondaryText,
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Go to sequence start',
+                  onPressed: () {
+                    _pausePreviewPlayback();
+                    _controller.setPlayhead(0);
+                  },
+                  icon: const Icon(Icons.first_page, size: 17),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Step one frame back',
+                  onPressed: () {
+                    _pausePreviewPlayback();
+                    _controller.setPlayhead(
+                      playhead - (1000 / _controller.document.frameRate).round(),
+                    );
+                  },
+                  icon: const Icon(Icons.chevron_left, size: 17),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: _previewPlaying ? 'Pause sequence' : 'Play sequence',
+                  onPressed: duration <= 0 ? null : _togglePreviewPlayback,
+                  icon: Icon(
+                    _previewPlaying ? Icons.pause : Icons.play_arrow,
+                    size: 20,
+                    color: palette.accent,
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Step one frame forward',
+                  onPressed: () {
+                    _pausePreviewPlayback();
+                    _controller.setPlayhead(
+                      playhead + (1000 / _controller.document.frameRate).round(),
+                    );
+                  },
+                  icon: const Icon(Icons.chevron_right, size: 17),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Go to sequence end',
+                  onPressed: () {
+                    _pausePreviewPlayback();
+                    _controller.setPlayhead(duration);
+                  },
+                  icon: const Icon(Icons.last_page, size: 17),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Previous keyframe',
+                  onPressed: () => _jumpToKeyframe(forward: false),
+                  icon: const Icon(Icons.skip_previous, size: 16),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Next keyframe',
+                  onPressed: () => _jumpToKeyframe(forward: true),
+                  icon: const Icon(Icons.skip_next, size: 16),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Add position keyframe',
+                  onPressed: _selected == null
+                      ? null
+                      : () => _addKeyframe('position.x'),
+                  icon: const Icon(Icons.diamond_outlined, size: 16),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Split selected clip at playhead',
+                  onPressed: _selected == null || _selected!.locked
+                      ? null
+                      : _splitSelectedLayer,
+                  icon: const Icon(Icons.content_cut, size: 16),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Delete selected clip',
+                  onPressed: _selected == null ? null : _deleteSelectedLayer,
+                  icon: const Icon(Icons.delete_outline, size: 16),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: _graphEditorVisible ? 'Show tracks' : 'Show Graph Editor',
+                  color: _graphEditorVisible ? palette.accent : null,
+                  onPressed: () => setState(() {
+                    _graphEditorVisible = !_graphEditorVisible;
+                    _panel = 'Animation';
+                  }),
+                  icon: const Icon(Icons.show_chart, size: 17),
+                ),
+                PopupMenuButton<TransitionKind>(
+                  tooltip: 'Add transition',
+                  onSelected: _controller.addTransition,
+                  itemBuilder: (_) => TransitionKind.values
+                      .map((kind) => PopupMenuItem(value: kind, child: Text(kind.name)))
+                      .toList(),
+                  child: const Padding(
+                    padding: EdgeInsets.all(7),
+                    child: Icon(Icons.auto_awesome_motion, size: 16),
+                  ),
+                ),
+                PopupMenuButton<double>(
+                  tooltip: 'Timeline zoom preset',
+                  onSelected: _setTimelineZoom,
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 1, child: Text('Fit sequence')),
+                    PopupMenuItem(value: 1.5, child: Text('150%')),
+                    PopupMenuItem(value: 2, child: Text('200%')),
+                    PopupMenuItem(value: 4, child: Text('400%')),
+                    PopupMenuItem(value: 8, child: Text('800%')),
+                    PopupMenuItem(value: 12, child: Text('1200%')),
+                  ],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    child: Text(
+                      '${(_timelineZoom * 100).round()}%',
+                      style: TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w900,
+                        color: palette.accent,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 3),
+          _buildTimelineTimeRuler(duration, playhead),
+          Expanded(
+            child: Listener(
+              onPointerSignal: _handleTimelinePointerSignal,
+              child: _graphEditorVisible
+                  ? _buildGraphEditor(duration)
+                  : layerRows,
+            ),
+          ),
+          _buildTimelineZoomNavigator(),
+        ],
+      ),
+    );
+  }
+
+  void _setTimelineZoom(double value) {
+    setState(() {
+      _timelineZoom = value.clamp(1.0, 12.0).toDouble();
+      _timelineScrollRatio = _timelineScrollRatio.clamp(0.0, 1.0).toDouble();
+    });
+  }
+
+  void _handleTimelinePointerSignal(PointerSignalEvent signal) {
+    if (signal is! PointerScrollEvent) return;
+    final shift = HardwareKeyboard.instance.isShiftPressed;
+    final control = HardwareKeyboard.instance.isControlPressed;
+    if (control) {
+      final multiplier = math.exp(-signal.scrollDelta.dy * 0.002);
+      _setTimelineZoom(_timelineZoom * multiplier);
+      return;
+    }
+    final horizontalDelta = signal.scrollDelta.dx != 0
+        ? signal.scrollDelta.dx
+        : shift
+            ? signal.scrollDelta.dy
+            : 0.0;
+    if (horizontalDelta == 0) return;
+    setState(() {
+      _timelineScrollRatio =
+          (_timelineScrollRatio + horizontalDelta / 650).clamp(0.0, 1.0).toDouble();
+    });
+  }
+
+  Widget _buildTimelineTimeRuler(int duration, int playhead) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final labelWidth = math.min(228.0, constraints.maxWidth * 0.46).toDouble();
+        return SizedBox(
+          height: 27,
+          child: Row(
+            children: [
+              SizedBox(
+                width: labelWidth,
+                child: Container(
+                  padding: const EdgeInsets.only(left: 8),
+                  alignment: Alignment.centerLeft,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF182538),
+                    border: Border(
+                      right: BorderSide(color: palette.border),
+                      top: BorderSide(color: palette.border),
+                      bottom: BorderSide(color: palette.border),
+                    ),
+                  ),
+                  child: Text(
+                    'TRACKS  /  TIME',
+                    style: TextStyle(
+                      color: palette.secondaryText,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.65,
+                    ),
+                  ),
                 ),
               ),
-              IconButton(
-                tooltip: 'Previous frame',
-                onPressed: () {
-                  _pausePreviewPlayback();
-                  _controller.setPlayhead(
-                    playhead - (1000 / _controller.document.frameRate).round(),
-                  );
-                },
-                icon: const Icon(Icons.chevron_left, size: 18),
-              ),
-              IconButton(
-                tooltip: 'Next frame',
-                onPressed: () {
-                  _pausePreviewPlayback();
-                  _controller.setPlayhead(
-                    playhead + (1000 / _controller.document.frameRate).round(),
-                  );
-                },
-                icon: const Icon(Icons.chevron_right, size: 18),
-              ),
-              IconButton(
-                tooltip: 'Previous keyframe',
-                onPressed: () => _jumpToKeyframe(forward: false),
-                icon: const Icon(Icons.skip_previous, size: 18),
-              ),
-              IconButton(
-                tooltip: 'Next keyframe',
-                onPressed: () => _jumpToKeyframe(forward: true),
-                icon: const Icon(Icons.skip_next, size: 18),
-              ),
-              IconButton(
-                tooltip: 'Add position keyframe',
-                onPressed: _selected == null
-                    ? null
-                    : () => _addKeyframe('position.x'),
-                icon: const Icon(Icons.diamond_outlined, size: 17),
-              ),
-              IconButton(
-                tooltip: 'Split selected clip at playhead',
-                onPressed: _selected == null || _selected!.locked
-                    ? null
-                    : _splitSelectedLayer,
-                icon: const Icon(Icons.content_cut, size: 17),
-              ),
-              IconButton(
-                tooltip: 'Delete selected layer',
-                onPressed: _selected == null ? null : _deleteSelectedLayer,
-                icon: const Icon(Icons.delete_outline, size: 17),
-              ),
-              IconButton(
-                tooltip: _graphEditorVisible
-                    ? 'Show layer timeline'
-                    : 'Show Graph Editor',
-                color: _graphEditorVisible ? palette.accent : null,
-                onPressed: () => setState(() {
-                  _graphEditorVisible = !_graphEditorVisible;
-                  _panel = 'Animation';
-                }),
-                icon: const Icon(Icons.show_chart, size: 18),
-              ),
-              PopupMenuButton<TransitionKind>(
-                tooltip: 'Add transition',
-                onSelected: _controller.addTransition,
-                itemBuilder: (_) => TransitionKind.values
-                    .map((kind) => PopupMenuItem(value: kind, child: Text(kind.name)))
-                    .toList(),
-                child: const Padding(
-                  padding: EdgeInsets.all(8),
-                  child: Icon(Icons.auto_awesome_motion, size: 18),
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (details) => _scrubTimelineAt(
+                    details.localPosition.dx,
+                    (constraints.maxWidth - labelWidth).toDouble(),
+                    duration,
+                  ),
+                  onHorizontalDragStart: (details) => _scrubTimelineAt(
+                    details.localPosition.dx,
+                    (constraints.maxWidth - labelWidth).toDouble(),
+                    duration,
+                  ),
+                  onHorizontalDragUpdate: (details) => _scrubTimelineAt(
+                    details.localPosition.dx,
+                    (constraints.maxWidth - labelWidth).toDouble(),
+                    duration,
+                  ),
+                  child: CustomPaint(
+                    painter: _PremiereTimelineRulerPainter(
+                      durationMs: duration,
+                      playheadMs: playhead,
+                      frameRate: _controller.document.frameRate,
+                      zoom: _timelineZoom,
+                      scrollRatio: _timelineScrollRatio,
+                      background: const Color(0xFF101A29),
+                      lineColor: const Color(0xFF354760),
+                      textColor: palette.secondaryText,
+                      playheadColor: const Color(0xFF48A7FF),
+                    ),
+                    child: const SizedBox.expand(),
+                  ),
                 ),
               ),
             ],
           ),
-          Slider(
-            value: playhead.toDouble().clamp(0, duration.toDouble()).toDouble(),
-            min: 0,
-            max: duration.toDouble(),
-            onChanged: (value) {
-              _pausePreviewPlayback();
-              _controller.setPlayhead(value.round());
-            },
+        );
+      },
+    );
+  }
+
+  void _scrubTimelineAt(double x, double viewportWidth, int duration) {
+    if (viewportWidth <= 0 || duration <= 0) return;
+    final contentWidth = viewportWidth * _timelineZoom;
+    final scrollOffset = (contentWidth - viewportWidth) * _timelineScrollRatio;
+    final contentX = (x + scrollOffset).clamp(0.0, contentWidth);
+    final timeMs = (contentX / contentWidth * duration).round();
+    _pausePreviewPlayback();
+    _controller.setPlayhead(timeMs.clamp(0, duration).toInt());
+  }
+
+  Widget _buildTimelineZoomNavigator() {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final labelWidth = math.min(228.0, constraints.maxWidth * 0.46).toDouble();
+        return SizedBox(
+          height: 19,
+          child: Row(
+            children: [
+              SizedBox(
+                width: labelWidth,
+                child: Row(
+                  children: [
+                    Text(
+                      'ZOOM / SCROLL',
+                      style: TextStyle(
+                        fontSize: 7,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                        color: palette.secondaryText,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(minWidth: 19, minHeight: 18),
+                      tooltip: 'Zoom out',
+                      onPressed: () => _setTimelineZoom(_timelineZoom / 1.5),
+                      icon: const Icon(Icons.remove, size: 12),
+                    ),
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(minWidth: 19, minHeight: 18),
+                      tooltip: 'Zoom in',
+                      onPressed: () => _setTimelineZoom(_timelineZoom * 1.5),
+                      icon: const Icon(Icons.add, size: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, barConstraints) {
+                    final barWidth = barConstraints.maxWidth;
+                    final thumbWidth = (barWidth / _timelineZoom)
+                        .clamp(math.min(18.0, barWidth), barWidth)
+                        .toDouble();
+                    final travel = math.max(0.0, barWidth - thumbWidth).toDouble();
+                    final thumbLeft = travel * _timelineScrollRatio;
+                    void updateFromX(double x) {
+                      if (travel <= 0) {
+                        setState(() => _timelineScrollRatio = 0);
+                        return;
+                      }
+                      setState(() {
+                        _timelineScrollRatio =
+                            ((x - thumbWidth / 2) / travel).clamp(0.0, 1.0).toDouble();
+                      });
+                    }
+
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapDown: (details) => updateFromX(details.localPosition.dx),
+                      onHorizontalDragUpdate: (details) {
+                        if (travel <= 0) return;
+                        setState(() {
+                          _timelineScrollRatio =
+                              (_timelineScrollRatio + details.delta.dx / travel)
+                                  .clamp(0.0, 1.0)
+                                  .toDouble();
+                        });
+                      },
+                      child: SizedBox.expand(
+                        child: Stack(
+                          alignment: Alignment.centerLeft,
+                          children: [
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              height: 5,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF26374C),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: thumbLeft,
+                              width: thumbWidth,
+                              height: 11,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF6C8EBB),
+                                  border: Border.all(color: const Color(0xFF9AC7F8)),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: _graphEditorVisible
-                ? _buildGraphEditor(duration)
-                : layerRows,
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -12002,6 +12598,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     KeyframeTrack track,
     int duration, {
     required double labelWidth,
+    required double trackContentWidth,
+    required double scrollOffset,
   }) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     final safeDuration = math.max(1, duration);
@@ -12017,52 +12615,66 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 8,
-                  color: palette.secondaryText,
-                ),
+                style: TextStyle(fontSize: 8, color: palette.secondaryText),
               ),
             ),
           ),
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: palette.appBackground.withValues(alpha: 0.6),
-                border: Border(
-                  top: BorderSide(color: palette.border.withValues(alpha: 0.45)),
-                  bottom: BorderSide(color: palette.border.withValues(alpha: 0.45)),
-                ),
-              ),
-              child: LayoutBuilder(
-                builder: (context, constraints) => Stack(
-                  clipBehavior: Clip.hardEdge,
-                  children: [
-                    for (final keyframe in track.keyframes)
-                      Positioned(
-                        left: (keyframe.timeMs / safeDuration *
-                                constraints.maxWidth - 5)
-                            .clamp(0.0, math.max(0.0, constraints.maxWidth - 10))
-                            .toDouble(),
-                        top: 2,
-                        bottom: 2,
-                        child: Tooltip(
-                          message:
-                              '${_time(keyframe.timeMs)} · ${keyframe.value.toStringAsFixed(3)} · ${keyframe.interpolation.name}',
-                          child: GestureDetector(
-                            onTap: () {
-                              _pausePreviewPlayback();
-                              _controller.setPlayhead(keyframe.timeMs);
-                            },
-                            child: const Icon(
-                              Icons.diamond,
-                              size: 10,
-                              color: Color(0xFFE4C36B),
-                            ),
-                          ),
+            child: ClipRect(
+              child: Stack(
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  Positioned(
+                    left: -scrollOffset,
+                    width: trackContentWidth,
+                    top: 0,
+                    bottom: 0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: palette.appBackground.withValues(alpha: 0.6),
+                        border: Border(
+                          top: BorderSide(color: palette.border.withValues(alpha: 0.45)),
+                          bottom: BorderSide(color: palette.border.withValues(alpha: 0.45)),
                         ),
                       ),
-                  ],
-                ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) => Stack(
+                          clipBehavior: Clip.hardEdge,
+                          children: [
+                            for (final keyframe in track.keyframes)
+                              Positioned(
+                                left: (keyframe.timeMs / safeDuration *
+                                            constraints.maxWidth -
+                                        5)
+                                    .clamp(
+                                      0.0,
+                                      math.max(0.0, constraints.maxWidth - 10),
+                                    )
+                                    .toDouble(),
+                                top: 2,
+                                bottom: 2,
+                                child: Tooltip(
+                                  message:
+                                      '${_time(keyframe.timeMs)} · ${keyframe.value.toStringAsFixed(3)} · ${keyframe.interpolation.name}',
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      _pausePreviewPlayback();
+                                      _controller.setPlayhead(keyframe.timeMs);
+                                    },
+                                    child: const Icon(
+                                      Icons.diamond,
+                                      size: 10,
+                                      color: Color(0xFFE4C36B),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -12080,8 +12692,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   ) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final labelWidth = math.min(130.0, constraints.maxWidth);
-        final trackWidth = math.max(0.0, constraints.maxWidth - labelWidth);
+        final labelWidth = math.min(228.0, constraints.maxWidth * 0.46).toDouble();
+        final trackWidth = math.max(1.0, constraints.maxWidth - labelWidth).toDouble();
+        final contentWidth = (trackWidth * _timelineZoom).toDouble();
+        final scrollOffset =
+            (contentWidth - trackWidth) * _timelineScrollRatio;
         final selectedId = _controller.document.selectedLayerId;
         return Stack(
           clipBehavior: Clip.hardEdge,
@@ -12094,28 +12709,46 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 final tracks = _timelineTracksFor(layer);
                 final expanded = selected ||
                     _expandedTimelineLayers.contains(layer.id);
+                final isAudio = layer.kind == LayerKind.audio;
+                final trackGroup = layers
+                    .where((item) => (item.kind == LayerKind.audio) == isAudio)
+                    .toList(growable: false);
+                final trackNumber =
+                    trackGroup.indexWhere((item) => item.id == layer.id) + 1;
+                final trackLabel = '${isAudio ? 'A' : 'V'}${trackNumber}';
+                final trackColor = isAudio
+                    ? const Color(0xFF168C84)
+                    : const Color(0xFF2878C7);
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Container(
-                      color: selected
-                          ? const Color(0x223C65A8)
-                          : Colors.transparent,
+                      height: 35,
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? const Color(0x223C65A8)
+                            : const Color(0xFF141F2D),
+                        border: Border(
+                          bottom: BorderSide(
+                            color: const Color(0xFF29384B).withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 3),
                       child: Row(
                         children: [
                           SizedBox(
-                            width: 130,
+                            width: labelWidth,
                             child: Row(
                               children: [
                                 SizedBox(
-                                  width: 21,
+                                  width: 20,
                                   child: IconButton(
                                     padding: EdgeInsets.zero,
                                     visualDensity: VisualDensity.compact,
                                     tooltip: expanded
-                                        ? 'Collapse layer properties'
-                                        : 'Expand layer properties',
+                                        ? 'Collapse clip properties'
+                                        : 'Expand clip properties',
                                     onPressed: () => setState(() {
                                       if (_expandedTimelineLayers.contains(layer.id)) {
                                         _expandedTimelineLayers.remove(layer.id);
@@ -12124,13 +12757,112 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                       }
                                     }),
                                     icon: Icon(
-                                      expanded
-                                          ? Icons.expand_more
-                                          : Icons.chevron_right,
+                                      expanded ? Icons.expand_more : Icons.chevron_right,
                                       size: 14,
+                                      color: paletteText(context),
                                     ),
                                   ),
                                 ),
+                                Container(
+                                  width: 29,
+                                  height: 23,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: trackColor,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    trackLabel,
+                                    style: const TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  padding: EdgeInsets.zero,
+                                  visualDensity: VisualDensity.compact,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 21,
+                                    minHeight: 22,
+                                  ),
+                                  tooltip: isAudio
+                                      ? (layer.enabled ? 'Mute audio track' : 'Unmute audio track')
+                                      : (layer.enabled ? 'Disable video track' : 'Enable video track'),
+                                  onPressed: () => _controller.setLayerEnabled(
+                                    layer.id,
+                                    !layer.enabled,
+                                  ),
+                                  icon: Icon(
+                                    isAudio
+                                        ? (layer.enabled ? Icons.volume_up : Icons.volume_off)
+                                        : (layer.enabled
+                                            ? Icons.visibility_outlined
+                                            : Icons.visibility_off_outlined),
+                                    size: 13,
+                                  ),
+                                ),
+                                IconButton(
+                                  padding: EdgeInsets.zero,
+                                  visualDensity: VisualDensity.compact,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 21,
+                                    minHeight: 22,
+                                  ),
+                                  tooltip: layer.solo ? 'Disable Solo' : 'Solo this track',
+                                  color: layer.solo ? palette.accent : null,
+                                  onPressed: () => _controller.setLayerSolo(
+                                    layer.id,
+                                    !layer.solo,
+                                  ),
+                                  icon: Icon(
+                                    isAudio
+                                        ? (layer.solo ? Icons.headphones : Icons.headphones_outlined)
+                                        : (layer.solo ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+                                    size: 13,
+                                  ),
+                                ),
+                                IconButton(
+                                  padding: EdgeInsets.zero,
+                                  visualDensity: VisualDensity.compact,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 21,
+                                    minHeight: 22,
+                                  ),
+                                  tooltip: layer.locked ? 'Unlock track' : 'Lock track',
+                                  color: layer.locked ? palette.accent : null,
+                                  onPressed: () => _controller.setLayerLocked(
+                                    layer.id,
+                                    !layer.locked,
+                                  ),
+                                  icon: Icon(
+                                    layer.locked ? Icons.lock : Icons.lock_open,
+                                    size: 12,
+                                  ),
+                                ),
+                                IconButton(
+                                  padding: EdgeInsets.zero,
+                                  visualDensity: VisualDensity.compact,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 21,
+                                    minHeight: 22,
+                                  ),
+                                  tooltip: layer.shy ? 'Unmark Shy Track' : 'Mark Shy Track',
+                                  color: layer.shy ? palette.accent : null,
+                                  onPressed: () => _controller.setLayerShy(
+                                    layer.id,
+                                    !layer.shy,
+                                  ),
+                                  icon: const Icon(Icons.visibility_off_outlined, size: 12),
+                                ),
+                                const SizedBox(width: 3),
+                                Icon(
+                                  _iconFor(layer.kind),
+                                  size: 13,
+                                  color: selected ? const Color(0xFFEAF0FF) : paletteText(context),
+                                ),
+                                const SizedBox(width: 4),
                                 Expanded(
                                   child: InkWell(
                                     onTap: () => _controller.selectLayer(layer.id),
@@ -12140,9 +12872,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         fontSize: 9,
-                                        fontWeight: selected
-                                            ? FontWeight.w900
-                                            : FontWeight.w500,
+                                        fontWeight: selected ? FontWeight.w900 : FontWeight.w500,
                                         color: selected
                                             ? const Color(0xFFEAF0FF)
                                             : paletteText(context),
@@ -12154,7 +12884,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             ),
                           ),
                           Expanded(
-                            child: _buildTimelineClip(layer, duration),
+                            child: ClipRect(
+                              child: Stack(
+                                clipBehavior: Clip.hardEdge,
+                                children: [
+                                  Positioned(
+                                    left: -scrollOffset,
+                                    width: contentWidth,
+                                    top: 0,
+                                    bottom: 0,
+                                    child: _buildTimelineClip(layer, duration),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -12166,6 +12909,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                           track.track,
                           duration,
                           labelWidth: labelWidth,
+                          trackContentWidth: contentWidth,
+                          scrollOffset: scrollOffset,
                         ),
                   ],
                 );
@@ -12180,19 +12925,34 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                         currentDuration)
                     .clamp(0.0, 1.0)
                     .toDouble();
-                final x = (labelWidth + progress * trackWidth)
+                final x = (labelWidth +
+                        progress * contentWidth -
+                        scrollOffset)
                     .clamp(
-                      0.0,
-                      math.max(0.0, constraints.maxWidth - 1),
+                      labelWidth,
+                      math.max(labelWidth, constraints.maxWidth - 1),
                     )
                     .toDouble();
                 return Positioned(
                   left: x,
                   top: 0,
                   bottom: 0,
-                  width: 1,
+                  width: 2,
                   child: IgnorePointer(
-                    child: Container(color: const Color(0xFFFFC36A)),
+                    child: Container(
+                      color: const Color(0xFF48A7FF),
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF48A7FF),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 );
               },
@@ -12323,9 +13083,22 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                 },
                               ),
                             ),
+                          if (layer.effects.isNotEmpty)
+                            Positioned(
+                              right: 4,
+                              top: 2,
+                              child: Text(
+                                'fx ${layer.effects.length}',
+                                style: const TextStyle(
+                                  fontSize: 7,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFFE8D28B),
+                                ),
+                              ),
+                            ),
                           Positioned(
                             left: 5,
-                            right: 12,
+                            right: 28,
                             top: 4,
                             child: Text(
                               layer.name,
@@ -13417,20 +14190,118 @@ class _CanvasGridPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF263249)
-      ..strokeWidth = 0.5;
-    const step = 24.0;
-    for (var x = 0.0; x < size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (var y = 0.0; y < size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    const cellSize = 18.0;
+    final light = Paint()..color = const Color(0xFF3A4352);
+    final dark = Paint()..color = const Color(0xFF252D3A);
+    for (var row = 0; row * cellSize < size.height; row++) {
+      for (var column = 0; column * cellSize < size.width; column++) {
+        final rect = Rect.fromLTWH(
+          column * cellSize,
+          row * cellSize,
+          cellSize,
+          cellSize,
+        );
+        canvas.drawRect(
+          rect,
+          (row + column).isEven ? light : dark,
+        );
+      }
     }
   }
 
   @override
   bool shouldRepaint(covariant _CanvasGridPainter oldDelegate) => false;
+}
+
+class _CompositionGuidesPainter extends CustomPainter {
+  const _CompositionGuidesPainter({
+    required this.showSafeMargins,
+    required this.showCenterGuides,
+  });
+
+  final bool showSafeMargins;
+  final bool showCenterGuides;
+
+  void _drawDashedLine(
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Paint paint,
+  ) {
+    final delta = end - start;
+    final length = delta.distance;
+    if (length <= 0) return;
+    final direction = delta / length;
+    const dashLength = 8.0;
+    const gapLength = 5.0;
+    for (var offset = 0.0; offset < length; offset += dashLength + gapLength) {
+      final finish = math.min(length, offset + dashLength);
+      canvas.drawLine(
+        start + direction * offset,
+        start + direction * finish,
+        paint,
+      );
+    }
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (showSafeMargins) {
+      final actionSafe = Paint()
+        ..color = const Color(0xBFFFFFFF)
+        ..strokeWidth = 1
+        ..style = PaintingStyle.stroke;
+      final titleSafe = Paint()
+        ..color = const Color(0xBFA9B8FF)
+        ..strokeWidth = 1
+        ..style = PaintingStyle.stroke;
+      canvas.drawRect(
+        Rect.fromLTWH(
+          size.width * 0.05,
+          size.height * 0.05,
+          size.width * 0.90,
+          size.height * 0.90,
+        ),
+        actionSafe,
+      );
+      canvas.drawRect(
+        Rect.fromLTWH(
+          size.width * 0.10,
+          size.height * 0.10,
+          size.width * 0.80,
+          size.height * 0.80,
+        ),
+        titleSafe,
+      );
+    }
+    if (showCenterGuides) {
+      final centerPaint = Paint()
+        ..color = const Color(0xCC6ED8CF)
+        ..strokeWidth = 1;
+      _drawDashedLine(
+        canvas,
+        Offset(size.width / 2, 0),
+        Offset(size.width / 2, size.height),
+        centerPaint,
+      );
+      _drawDashedLine(
+        canvas,
+        Offset(0, size.height / 2),
+        Offset(size.width, size.height / 2),
+        centerPaint,
+      );
+      canvas.drawCircle(
+        Offset(size.width / 2, size.height / 2),
+        3,
+        Paint()..color = const Color(0xEE6ED8CF),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CompositionGuidesPainter oldDelegate) =>
+      oldDelegate.showSafeMargins != showSafeMargins ||
+      oldDelegate.showCenterGuides != showCenterGuides;
 }
 
 
@@ -13591,4 +14462,139 @@ class _BezierCurveGraphPainter extends CustomPainter {
       oldDelegate.curve.y1 != curve.y1 ||
       oldDelegate.curve.x2 != curve.x2 ||
       oldDelegate.curve.y2 != curve.y2;
+}
+
+
+class _PremiereTimelineRulerPainter extends CustomPainter {
+  const _PremiereTimelineRulerPainter({
+    required this.durationMs,
+    required this.playheadMs,
+    required this.frameRate,
+    required this.zoom,
+    required this.scrollRatio,
+    required this.background,
+    required this.lineColor,
+    required this.textColor,
+    required this.playheadColor,
+  });
+
+  final int durationMs;
+  final int playheadMs;
+  final double frameRate;
+  final double zoom;
+  final double scrollRatio;
+  final Color background;
+  final Color lineColor;
+  final Color textColor;
+  final Color playheadColor;
+
+  double _niceStep(double raw) {
+    final safeRaw = math.max(1.0, raw);
+    final power = math.pow(10, (math.log(safeRaw) / math.ln10).floor()).toDouble();
+    final scaled = safeRaw / power;
+    final factor = scaled <= 1
+        ? 1.0
+        : scaled <= 2
+            ? 2.0
+            : scaled <= 5
+                ? 5.0
+                : 10.0;
+    return factor * power;
+  }
+
+  String _label(int ms) {
+    final clamped = ms.clamp(0, math.max(0, durationMs));
+    final seconds = clamped ~/ 1000;
+    final frames =
+        ((clamped % 1000) * frameRate / 1000).floor().clamp(0, 999);
+    return '${(seconds ~/ 60).toString().padLeft(2, '0')}:'
+        '${(seconds % 60).toString().padLeft(2, '0')}:'
+        '${frames.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = background);
+    if (size.width <= 0 || durationMs <= 0) return;
+
+    final visibleContentWidth = size.width * zoom;
+    final scrollOffset =
+        ((visibleContentWidth - size.width) * scrollRatio.clamp(0.0, 1.0)).toDouble();
+    final visibleStart =
+        scrollOffset / visibleContentWidth * durationMs;
+    final visibleDuration = durationMs / zoom;
+    final visibleEnd = math.min(durationMs.toDouble(), visibleStart + visibleDuration).toDouble();
+    final step = _niceStep(visibleDuration * 95 / math.max(1, size.width));
+    final minorStep = step / 5;
+    final firstTick = ((visibleStart / minorStep).floor() * minorStep).toDouble();
+
+    final minorPaint = Paint()
+      ..color = lineColor.withValues(alpha: 0.62)
+      ..strokeWidth = 0.7;
+    final majorPaint = Paint()
+      ..color = lineColor
+      ..strokeWidth = 1;
+    final labelStyle = TextStyle(
+      color: textColor,
+      fontSize: 8,
+      fontWeight: FontWeight.w600,
+      fontFeatures: const [ui.FontFeature.tabularFigures()],
+    );
+
+    for (double value = firstTick; value <= visibleEnd + minorStep; value += minorStep) {
+      if (value < 0 || value > durationMs) continue;
+      final x = (value / durationMs * visibleContentWidth - scrollOffset).toDouble();
+      if (x < -1 || x > size.width + 1) continue;
+      final major = (value / step - (value / step).round()).abs() < 0.0001;
+      canvas.drawLine(
+        Offset(x, major ? 6 : 17),
+        Offset(x, size.height - 1),
+        major ? majorPaint : minorPaint,
+      );
+      if (major) {
+        final painter = TextPainter(
+          text: TextSpan(text: _label(value.round()), style: labelStyle),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final labelX = (x + 4).clamp(0.0, math.max(0.0, size.width - painter.width)).toDouble();
+        painter.paint(canvas, Offset(labelX, 1));
+        painter.dispose();
+      }
+    }
+
+    canvas.drawLine(
+      Offset(0, size.height - 1),
+      Offset(size.width, size.height - 1),
+      majorPaint,
+    );
+
+    final playheadX =
+        playheadMs / durationMs * visibleContentWidth - scrollOffset;
+    if (playheadX >= -1 && playheadX <= size.width + 1) {
+      final playheadPaint = Paint()..color = playheadColor;
+      canvas.drawLine(
+        Offset(playheadX, 0),
+        Offset(playheadX, size.height),
+        playheadPaint..strokeWidth = 1.6,
+      );
+      final head = Path()
+        ..moveTo(playheadX - 5, 0)
+        ..lineTo(playheadX + 5, 0)
+        ..lineTo(playheadX, 7)
+        ..close();
+      canvas.drawPath(head, playheadPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PremiereTimelineRulerPainter oldDelegate) =>
+      oldDelegate.durationMs != durationMs ||
+      oldDelegate.playheadMs != playheadMs ||
+      oldDelegate.frameRate != frameRate ||
+      oldDelegate.zoom != zoom ||
+      oldDelegate.scrollRatio != scrollRatio ||
+      oldDelegate.background != background ||
+      oldDelegate.lineColor != lineColor ||
+      oldDelegate.textColor != textColor ||
+      oldDelegate.playheadColor != playheadColor;
 }
