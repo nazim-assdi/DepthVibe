@@ -964,6 +964,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   Size _previewPenLayerSize = Size.zero;
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
+  double _timelineHeight = 260;
   final Set<String> _expandedTimelineLayers = {};
   String _effectCategory = 'All';
   String _effectSearch = '';
@@ -2340,7 +2341,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   },
                 ),
               ),
-              _buildPlayheadAwareTimeline(),
+              _buildTimelineSplitter(),
+              SizedBox(
+                height: _timelineHeight,
+                child: _buildPlayheadAwareTimeline(),
+              ),
               if (_rendering || _projectBusy)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -2885,6 +2890,32 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTimelineSplitter() {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeRow,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onVerticalDragUpdate: (details) {
+          setState(() {
+            _timelineHeight =
+                (_timelineHeight - details.delta.dy).clamp(150.0, 560.0).toDouble();
+          });
+        },
+        onDoubleTap: () => setState(() => _timelineHeight = 260),
+        child: SizedBox(
+          height: 6,
+          child: Center(
+            child: Container(
+              height: 1,
+              color: palette.border,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -11803,7 +11834,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
-      height: 260,
+      height: _timelineHeight,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: palette.toolbar,
