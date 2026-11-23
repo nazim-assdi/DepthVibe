@@ -3027,7 +3027,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   style: const TextStyle(fontSize: 8),
                 ),
                 trailing: SizedBox(
-                  width: 112,
+                  width: 160,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
