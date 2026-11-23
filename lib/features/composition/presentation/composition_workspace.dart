@@ -3887,9 +3887,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           primitive: ShapePrimitive.path,
           pathVertices: shapeVertices,
           pathClosed: _previewPenPathClosed,
-          fillColor: _previewPenPathClosed
-              ? currentStyle.fillColor
-              : 'transparent',
+          fillColor: currentStyle.fillColor,
           strokeWidth: !_previewPenPathClosed &&
                   currentStyle.strokeWidth <= 0
               ? 2
@@ -7611,7 +7609,6 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             onChanged: (value) => _controller.setShapeStyle(
               style.copyWith(
                 pathClosed: value,
-                fillColor: value ? style.fillColor : 'transparent',
                 strokeWidth: !value && style.strokeWidth <= 0
                     ? 2
                     : style.strokeWidth,
