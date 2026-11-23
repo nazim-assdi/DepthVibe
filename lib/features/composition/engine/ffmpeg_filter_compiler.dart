@@ -61,6 +61,20 @@ class FfmpegFilterCompiler {
       );
     }
 
+    if (id == 'transform') {
+      final scale = parameterExpression('scale');
+      final rotation = parameterExpression('rotation');
+      final safeScale = 'max(0.001,min(400,(' + scale + ')))';
+      final safeRotation = 'max(-360,min(360,(' + rotation + ')))';
+      final angle = '(' + safeRotation + ')*PI/180';
+      return 'scale=w='
+          "'max(1,iw*(" + safeScale + ")/100)':"
+          "h='max(1,ih*(" + safeScale + ")/100)':eval=frame,"
+          'rotate=angle=' + "'" + angle + "'" +
+          ":ow='rotw(" + angle + ")':"
+          "oh='roth(" + angle + ")':c=black@0";
+    }
+
     if (id == 'color_lut') {
       final path = effect.assetUri;
       if (path == null || path.trim().isEmpty) return null;

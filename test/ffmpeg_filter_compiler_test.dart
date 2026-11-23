@@ -1,8 +1,100 @@
+import 'package:depthvibe/features/composition/data/effect_catalog.dart';
 import 'package:depthvibe/features/composition/domain/composition_models.dart';
 import 'package:depthvibe/features/composition/engine/ffmpeg_filter_compiler.dart';
+import 'package:depthvibe/features/composition/engine/ffmpeg_compositing_effect_compiler.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+
+  test('every built-in effect has a native FFmpeg or compositing render path', () {
+    const compiler = FfmpegFilterCompiler();
+    const compositeCompiler = FfmpegCompositingEffectCompiler();
+
+    for (final definition in EffectCatalog.all) {
+      final parameters = <String, double>{
+        for (final parameter in definition.parameters)
+          parameter.id: parameter.defaultValue,
+      };
+      final layer = CompositionLayer(
+        id: 'catalog-' + definition.id,
+        name: definition.name,
+        kind: LayerKind.video,
+        effects: [
+          EffectInstance(
+            id: 'effect-' + definition.id,
+            effectId: definition.id,
+            name: definition.name,
+            parameters: parameters,
+            assetUri: definition.id == 'color_lut'
+                ? '/tmp/depthvibe-test-identity.cube'
+                : null,
+          ),
+        ],
+      );
+
+      final nativeFilters = compiler.compileEffects(layer, timeMs: 0);
+      final compositeFilters = <String>[];
+      compositeCompiler.compile(
+        filters: compositeFilters,
+        inputLabel: 'source',
+        layer: layer,
+        index: 0,
+      );
+
+      expect(
+        nativeFilters.isNotEmpty || compositeFilters.isNotEmpty,
+        isTrue,
+        reason: definition.id + ' does not have a render path',
+      );
+    }
+  });
+
+  test('Transform effect compiles animated scale and rotation with transparent edges', () {
+    const layer = CompositionLayer(
+      id: 'animated-transform',
+      name: 'Animated Transform',
+      kind: LayerKind.video,
+      effects: [
+        EffectInstance(
+          id: 'transform-1',
+          effectId: 'transform',
+          name: 'Transform',
+          parameters: {'scale': 100, 'rotation': 0},
+          keyframeTracks: [
+            KeyframeTrack(
+              property: 'scale',
+              keyframes: [
+                ScalarKeyframe(timeMs: 0, value: 70),
+                ScalarKeyframe(timeMs: 1000, value: 125),
+              ],
+            ),
+            KeyframeTrack(
+              property: 'rotation',
+              keyframes: [
+                ScalarKeyframe(timeMs: 0, value: -15),
+                ScalarKeyframe(timeMs: 1000, value: 25),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final filters = const FfmpegFilterCompiler().compileEffects(
+      layer,
+      timeMs: 0,
+    );
+
+    expect(filters, hasLength(1));
+    expect(filters.single, contains('scale=w='));
+    expect(filters.single, contains('eval=frame'));
+    expect(filters.single, contains('rotate=angle='));
+    expect(filters.single, contains('rotw('));
+    expect(filters.single, contains('roth('));
+    expect(filters.single, contains('black@0'));
+    expect(filters.single, contains('T'));
+  });
+
   test('exports animated brightness as a frame-evaluated FFmpeg expression', () {
     const compiler = FfmpegFilterCompiler();
     const layer = CompositionLayer(

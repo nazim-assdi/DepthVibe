@@ -62,6 +62,10 @@ After Effects export first applies explicit DepthVibe-to-AE mappings, then attem
 
 The repository includes a standalone ScriptUI palette at `integrations/adobe/after-effects-cep/scripts/DepthVibe_Motion_Tools.jsx`. It provides original quick actions for Null Controllers, Adjustment Layers, Camera Rigs, editable text layers, fade/pop entrances, layer staggering and keyframe easing. Run it in After Effects through **File > Scripts > Run Script File**. It is original utility code; it does not install third-party plugins or execute scripts imported from user packs.
 
+## After Effects helper scripts
+
+The standalone ScriptUI toolkit includes original quick actions for native Adjustment Layers, 3D Null parent controllers, cameras, shape/text layers, built-in effects, editable motion entrances/exits, staggering and keyframe easing. Run the script explicitly inside After Effects. The separate CEP bridge is metadata-oriented and is not a lossless AEP importer/exporter.
+
 ## Compatibility boundary
 
 This is not a copy of all Adobe built-in or third-party plug-ins and not a redistribution of Motion Bro preset packs. Native equivalents are added where there is a documented renderer; unmatched proprietary effect descriptors remain metadata and require the original plug-in on the target machine.

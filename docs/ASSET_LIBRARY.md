@@ -9,16 +9,16 @@ The Compositor Library has six primary categories: Overlays & Stickers, Motion, 
 | Collection | Entries | What Apply does |
 |---|---:|---|
 | Overlays & Stickers | 72 | 30 native effect overlays apply a registered visual effect; 42 typographic stickers create editable text layers with optional motion |
-| Motion | 54 | Adds ordinary editable transform/opacity keyframe tracks to the selected unlocked layer |
+| Motion | 81 | Adds ordinary editable transform/opacity keyframe tracks to the selected unlocked layer |
 | Audio Presets | 41 | Applies track gain, three-band EQ, pan and fade-in/out settings to an audio or video layer |
-| Titles & Lower Thirds | 39 | Creates an editable text layer with styling, position and a registered motion recipe |
+| Titles & Lower Thirds | 51 | Creates an editable text layer with styling, position and a registered motion recipe |
 | Color Presets | 48 | Applies an editable native primary color-grade effect |
-| Multi-effect Color Looks | 39 | Adds a stack of independently editable native effects to a selected visual layer |
-| Video Effects & Filters | 68 | Adds one registered native visual effect with its parameter controls |
-| Curated Transitions | 38 | Adds a native transition recipe with its configured duration |
+| Multi-effect Color Looks | 59 | Adds a stack of independently editable native effects to a selected visual layer |
+| Video Effects & Filters | 76 | Adds one registered native visual effect with its parameter controls |
+| Curated Transitions | 64 | Adds a native transition recipe with its configured duration |
 | Transition Engine | 61 | Exposes the underlying built-in transition types |
 
-The first eight collections total 399 built-in catalogue entries. This is an entry count, not a count of unique media files; an effect may also appear as an overlay recipe or as a step in a multi-effect look.
+The first eight collections total 492 built-in catalogue entries. This is an entry count, not a count of unique media files; an effect may also appear as an overlay recipe or as a step in a multi-effect look.
 
 ## Applying the collections
 
@@ -28,7 +28,7 @@ Native film, texture, lens and graphic overlays apply existing DepthVibe effect 
 
 ### Motion
 
-All 54 recipes are ordinary transform/opacity KeyframeTracks. Applying one at the current playhead writes editable keyframes to the selected unlocked layer; the timeline and graph editor remain available.
+All 81 recipes are ordinary transform/opacity KeyframeTracks. Applying one at the current playhead writes editable keyframes to the selected unlocked layer; the timeline and graph editor remain available.
 
 ### Audio Presets
 
@@ -40,15 +40,15 @@ Applying one creates a new editable text layer with sample copy, font size, weig
 
 ### Color Presets
 
-The 48 primary-grade recipes use the registered Color Grade parameter schema. Applying a color preset replaces the selected layer's current primary/curves/LUT grade group with that recipe. The 39 multi-effect looks add a stack of normal, separately editable effect instances. Import `.cube` LUTs through the LUT importer; a LUT is not embedded in a primary-grade-only recipe.
+The 48 primary-grade recipes use the registered Color Grade parameter schema. Applying a color preset replaces the selected layer's current primary/curves/LUT grade group with that recipe. The 59 multi-effect looks add a stack of normal, separately editable effect instances. Import `.cube` LUTs through the LUT importer; a LUT is not embedded in a primary-grade-only recipe.
 
 ### Video Effects & Filters
 
-The 68 built-in native effects keep typed parameters and use the current FFmpeg/custom render pipeline. Preview tiles are generated visual guides rather than pixel-exact rendering of the source footage. Runtime support depends on the filters present in the packaged FFmpeg build and must be verified on each target platform.
+The 76 built-in native effects keep typed parameters and use the current FFmpeg/custom render pipeline. Preview tiles are generated visual guides rather than pixel-exact rendering of the source footage. Runtime support depends on the filters present in the packaged FFmpeg build and must be verified on each target platform.
 
 ### Transitions
 
-The 38 curated recipes map to existing TransitionKind values and specify intended durations. Applying a recipe requires at least two enabled visual clips. The editor uses the regular frame validator and FFmpeg export path; preview animation is illustrative.
+The 64 curated recipes cover all 61 native TransitionKind values and specify intended durations. Applying a recipe requires at least two enabled visual clips. The editor uses the regular frame validator and FFmpeg export path; preview animation is illustrative.
 
 ## Downloadable offline packs
 
