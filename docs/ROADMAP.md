@@ -53,8 +53,8 @@ Status describes working source paths, not release-ready feature parity. A model
 
 ## Stage 4 — 3D and tracking
 - [x] Camera and light layer data models and controls.
-- [x] CPU GLB/OBJ scene renderer integrated with composition preview and export, including camera-aware 3D text planes.
-- [ ] GPU/PBR renderer parity, extruded 3D glyph geometry, material batching and complete scene-render integration.
+- [x] CPU GLB/OBJ scene renderer integrated with composition preview and export, including camera-aware 3D text meshes with adjustable raster-derived extrusion side walls.
+- [ ] GPU/PBR renderer parity, vector-outline/bevel text geometry, material batching and complete scene-render integration.
 - [ ] Camera projection, depth of field, environment maps, real lights and shadow maps.
 - [x] Basic 2D template matching from a manually entered ROI with translation keyframes for stabilization.
 - [ ] Optical-flow/planar tracking, perspective/rotation/scale solve, track-to-null, occlusion handling and 3D camera solve.
