@@ -56,6 +56,7 @@ import '../engine/software_3d_renderer.dart';
 import '../engine/gpu_3d_mesh_view.dart';
 import '../engine/audio_waveform_service.dart';
 import '../engine/color_grade_preview.dart';
+import '../engine/adjustment_preview_compiler.dart';
 import '../engine/cube_lut_validator.dart';
 import '../engine/motion_tracking_service.dart';
 import '../engine/transition_frame_validator.dart';
@@ -4894,6 +4895,65 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     });
   }
 
+  Widget _applyAdjustmentOperation(
+    Widget source,
+    EffectInstance effect,
+    int timeMs,
+  ) {
+    if (effect.effectId == 'color_grade') {
+      final filter = ColorGradePreview.filterFor(effect, timeMs);
+      return filter == null
+          ? source
+          : ColorFiltered(colorFilter: filter, child: source);
+    }
+
+    final operation =
+        const AdjustmentPreviewCompiler().compile(effect, timeMs);
+    if (operation == null) return source;
+    switch (operation.kind) {
+      case AdjustmentPreviewKind.colorMatrix:
+        return ColorFiltered(
+          colorFilter: ColorFilter.matrix(operation.colorMatrix),
+          child: source,
+        );
+      case AdjustmentPreviewKind.gaussianBlur:
+        if (operation.amount <= 0) return source;
+        return ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(
+            sigmaX: operation.amount,
+            sigmaY: operation.amount,
+          ),
+          child: source,
+        );
+      case AdjustmentPreviewKind.boxBlur:
+        if (operation.amount <= 0) return source;
+        final sigma = operation.amount * 0.58;
+        return ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(
+            sigmaX: sigma,
+            sigmaY: sigma,
+          ),
+          child: source,
+        );
+      case AdjustmentPreviewKind.horizontalFlip:
+        return Transform.flip(flipX: true, child: source);
+      case AdjustmentPreviewKind.verticalFlip:
+        return Transform.flip(flipY: true, child: source);
+      case AdjustmentPreviewKind.vignette:
+        final stop = (0.88 - operation.amount * 0.28)
+            .clamp(0.4, 0.86)
+            .toDouble();
+        return ShaderMask(
+          blendMode: BlendMode.multiply,
+          shaderCallback: (bounds) => RadialGradient(
+            colors: const [Colors.white, Colors.black],
+            stops: [stop, 1],
+          ).createShader(bounds),
+          child: source,
+        );
+    }
+  }
+
   Widget _applyAdjustmentLayerPreview(
     Widget composite,
     CompositionLayer layer,
@@ -4909,34 +4969,32 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         .toDouble();
     if (opacity <= 0) return composite;
 
-    var result = composite;
+    // Run the effect stack sequentially, then blend the complete processed
+    // result once. Blending after every effect would change the strength and
+    // order of multi-effect adjustment layers.
+    Widget adjusted = composite;
     for (final effect in layer.effects) {
-      if (!effect.enabled || effect.effectId != 'color_grade') continue;
-      final filter = ColorGradePreview.filterFor(effect, timeMs);
-      if (filter == null) continue;
-      Widget filtered = ColorFiltered(
-        colorFilter: filter,
-        child: result,
-      );
-      final activeMasks = layer.masks.where((mask) => mask.enabled).toList();
-      if (activeMasks.isNotEmpty) {
-        filtered = ClipPath(
-          clipper: _AnimatedMaskClipper(
-            masks: activeMasks,
-            timeMs: timeMs,
-          ),
-          child: filtered,
-        );
-      }
-      result = Stack(
-        fit: StackFit.expand,
-        children: [
-          result,
-          Opacity(opacity: opacity, child: filtered),
-        ],
+      adjusted = _applyAdjustmentOperation(adjusted, effect, timeMs);
+    }
+
+    final activeMasks = layer.masks.where((mask) => mask.enabled).toList();
+    if (activeMasks.isNotEmpty) {
+      adjusted = ClipPath(
+        clipper: _AnimatedMaskClipper(
+          masks: activeMasks,
+          timeMs: timeMs,
+        ),
+        child: adjusted,
       );
     }
-    return result;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        composite,
+        Opacity(opacity: opacity, child: adjusted),
+      ],
+    );
   }
 
   Widget _buildCanvas(CompositionDocument doc, CompositionLayer? selected) {
