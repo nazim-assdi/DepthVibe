@@ -1830,6 +1830,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     if (_isTextEditingTargetFocused()) return KeyEventResult.ignored;
 
     final key = event.logicalKey;
+    final isRepeat = event is KeyRepeatEvent;
+    final isArrow = key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown;
+    if (isRepeat && !isArrow) return KeyEventResult.ignored;
     final control = HardwareKeyboard.instance.isControlPressed;
     final meta = HardwareKeyboard.instance.isMetaPressed;
     final command = control || meta;
@@ -3328,7 +3334,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       strokeColor: '#FFFFFF',
       strokeWidth: 0,
       cornerRadius: primitive == ShapePrimitive.roundedRectangle
-          ? math.min(width, height) * 0.12
+          ? 14.4
           : 0,
       points: 5,
     );
