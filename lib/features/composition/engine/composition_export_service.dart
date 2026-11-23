@@ -23,6 +23,7 @@ import 'scene_mesh_loader.dart';
 import 'software_3d_renderer.dart';
 import 'software_3d_png_encoder.dart';
 import 'shape_layer_rasterizer.dart';
+import 'text_plane_mesh_builder.dart';
 
 typedef CompositionExportProgress = void Function(double value);
 
@@ -196,18 +197,33 @@ class CompositionExportService {
     );
 
     try {
-      final meshVideoPaths = await _prepareMeshLayerVideos(
-        document,
-        visualLayers.where((layer) => layer.kind == LayerKind.threeDModel).toList(),
-        meshTempDirectory,
-        onProgress: onProgress,
-        cancellation: cancellation,
-      );
-      cancellation?.throwIfCancelled();
       final textImagePaths = await _prepareTextLayerImages(
         document,
         visualLayers.where((layer) => layer.kind == LayerKind.text).toList(),
         textTempDirectory,
+        cancellation: cancellation,
+      );
+      cancellation?.throwIfCancelled();
+      final threeDTextLayers = visualLayers.where(
+        (layer) => layer.kind == LayerKind.text && layer.is3dText,
+      ).toList();
+      final textPlaneMeshes = await _prepareTextPlaneMeshes(
+        threeDTextLayers,
+        textImagePaths,
+        cancellation: cancellation,
+      );
+      cancellation?.throwIfCancelled();
+      final meshRenderLayers = visualLayers.where(
+        (layer) =>
+            layer.kind == LayerKind.threeDModel ||
+            (layer.kind == LayerKind.text && layer.is3dText),
+      ).toList();
+      final meshVideoPaths = await _prepareMeshLayerVideos(
+        document,
+        meshRenderLayers,
+        meshTempDirectory,
+        preloadedMeshes: textPlaneMeshes,
+        onProgress: onProgress,
         cancellation: cancellation,
       );
       cancellation?.throwIfCancelled();
@@ -302,6 +318,7 @@ class CompositionExportService {
     Directory tempDirectory, {
     CompositionExportProgress? onProgress,
     CompositionExportCancellation? cancellation,
+    Map<String, ObjMesh> preloadedMeshes = const {},
   }) async {
     if (meshLayers.isEmpty) return const {};
     await tempDirectory.create(recursive: true);
@@ -317,10 +334,12 @@ class CompositionExportService {
       cancellation?.throwIfCancelled();
       final layer = meshLayers[layerIndex];
       final sourcePath = layer.sourceUri;
-      if (sourcePath == null || sourcePath.isEmpty) {
-        throw StateError('3D mesh layer \${layer.name} has no local mesh source.');
+      final preloadedMesh = preloadedMeshes[layer.id];
+      if (preloadedMesh == null && (sourcePath == null || sourcePath.isEmpty)) {
+        throw StateError('3D layer has no local mesh source.');
       }
-      final mesh = await const SceneMeshLoader().load(sourcePath);
+      final mesh = preloadedMesh ??
+          await const SceneMeshLoader().load(sourcePath!);
       cancellation?.throwIfCancelled();
       final frameDirectory = Directory(
         tempDirectory.path + Platform.pathSeparator + layer.id,
@@ -493,6 +512,29 @@ class CompositionExportService {
     }
   }
 
+
+  Future<Map<String, ObjMesh>> _prepareTextPlaneMeshes(
+    List<CompositionLayer> layers,
+    Map<String, String> textImagePaths, {
+    CompositionExportCancellation? cancellation,
+  }) async {
+    if (layers.isEmpty) return const <String, ObjMesh>{};
+    const builder = TextPlaneMeshBuilder();
+    final result = <String, ObjMesh>{};
+    for (final layer in layers) {
+      cancellation?.throwIfCancelled();
+      final path = textImagePaths[layer.id];
+      if (path == null) {
+        throw StateError('3D text layer has no rasterized text image.');
+      }
+      final file = File(path);
+      if (!await file.exists()) {
+        throw StateError('3D text raster is missing.');
+      }
+      result[layer.id] = await builder.fromPngBytes(await file.readAsBytes());
+    }
+    return Map.unmodifiable(result);
+  }
 
   Future<Map<String, String>> _prepareShapeLayerImages(
     CompositionDocument document,
@@ -759,10 +801,11 @@ class CompositionExportService {
     buffer.write(' ');
 
     for (final layer in mediaLayers) {
-      if (layer.kind == LayerKind.threeDModel) {
+      if (layer.kind == LayerKind.threeDModel ||
+          (layer.kind == LayerKind.text && layer.is3dText)) {
         final meshVideo = meshVideoPaths[layer.id];
         if (meshVideo == null) {
-          throw StateError('3D mesh layer ${layer.name} has no rendered frame source.');
+          throw StateError('3D layer has no rendered frame source.');
         }
         buffer.write('-i ' + _quote(meshVideo) + ' ');
         continue;
@@ -867,7 +910,8 @@ class CompositionExportService {
       );
       if (!localTransform.enabled) continue;
       final cameraSettings = cameraLayer?.camera;
-      final isMeshLayer = layer.kind == LayerKind.threeDModel;
+      final isMeshLayer = layer.kind == LayerKind.threeDModel ||
+          (layer.kind == LayerKind.text && layer.is3dText);
       final projectedTransform = !isMeshLayer &&
               cameraLayer != null &&
               resolvedCamera != null &&
