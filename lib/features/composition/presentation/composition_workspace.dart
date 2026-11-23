@@ -2754,10 +2754,6 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               children: [
-          SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
                   _toolChip(
                     'Select',
                     Icons.mouse,
@@ -2922,10 +2918,6 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     false,
                     onTap: _addPreviewTransformKeyframes,
                   ),
-                ],
-                  ],
-                ),
-              ),
               ],
             ),
           ),
