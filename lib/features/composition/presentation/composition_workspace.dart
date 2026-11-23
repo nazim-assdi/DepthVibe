@@ -5720,7 +5720,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         : ColorFiltered(colorFilter: gradeFilter, child: maskedVisual);
     Widget previewVisual = LiveEffectPreview.apply(
       child: gradedVisual,
-      effects: layer.effects,
+      // Primary Color Grade already has its dedicated cached matrix preview.
+      // All other effect types flow through the shared 68-effect GPU registry.
+      effects: layer.effects.where((effect) => effect.effectId != 'color_grade').toList(),
       timeMs: timeMs,
       canvasSize: canvasSize,
     );
@@ -8525,7 +8527,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       final categoryMatches = _effectCategory == 'All' || effect.category == _effectCategory;
       final query = _effectSearch.trim().toLowerCase();
       final searchMatches = query.isEmpty ||
-          (effect.name + ' ' + effect.category + ' ' + effect.description)
+          (effect.name + ' ' + effect.id + ' ' + effect.category + ' ' +
+                  effect.description + ' ' + effect.ffmpegFilter)
               .toLowerCase().contains(query);
       return categoryMatches && searchMatches;
     }).toList();
@@ -8598,19 +8601,82 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ),
         ),
         const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          initialValue: _effectCategory,
-          items: ['All', ...EffectCatalog.categories]
-              .map((category) => DropdownMenuItem(value: category, child: Text(category)))
-              .toList(),
-          onChanged: (value) => setState(() => _effectCategory = value ?? 'All'),
+        Wrap(
+          spacing: 5,
+          runSpacing: 5,
+          children: [
+            for (final category in ['All', ...EffectCatalog.categories])
+              ChoiceChip(
+                label: Text(
+                  category == 'All'
+                      ? 'ALL · ${EffectCatalog.all.length}'
+                      : category.toUpperCase(),
+                  style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w800),
+                ),
+                selected: _effectCategory == category,
+                onSelected: (_) => setState(() => _effectCategory = category),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0),
+              ),
+          ],
         ),
-        const SizedBox(height: 8),
-        for (final effect in filtered)
-          EffectPreviewTile(
-            effect: effect,
-            onApply: () => _controller.addEffect(effect.id),
-          ),
+        const SizedBox(height: 7),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${filtered.length} EFFECTS · ${EffectCatalog.all.length} BUILT-IN',
+                style: const TextStyle(
+                  color: Color(0xFF9AAEC9),
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.55,
+                ),
+              ),
+            ),
+            const Text(
+              'HOVER TO PREVIEW',
+              style: TextStyle(
+                color: Color(0xFF8C9DB7),
+                fontSize: 7,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 560
+                ? 3
+                : constraints.maxWidth >= 230
+                    ? 2
+                    : 1;
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: filtered.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                crossAxisSpacing: 7,
+                mainAxisSpacing: 7,
+                childAspectRatio: columns == 1 ? 2.25 : 0.82,
+              ),
+              itemBuilder: (context, index) {
+                final effect = filtered[index];
+                return EffectPreviewTile(
+                  grid: columns > 1,
+                  effect: effect,
+                  onApply: () {
+                    _controller.addEffect(effect.id);
+                    setState(() => _notice = 'Added ${effect.name} · live preview enabled.');
+                  },
+                );
+              },
+            );
+          },
+        ),
         const Divider(),
         _panelHeader('APPLIED EFFECTS', Icons.tune),
         if (layer.effects.isEmpty)
