@@ -1759,18 +1759,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       final objFile = File(
         directory.path + Platform.pathSeparator + stem + '.obj',
       );
-      final mtlFile = File(
-        directory.path + Platform.pathSeparator + stem + '.mtl',
-      );
       if (!await objFile.exists()) {
         await objFile.writeAsString(
           PrimitiveObjFactory.objFor(preset.id),
-          flush: true,
-        );
-      }
-      if (!await mtlFile.exists()) {
-        await mtlFile.writeAsString(
-          PrimitiveObjFactory.materialFor(preset.id),
           flush: true,
         );
       }
