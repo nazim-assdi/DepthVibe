@@ -81,6 +81,8 @@ class CompositionWorkspace extends StatefulWidget {
 class _CompositionWorkspaceState extends State<CompositionWorkspace>
     with WidgetsBindingObserver {
   final CompositionController _controller = CompositionController();
+  final FocusNode _workspaceFocusNode =
+      FocusNode(debugLabel: 'DepthVibe Composition Workspace');
   final PhotoshopImportService _photoshop = const PhotoshopImportService();
   final CompositionExportService _exporter = const CompositionExportService();
   final MotionTrackingService _tracker = const MotionTrackingService();
@@ -1813,6 +1815,140 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     return '${(seconds ~/ 60).toString().padLeft(2, '0')}:${(seconds % 60).toString().padLeft(2, '0')}:${frames.toString().padLeft(2, '0')}';
   }
 
+  bool _isTextEditingTargetFocused() {
+    final focusedWidget = FocusManager.instance.primaryFocus?.context?.widget;
+    return focusedWidget is EditableText;
+  }
+
+  KeyEventResult _handleWorkspaceKeyEvent(
+    FocusNode node,
+    KeyEvent event,
+  ) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (_isTextEditingTargetFocused()) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    final control = HardwareKeyboard.instance.isControlPressed;
+    final meta = HardwareKeyboard.instance.isMetaPressed;
+    final command = control || meta;
+    final shift = HardwareKeyboard.instance.isShiftPressed;
+    final alt = HardwareKeyboard.instance.isAltPressed;
+
+    if (command && !alt) {
+      if (key == LogicalKeyboardKey.keyS) {
+        if (!_projectBusy && !_rendering) {
+          unawaited(_saveCompositionProject());
+        }
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.keyO) {
+        if (!_projectBusy && !_rendering) {
+          unawaited(_openCompositionProject());
+        }
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.keyZ) {
+        if (shift) {
+          if (_controller.canRedo) _controller.redo();
+        } else if (_controller.canUndo) {
+          _controller.undo();
+        }
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.keyY) {
+        if (_controller.canRedo) _controller.redo();
+        return KeyEventResult.handled;
+      }
+    }
+
+    if (key == LogicalKeyboardKey.space && !command && !alt) {
+      _togglePreviewPlayback();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.escape) {
+      if (_activePreviewTool == 'Pen') {
+        _cancelPreviewPenPath();
+      } else if (_previewShapeDrawStart != null ||
+          _shapePrimitiveForTool(_activePreviewTool) != null) {
+        _cancelPreviewShapeDraw();
+      } else {
+        setState(() => _activePreviewTool = 'Select');
+      }
+      return KeyEventResult.handled;
+    }
+
+    if (!command && !alt && !shift) {
+      if (key == LogicalKeyboardKey.keyV) {
+        setState(() => _activePreviewTool = 'Select');
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.keyH) {
+        setState(() => _activePreviewTool = 'Hand');
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.keyG) {
+        final layer = _controller.selectedLayer;
+        if (layer == null) {
+          _controller.addLayer(LayerKind.shape, name: 'Bezier Shape');
+        }
+        final selected = _controller.selectedLayer;
+        if (selected != null && !selected.locked) {
+          _beginPreviewPenPath(selected);
+        }
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.keyQ) {
+        const tools = [
+          'DrawRectangle',
+          'DrawRoundedRectangle',
+          'DrawEllipse',
+          'DrawPolygon',
+          'DrawStar',
+        ];
+        final index = tools.indexOf(_activePreviewTool);
+        setState(() => _activePreviewTool = tools[(index + 1) % tools.length]);
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.delete ||
+          key == LogicalKeyboardKey.backspace) {
+        _controller.removeSelectedLayer();
+        _selectedShapeVertexIndex = null;
+        return KeyEventResult.handled;
+      }
+    }
+
+    if (!command && !alt &&
+        (key == LogicalKeyboardKey.arrowLeft ||
+            key == LogicalKeyboardKey.arrowRight ||
+            key == LogicalKeyboardKey.arrowUp ||
+            key == LogicalKeyboardKey.arrowDown)) {
+      final layer = _controller.selectedLayer;
+      if (layer == null || layer.locked) return KeyEventResult.handled;
+      final step = shift ? 10.0 : 1.0;
+      final property = key == LogicalKeyboardKey.arrowLeft ||
+              key == LogicalKeyboardKey.arrowRight
+          ? 'position.x'
+          : 'position.y';
+      final direction = key == LogicalKeyboardKey.arrowLeft ||
+              key == LogicalKeyboardKey.arrowUp
+          ? -1.0
+          : 1.0;
+      final value = layer.valueAt(property, _controller.document.playheadMs);
+      final hasAnimation =
+          layer.keyframeTracks.any((track) => track.property == property);
+      _controller.setTransformValue(
+        property,
+        value + direction * step,
+        keyframe: _autoKeyEnabled || hasAnimation,
+      );
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
   @override
   void dispose() {
     _recoveryTimer?.cancel();
@@ -1836,13 +1972,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _previewFrameErrors.clear();
     _sourceStatJobs.clear();
     _controller.dispose();
+    _workspaceFocusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
+    return Focus(
+      focusNode: _workspaceFocusNode,
+      autofocus: true,
+      onKeyEvent: _handleWorkspaceKeyEvent,
+      child: AnimatedBuilder(
+        animation: _controller,
       builder: (context, _) {
         final doc = _controller.document;
         final layer = _selected;
@@ -2058,6 +2199,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ),
         );
       },
+      ),
     );
   }
 
