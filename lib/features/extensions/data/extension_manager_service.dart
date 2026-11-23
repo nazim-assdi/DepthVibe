@@ -94,6 +94,7 @@ class ExtensionManagerService extends ChangeNotifier {
 
     final root = _rootDirectory!;
     final staging = await root.createTemp('.extension_install_');
+    final canonicalStagingRoot = await staging.resolveSymbolicLinks();
     InputFileStream? input;
     var installedDirectory = false;
     try {
@@ -189,7 +190,7 @@ class ExtensionManagerService extends ChangeNotifier {
           throw FormatException('Extension asset is not a file: ' + asset);
         }
         final canonical = await assetFile.resolveSymbolicLinks();
-        if (!_isInside(staging.path, canonical)) {
+        if (!_isInside(canonicalStagingRoot, canonical)) {
           throw const FormatException(
             'An extension asset resolves outside its package.',
           );

@@ -6,6 +6,8 @@ import 'dart:ui' as ui;
 
 import 'package:cross_file/cross_file.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter_svg/flutter_svg.dart' as vg;
