@@ -531,7 +531,11 @@ class CompositionExportService {
       if (!await file.exists()) {
         throw StateError('3D text raster is missing.');
       }
-      result[layer.id] = await builder.fromPngBytes(await file.readAsBytes());
+      result[layer.id] = await builder.fromPngBytes(
+        await file.readAsBytes(),
+        extrusionDepth: layer.textExtrusionDepth / 100,
+        sideColor: layer.textColor,
+      );
     }
     return Map.unmodifiable(result);
   }
