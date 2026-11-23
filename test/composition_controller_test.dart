@@ -1682,8 +1682,8 @@ void main() {
     );
 
     controller.beginInteractiveEdit();
-    controller.setTransformValue('opacity', 63, recordHistory: false);
-    controller.setTransformValue('opacity', 27, recordHistory: false);
+    controller.setTransformValue('opacity', 63);
+    controller.setTransformValue('opacity', 27);
     controller.endInteractiveEdit();
 
     final edited = controller.selectedLayer!;
@@ -1904,6 +1904,64 @@ void main() {
     controller.undo();
     expect(controller.document.layers, hasLength(2));
     expect(controller.selectedLayer!.id, 'source');
+    controller.dispose();
+  });
+
+  test('empty interactive edit does not add a phantom undo entry', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(
+            id: 'clip',
+            name: 'Clip',
+            kind: LayerKind.video,
+          ),
+        ],
+        selectedLayerId: 'clip',
+      ),
+    );
+
+    controller.beginInteractiveEdit();
+    controller.endInteractiveEdit();
+    expect(controller.canUndo, isFalse);
+    expect(controller.undoHistoryLength, 0);
+    controller.dispose();
+  });
+
+  test('multiple left trims in one pointer gesture undo as one edit', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 8000,
+        layers: [
+          CompositionLayer(
+            id: 'clip',
+            name: 'Clip',
+            kind: LayerKind.video,
+            startMs: 2000,
+            durationMs: 4000,
+            sourceInMs: 1000,
+          ),
+        ],
+        selectedLayerId: 'clip',
+      ),
+    );
+
+    controller.beginInteractiveEdit();
+    controller.trimLayerStart('clip', 120);
+    controller.trimLayerStart('clip', 180);
+    controller.endInteractiveEdit();
+
+    final trimmed = controller.document.layers.single;
+    expect(trimmed.startMs, 2300);
+    expect(trimmed.durationMs, 3700);
+    expect(trimmed.sourceInMs, 1300);
+    expect(controller.undoHistoryLength, 1);
+
+    controller.undo();
+    final restored = controller.document.layers.single;
+    expect(restored.startMs, 2000);
+    expect(restored.durationMs, 4000);
+    expect(restored.sourceInMs, 1000);
     controller.dispose();
   });
 

@@ -24,6 +24,7 @@ class CompositionController extends ChangeNotifier {
   final List<CompositionDocument> _undoHistory = [];
   final List<CompositionDocument> _redoHistory = [];
   bool _interactiveEditActive = false;
+  bool _interactiveEditHasHistorySnapshot = false;
 
   CompositionDocument get document => _document;
   ValueListenable<int> get playhead => playheadListenable;
@@ -34,6 +35,7 @@ class CompositionController extends ChangeNotifier {
 
   void undo() {
     _interactiveEditActive = false;
+    _interactiveEditHasHistorySnapshot = false;
     if (_undoHistory.isEmpty) return;
     _redoHistory.add(_document);
     _document = _undoHistory.removeLast();
@@ -43,6 +45,7 @@ class CompositionController extends ChangeNotifier {
 
   void redo() {
     _interactiveEditActive = false;
+    _interactiveEditHasHistorySnapshot = false;
     if (_redoHistory.isEmpty) return;
     _undoHistory.add(_document);
     if (_undoHistory.length > maxUndoHistory) {
@@ -100,13 +103,14 @@ class CompositionController extends ChangeNotifier {
   /// Groups a continuous pointer/slider gesture into one undo step.
   void beginInteractiveEdit() {
     if (_interactiveEditActive) return;
-    _recordUndoSnapshot();
     _interactiveEditActive = true;
+    _interactiveEditHasHistorySnapshot = false;
   }
 
   /// Ends the current continuous edit transaction.
   void endInteractiveEdit() {
     _interactiveEditActive = false;
+    _interactiveEditHasHistorySnapshot = false;
   }
 
   void _set(
@@ -114,8 +118,13 @@ class CompositionController extends ChangeNotifier {
     bool recordHistory = true,
   }) {
     if (identical(next, _document)) return;
-    if (recordHistory && !_interactiveEditActive) {
-      _recordUndoSnapshot();
+    if (recordHistory) {
+      if (!_interactiveEditActive || !_interactiveEditHasHistorySnapshot) {
+        _recordUndoSnapshot();
+        if (_interactiveEditActive) {
+          _interactiveEditHasHistorySnapshot = true;
+        }
+      }
     }
     _document = next;
     if (playheadListenable.value != next.playheadMs) {

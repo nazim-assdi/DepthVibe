@@ -8205,7 +8205,6 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               : (next) => _controller.setTransformValue(
                     property,
                     next,
-                    recordHistory: false,
                   ),
           onChangeEnd: layer.locked
               ? null
@@ -8213,7 +8212,6 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   _controller.setTransformValue(
                     property,
                     next,
-                    recordHistory: false,
                   );
                   _controller.endInteractiveEdit();
                 },
