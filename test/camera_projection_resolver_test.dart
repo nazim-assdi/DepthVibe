@@ -273,6 +273,24 @@ void main() {
     expect(rotation.z, 30);
   });
 
+  test('two-node camera falls back to authored rotation for a coincident target', () {
+    const camera = ResolvedLayerTransform(
+      position: Vector3(960, 540, 0),
+      scale: Vector3(100, 100, 100),
+      rotation: Vector3(12, 25, 30),
+      opacity: 100,
+      enabled: true,
+    );
+    const settings = CameraSettings(
+      cameraMode: 'twoNode',
+      pointOfInterestX: 960,
+      pointOfInterestY: 540,
+      pointOfInterestZ: 0,
+    );
+
+    expect(resolver.effectiveCameraRotation(camera, settings), camera.rotation);
+  });
+
   test('two-node export expressions contain the saved point of interest', () {
     const parentResolver = ParentTransformExpressionResolver();
     const cameraLayer = CompositionLayer(
