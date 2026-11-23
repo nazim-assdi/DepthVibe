@@ -2937,14 +2937,22 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             child: Row(
               children: [
                 Icon(
-                  _leftPanel == 'Project' ? Icons.folder_open : Icons.auto_awesome,
+                  _leftPanel == 'Project'
+                      ? Icons.folder_open
+                      : _leftPanel == 'Info'
+                          ? Icons.info_outline
+                          : Icons.auto_awesome,
                   size: 15,
                   color: palette.accent,
                 ),
                 const SizedBox(width: 7),
                 Expanded(
                   child: Text(
-                    _leftPanel == 'Project' ? 'PROJECT' : 'EFFECTS & PRESETS',
+                    _leftPanel == 'Project'
+                        ? 'PROJECT'
+                        : _leftPanel == 'Info'
+                            ? 'COMPOSITION INFO'
+                            : 'EFFECTS & PRESETS',
                     style: TextStyle(
                       fontSize: 10,
                       letterSpacing: 1,
@@ -7459,20 +7467,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
-  void _reorderRightPanels(int oldIndex, int newIndex) {
-    if (newIndex > oldIndex) newIndex--;
-    setState(() {
-      final panel = _rightPanelOrder.removeAt(oldIndex);
-      _rightPanelOrder.insert(newIndex, panel);
-    });
-  }
 
-  Widget _buildActivePanel(CompositionLayer? layer) {
+
+    Widget _buildActivePanel(CompositionLayer? layer) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     const panels = <(String, String, IconData)>[
       ('Transform', 'Properties', Icons.tune),
       ('Effects', 'Effect Controls', Icons.auto_awesome),
       ('Typography', 'Character', Icons.text_fields),
+      ('Preview', 'Preview', Icons.play_circle_outline),
       ('Animation', 'Graph Editor', Icons.show_chart),
       ('Layers', 'Layer Info', Icons.layers_outlined),
       ('Timing', 'Timing', Icons.schedule),
@@ -7660,6 +7663,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         return _buildTimingPanel(layer);
       case 'Transform':
         return _buildTransformPanel(layer);
+      case 'Preview':
+        return _buildPreviewPanel();
       case 'Color':
         return _buildColorPanel(layer);
       case 'Animation':
@@ -7687,6 +7692,81 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       default:
         return _buildLayerInfo(layer);
     }
+  }
+
+  Widget _buildPreviewPanel() {
+    final document = _controller.document;
+    final frameStep = (1000 / document.frameRate).round().clamp(1, 1000);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _panelHeader('PREVIEW', Icons.play_circle_outline),
+        Text(
+          document.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          '${document.frameRate.toStringAsFixed(2)} fps · '
+          '${document.width} × ${document.height} · '
+          '${_time(document.durationMs)}',
+          style: const TextStyle(fontSize: 9, color: Color(0xFF9BAAC1)),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              tooltip: 'Previous frame',
+              onPressed: () {
+                _pausePreviewPlayback();
+                _controller.setPlayhead(document.playheadMs - frameStep);
+              },
+              icon: const Icon(Icons.skip_previous),
+            ),
+            IconButton(
+              tooltip: _previewPlaying ? 'Stop preview' : 'Play preview',
+              onPressed: _togglePreviewPlayback,
+              iconSize: 28,
+              icon: Icon(
+                _previewPlaying
+                    ? Icons.stop_circle_outlined
+                    : Icons.play_circle_fill,
+                color: const Color(0xFF9FB2FF),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Next frame',
+              onPressed: () {
+                _pausePreviewPlayback();
+                _controller.setPlayhead(document.playheadMs + frameStep);
+              },
+              icon: const Icon(Icons.skip_next),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Current Time  ${_time(document.playheadMs)}',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 10, color: Color(0xFFB7C4DC)),
+        ),
+        const SizedBox(height: 10),
+        Slider(
+          min: 0,
+          max: math.max(1, document.durationMs).toDouble(),
+          value: document.playheadMs
+              .clamp(0, math.max(1, document.durationMs))
+              .toDouble(),
+          onChanged: (value) {
+            _pausePreviewPlayback();
+            _controller.setPlayhead(value.round());
+          },
+        ),
+      ],
+    );
   }
 
   Widget _buildLayerInfo(CompositionLayer layer) {
@@ -11735,29 +11815,23 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ),
               const Spacer(),
               Text(_time(playhead), style: const TextStyle(fontSize: 10, color: Color(0xFFB7C4DC))),
-              Builder(
-                builder: (context) {
-                  final stats = _previewFrameService.stats;
-                  final decodeText = stats.averageDecodeMs <= 0
-                      ? 'decode warming'
-                      : '${stats.averageDecodeMs.round()} ms decode';
-                  final uiText = stats.averageUiFrameMs <= 0
-                      ? 'UI warming'
-                      : '${stats.averageUiFrameMs.round()} ms UI';
-                  final queueText = stats.averageQueueWaitMs <= 0
-                      ? 'queue ready'
-                      : '${stats.averageQueueWaitMs.round()} ms queue';
-                  return Text(
-                    '${stats.effectivePreviewWidth}px · '
-                    '${stats.effectivePreviewFrameRate} FPS · '
-                    '$decodeText · $queueText · $uiText · '
-                    '${stats.droppedRequests} skipped',
-                    style: const TextStyle(
-                      fontSize: 8,
-                      color: Color(0xFF8D9CB3),
-                    ),
-                  );
-                },
+              Text(
+                '${_controller.document.frameRate.toStringAsFixed(0)} FPS',
+                style: const TextStyle(
+                  fontSize: 8,
+                  color: Color(0xFF8D9CB3),
+                ),
+              ),
+              IconButton(
+                tooltip: _hideShyLayers ? 'Show Shy Layers' : 'Hide Shy Layers',
+                onPressed: () => setState(
+                  () => _hideShyLayers = !_hideShyLayers,
+                ),
+                icon: Icon(
+                  _hideShyLayers ? Icons.filter_alt : Icons.filter_alt_outlined,
+                  size: 15,
+                  color: _hideShyLayers ? palette.accent : palette.secondaryText,
+                ),
               ),
               IconButton(
                 tooltip: _previewPlaying ? 'Pause realtime preview' : 'Play realtime preview',
@@ -11962,7 +12036,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   ) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final labelWidth = math.min(238.0, constraints.maxWidth);
+        final labelWidth = math.min(260.0, constraints.maxWidth);
         final trackWidth = math.max(0.0, constraints.maxWidth - labelWidth);
         final selectedId = _controller.document.selectedLayerId;
         return Stack(
@@ -12066,6 +12140,26 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                   ),
                                   icon: Icon(
                                     layer.locked ? Icons.lock : Icons.lock_open,
+                                    size: 13,
+                                  ),
+                                ),
+                                IconButton(
+                                  padding: EdgeInsets.zero,
+                                  visualDensity: VisualDensity.compact,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 22,
+                                    minHeight: 22,
+                                  ),
+                                  tooltip: layer.shy ? 'Unmark Shy Layer' : 'Mark Shy Layer',
+                                  color: layer.shy ? palette.accent : null,
+                                  onPressed: () => _controller.setLayerShy(
+                                    layer.id,
+                                    !layer.shy,
+                                  ),
+                                  icon: Icon(
+                                    layer.shy
+                                        ? Icons.visibility_off
+                                        : Icons.visibility_off_outlined,
                                     size: 13,
                                   ),
                                 ),
