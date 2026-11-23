@@ -886,6 +886,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   CompositionExportCancellation? _renderCancellation;
   String _panel = 'Transform';
   String _leftPanel = 'Project';
+  String _projectSearch = '';
   String _leftEffectSearch = '';
   String _workspacePreset = 'After Effects';
   final List<String> _rightPanelOrder = [
@@ -2982,7 +2983,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ),
             child: Row(
               children: [
-                for (final tab in const ['Project', 'Effects & Presets', 'Info'])
+                for (final tab in const ['Project', 'Effects & Presets'])
                   Expanded(
                     child: InkWell(
                       onTap: () => setState(() => _leftPanel = tab),
@@ -3034,283 +3035,155 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     CompositionDocument document,
   ) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
-    final visibleLayers = _hideShyLayers
-        ? layers.where((layer) => !layer.shy).toList()
-        : layers;
-    return Column(
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: palette.border)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                document.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: palette.primaryText,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                '${document.width} × ${document.height}  ·  ${document.frameRate.toStringAsFixed(0)} fps  ·  ${_time(document.durationMs)}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 8, color: palette.secondaryText),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 7, 10, 5),
+    final query = _projectSearch.trim().toLowerCase();
+    final seenSources = <String>{};
+    final footage = <CompositionLayer>[];
+    for (final layer in layers) {
+      final source = layer.sourceUri;
+      if (source == null || source.isEmpty || !seenSources.add(source)) {
+        continue;
+      }
+      final sourceName = layer.externalSourceName ??
+          source.replaceAll('\\', '/').split('/').last;
+      final searchable =
+          '${layer.name} $sourceName ${layer.kind.name}'.toLowerCase();
+      if (query.isEmpty || searchable.contains(query)) {
+        footage.add(layer);
+      }
+    }
+    final showComposition = query.isEmpty ||
+        document.name.toLowerCase().contains(query) ||
+        'composition'.contains(query);
+
+    Widget sectionHeader(String title, int count) => Padding(
+          padding: const EdgeInsets.fromLTRB(10, 13, 10, 5),
           child: Row(
             children: [
-              Icon(Icons.layers_outlined, size: 13, color: palette.secondaryText),
-              const SizedBox(width: 6),
               Text(
-                'COMPOSITION LAYERS  (${layers.length})',
+                title.toUpperCase(),
                 style: TextStyle(
-                  fontSize: 8,
-                  letterSpacing: 0.7,
+                  fontSize: 9,
+                  letterSpacing: 0.8,
                   fontWeight: FontWeight.w900,
                   color: palette.secondaryText,
                 ),
               ),
-              const Spacer(),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                tooltip: _hideShyLayers ? 'Show Shy Layers' : 'Hide Shy Layers',
-                onPressed: () => setState(() => _hideShyLayers = !_hideShyLayers),
-                icon: Icon(
-                  _hideShyLayers ? Icons.filter_alt : Icons.filter_alt_outlined,
-                  size: 15,
-                  color: _hideShyLayers ? palette.accent : palette.secondaryText,
-                ),
+              const SizedBox(width: 6),
+              Text(
+                count.toString(),
+                style: TextStyle(fontSize: 8, color: palette.secondaryText),
               ),
             ],
           ),
+        );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(9, 8, 9, 5),
+          child: TextField(
+            onChanged: (value) => setState(() => _projectSearch = value),
+            decoration: const InputDecoration(
+              isDense: true,
+              prefixIcon: Icon(Icons.search, size: 16),
+              hintText: 'Search Project',
+              contentPadding: EdgeInsets.symmetric(vertical: 8),
+            ),
+          ),
         ),
         Expanded(
-          child: ReorderableListView.builder(
-            buildDefaultDragHandles: false,
-            itemCount: visibleLayers.length,
-            onReorder: (oldIndex, newIndex) {
-              if (newIndex > oldIndex) newIndex--;
-              final moving = visibleLayers[oldIndex];
-              final remainingVisible = [...visibleLayers]..removeAt(oldIndex);
-              final remainingAll = [...layers]
-                ..removeWhere((layer) => layer.id == moving.id);
-              final insertion = newIndex.clamp(0, remainingVisible.length).toInt();
-              final targetId = insertion < remainingVisible.length
-                  ? remainingVisible[insertion].id
-                  : null;
-              final globalIndex = targetId == null
-                  ? (remainingVisible.isEmpty
-                      ? remainingAll.length
-                      : remainingAll.indexWhere(
-                            (layer) => layer.id == remainingVisible.last.id,
-                          ) + 1)
-                  : remainingAll.indexWhere((layer) => layer.id == targetId);
-              _controller.reorderLayer(moving.id, globalIndex);
-            },
-            itemBuilder: (context, index) {
-              final layer = visibleLayers[index];
-              final selected = layer.id == document.selectedLayerId;
-              var depth = 0;
-              var ancestorId = layer.parentId;
-              while (ancestorId != null && depth <= layers.length) {
-                final parents = layers.where((item) => item.id == ancestorId);
-                if (parents.isEmpty) break;
-                ancestorId = parents.first.parentId;
-                depth++;
-              }
-              final metadata = <String>[
-                layer.kind == LayerKind.precomposition
-                    ? 'PSD group'
-                    : layer.kind.name,
-                if (layer.photoshopClipped)
-                  layer.clippingBaseLayerId == null
-                      ? 'clipped layer'
-                      : 'clipped to base',
-                if (layer.smartObjectResourceId != null) 'Smart Object',
-                if (layer.guideLayer) 'Guide',
-                if (layer.shy) 'Shy',
-                if (layer.solo) 'Solo',
-                if (layer.photoshopAdjustmentKey != null)
-                  'Adjustment ${layer.photoshopAdjustmentKey}',
-              ];
-              return ListTile(
-                key: ValueKey<String>('project-layer-${layer.id}'),
-                dense: true,
-                contentPadding: EdgeInsets.only(
-                  left: 8 + depth * 12,
-                  right: 4,
+          child: ListView(
+            padding: const EdgeInsets.only(bottom: 12),
+            children: [
+              if (showComposition) ...[
+                sectionHeader('Compositions', 1),
+                ListTile(
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  leading: Icon(
+                    Icons.movie_creation_outlined,
+                    size: 17,
+                    color: palette.accent,
+                  ),
+                  title: Text(
+                    document.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                  subtitle: Text(
+                    '${document.width} × ${document.height} · '
+                    '${document.frameRate.toStringAsFixed(0)} fps · '
+                    '${_time(document.durationMs)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 8, color: palette.secondaryText),
+                  ),
+                  onTap: document.selectedLayerId == null
+                      ? null
+                      : () => _controller.selectLayer(
+                            document.selectedLayerId!,
+                          ),
                 ),
-                selected: selected,
-                selectedTileColor: palette.accentSoft,
-                leading: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ReorderableDragStartListener(
-                      index: index,
-                      child: Icon(
-                        Icons.drag_indicator,
-                        size: 14,
+              ],
+              if (footage.isNotEmpty) ...[
+                sectionHeader('Footage', footage.length),
+                for (final layer in footage)
+                  ListTile(
+                    key: ValueKey<String>('project-footage-${layer.id}'),
+                    dense: true,
+                    visualDensity: VisualDensity.compact,
+                    leading: Icon(
+                      _iconFor(layer.kind),
+                      size: 17,
+                      color: palette.secondaryText,
+                    ),
+                    title: Text(
+                      layer.externalSourceName ??
+                          layer.sourceUri!
+                              .replaceAll('\\', '/')
+                              .split('/')
+                              .last,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10),
+                    ),
+                    subtitle: Text(
+                      layer.kind.name.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 8,
                         color: palette.secondaryText,
                       ),
                     ),
-                    const SizedBox(width: 3),
-                    Icon(
-                      layer.kind == LayerKind.precomposition
-                          ? Icons.folder_open
-                          : _iconFor(layer.kind),
-                      size: 16,
-                      color: selected ? palette.accent : palette.secondaryText,
-                    ),
-                  ],
-                ),
-                title: Text(
-                  layer.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10),
-                ),
-                subtitle: Text(
-                  metadata.join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 8),
-                ),
-                trailing: SizedBox(
-                  width: 160,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                    selected: layer.id == document.selectedLayerId,
+                    selectedTileColor: palette.accentSoft,
+                    onTap: () => _controller.selectLayer(layer.id),
+                  ),
+              ],
+              if (!showComposition && footage.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(22),
+                  child: Column(
                     children: [
-                      IconButton(
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                        tooltip: layer.enabled ? 'Hide layer' : 'Show layer',
-                        onPressed: () => _controller.setLayerEnabled(
-                          layer.id,
-                          !layer.enabled,
-                        ),
-                        icon: Icon(
-                          layer.enabled ? Icons.visibility : Icons.visibility_off,
-                          size: 14,
-                        ),
+                      Icon(
+                        Icons.search_off,
+                        size: 25,
+                        color: palette.secondaryText,
                       ),
-                      IconButton(
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                        tooltip: layer.solo ? 'Disable Solo' : 'Solo this layer',
-                        color: layer.solo ? palette.accent : null,
-                        onPressed: () => _controller.setLayerSolo(
-                          layer.id,
-                          !layer.solo,
+                      const SizedBox(height: 8),
+                      Text(
+                        'No project items match this search.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: palette.secondaryText,
                         ),
-                        icon: Icon(
-                          layer.solo ? Icons.headphones : Icons.headphones_outlined,
-                          size: 14,
-                        ),
-                      ),
-                      IconButton(
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                        tooltip: layer.locked ? 'Unlock layer' : 'Lock layer',
-                        onPressed: () => _controller.setLayerLocked(
-                          layer.id,
-                          !layer.locked,
-                        ),
-                        icon: Icon(
-                          layer.locked ? Icons.lock : Icons.lock_open,
-                          size: 14,
-                        ),
-                      ),
-                      PopupMenuButton<String>(
-                        padding: EdgeInsets.zero,
-                        tooltip: 'Edit layer',
-                        iconSize: 16,
-                        onSelected: (action) {
-                          if (action == 'rename') {
-                            unawaited(_renameLayerDialog(layer));
-                            return;
-                          }
-                          if (action == 'duplicate') {
-                            final duplicated = _controller.duplicateLayer(layer.id);
-                            if (mounted && duplicated) {
-                              setState(() => _notice = 'Duplicated "${layer.name}".');
-                            }
-                            return;
-                          }
-                          if (action == 'guide') {
-                            _controller.setLayerGuide(layer.id, !layer.guideLayer);
-                            return;
-                          }
-                          if (action == 'shy') {
-                            _controller.setLayerShy(layer.id, !layer.shy);
-                            return;
-                          }
-                          if (action == 'delete') {
-                            final deleted = _controller.removeLayer(layer.id);
-                            if (mounted && deleted) {
-                              setState(() => _notice = 'Deleted "${layer.name}". Use Undo to restore it.');
-                            }
-                          }
-                        },
-                        itemBuilder: (_) => [
-                          PopupMenuItem(
-                            value: 'rename',
-                            child: Row(
-                              children: [
-                                Icon(Icons.drive_file_rename_outline, size: 16),
-                                SizedBox(width: 8),
-                                Text('Rename layer'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'duplicate',
-                            child: Row(
-                              children: [
-                                Icon(Icons.copy_outlined, size: 16),
-                                SizedBox(width: 8),
-                                Text('Duplicate layer'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete_outline, size: 16),
-                                SizedBox(width: 8),
-                                Text('Delete layer'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'guide',
-                            child: Text(layer.guideLayer ? 'Disable Guide Layer' : 'Make Guide Layer'),
-                          ),
-                          PopupMenuItem(
-                            value: 'shy',
-                            child: Text(layer.shy ? 'Unmark Shy Layer' : 'Mark as Shy Layer'),
-                          ),
-                        ],
                       ),
                     ],
                   ),
                 ),
-                onTap: () => _controller.selectLayer(layer.id),
-              );
-            },
+            ],
           ),
         ),
       ],
@@ -7597,12 +7470,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   Widget _buildActivePanel(CompositionLayer? layer) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     const panels = <(String, String, IconData)>[
-      ('Transform', 'Transform', Icons.transform),
+      ('Transform', 'Properties', Icons.tune),
       ('Effects', 'Effect Controls', Icons.auto_awesome),
+      ('Typography', 'Character', Icons.text_fields),
       ('Animation', 'Graph Editor', Icons.show_chart),
       ('Layers', 'Layer Info', Icons.layers_outlined),
       ('Timing', 'Timing', Icons.schedule),
-      ('Typography', 'Character', Icons.text_fields),
       ('Shape', 'Shape', Icons.category_outlined),
       ('Color', 'Color', Icons.color_lens_outlined),
       ('Masks', 'Masks', Icons.crop_free),
@@ -7615,11 +7488,60 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       ('Library', 'Libraries', Icons.video_library_outlined),
     ];
     final panelById = {for (final item in panels) item.$1: item};
-    final orderedPanels = _rightPanelOrder
-        .where(panelById.containsKey)
+    final active = panelById[_panel] ?? panels.first;
+    const primaryIds = {'Transform', 'Effects', 'Typography'};
+    final overflowPanels = _rightPanelOrder
+        .where((id) => panelById.containsKey(id) && !primaryIds.contains(id))
         .map((id) => panelById[id]!)
         .toList();
-    final active = panelById[_panel] ?? panels.first;
+
+    Widget dockTab((String, String, IconData) item) {
+      final selected = _panel == item.$1;
+      return Expanded(
+        child: InkWell(
+          onTap: () => setState(() => _panel = item.$1),
+          child: Container(
+            height: 35,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected ? palette.accentSoft : Colors.transparent,
+              border: Border(
+                bottom: BorderSide(
+                  color: selected ? palette.accent : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  item.$3,
+                  size: 13,
+                  color: selected ? palette.accent : palette.secondaryText,
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    item.$2.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 8,
+                      letterSpacing: 0.1,
+                      fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
+                      color: selected
+                          ? palette.primaryText
+                          : palette.secondaryText,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -7628,121 +7550,77 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       ),
       child: Column(
         children: [
-          SizedBox(
-            height: 39,
-            child: ReorderableListView.builder(
-              scrollDirection: Axis.horizontal,
-              buildDefaultDragHandles: true,
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-              itemCount: orderedPanels.length,
-              onReorder: _reorderRightPanels,
-              itemBuilder: (context, index) {
-                final item = orderedPanels[index];
-                final selected = _panel == item.$1;
-                return Tooltip(
-                  key: ValueKey<String>('dock-${item.$1}'),
-                  message: 'Drag to reorder · ${item.$2}',
-                  child: InkWell(
-                    onTap: () => setState(() => _panel = item.$1),
-                    child: Container(
-                      constraints: const BoxConstraints(minWidth: 76),
-                      padding: const EdgeInsets.symmetric(horizontal: 9),
-                      decoration: BoxDecoration(
-                        color: selected ? palette.accentSoft : Colors.transparent,
-                        border: Border(
-                          bottom: BorderSide(
-                            color: selected ? palette.accent : Colors.transparent,
-                            width: 2,
-                          ),
+          Row(
+            children: [
+              dockTab(panels[0]),
+              dockTab(panels[1]),
+              dockTab(panels[2]),
+              SizedBox(
+                width: 34,
+                child: PopupMenuButton<String>(
+                  tooltip: 'Open another panel',
+                  padding: EdgeInsets.zero,
+                  icon: Icon(Icons.more_horiz, size: 17, color: palette.secondaryText),
+                  onSelected: (value) {
+                    if (value == 'restore') {
+                      _applyWorkspacePreset('After Effects');
+                    } else {
+                      setState(() => _panel = value);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    for (final item in overflowPanels)
+                      PopupMenuItem<String>(
+                        value: item.$1,
+                        child: Row(
+                          children: [
+                            Icon(item.$3, size: 15),
+                            const SizedBox(width: 8),
+                            Text(item.$2),
+                          ],
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            item.$3,
-                            size: 13,
-                            color: selected
-                                ? palette.accent
-                                : palette.secondaryText,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            item.$2.toUpperCase(),
-                            maxLines: 1,
-                            style: TextStyle(
-                              fontSize: 8,
-                              letterSpacing: 0.25,
-                              fontWeight: selected
-                                  ? FontWeight.w900
-                                  : FontWeight.w600,
-                              color: selected
-                                  ? palette.primaryText
-                                  : palette.secondaryText,
-                            ),
-                          ),
-                        ],
-                      ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'restore',
+                      child: Text('Restore After Effects Workspace'),
                     ),
-                  ),
-                );
-              },
-            ),
+                  ],
+                ),
+              ),
+            ],
           ),
           Container(
-            height: 39,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
               color: palette.toolbar,
               border: Border(
-                top: BorderSide(color: palette.border),
                 bottom: BorderSide(color: palette.border),
               ),
             ),
             child: Row(
               children: [
-                Icon(active.$3, size: 15, color: palette.accent),
-                const SizedBox(width: 8),
+                Icon(active.$3, size: 14, color: palette.accent),
+                const SizedBox(width: 7),
                 Expanded(
                   child: Text(
                     active.$2.toUpperCase(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 10,
-                      letterSpacing: 1,
+                      fontSize: 9,
+                      letterSpacing: 0.7,
                       fontWeight: FontWeight.w900,
                       color: palette.primaryText,
                     ),
                   ),
                 ),
                 Text(
-                  layer == null ? 'NO LAYER SELECTED' : layer.name,
+                  layer == null ? 'NO LAYER' : layer.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 8,
-                    color: palette.secondaryText,
-                  ),
-                ),
-                const SizedBox(width: 5),
-                PopupMenuButton<String>(
-                  tooltip: 'Restore After Effects workspace',
-                  onSelected: (_) => _applyWorkspacePreset('After Effects'),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
-                      value: 'restore',
-                      child: Text('Restore Default Panel Layout'),
-                    ),
-                  ],
-                  child: Padding(
-                    padding: const EdgeInsets.all(5),
-                    child: Icon(
-                      Icons.more_horiz,
-                      size: 17,
-                      color: palette.secondaryText,
-                    ),
-                  ),
+                  style: TextStyle(fontSize: 8, color: palette.secondaryText),
                 ),
               ],
             ),
@@ -7763,7 +7641,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             child: Text('Select a layer to edit'),
                           )
                 : SingleChildScrollView(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     child: _panelContent(layer),
                   ),
           ),
@@ -7773,7 +7651,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
 
-  Widget _panelContent(CompositionLayer layer) {
+
+    Widget _panelContent(CompositionLayer layer) {
     switch (_panel) {
       case 'Typography':
         return _buildTypographyPanel(layer);
@@ -8247,6 +8126,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ('Position X', 'position.x', 0.0, 1920.0),
           ('Position Y', 'position.y', 0.0, 1080.0),
           ('Position Z', 'position.z', -2000.0, 2000.0),
+          ('Anchor X', 'anchor.x', -2000.0, 2000.0),
+          ('Anchor Y', 'anchor.y', -2000.0, 2000.0),
+          ('Anchor Z', 'anchor.z', -2000.0, 2000.0),
           ('Scale X', 'scale.x', 0.0, 400.0),
           ('Scale Y', 'scale.y', 0.0, 400.0),
           ('Scale Z', 'scale.z', 0.0, 400.0),
