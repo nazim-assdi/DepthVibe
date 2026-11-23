@@ -99,7 +99,7 @@ class LiveEffectPreview {
 
       final matrix = colorMatrixFor(effect, timeMs);
       if (matrix != null) {
-        result = ColorFiltered(colorFilter: ColorFilter.matrix(matrix), child: result);
+        result = ColorFiltered(colorFilter: ui.ColorFilter.matrix(matrix), child: result);
       }
       switch (effect.effectId) {
         case 'gaussian_blur':
