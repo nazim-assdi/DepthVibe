@@ -53,7 +53,24 @@ class CompositionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  String _id(String prefix) => '${prefix}_${_nextId++}';
+  String _id(String prefix) {
+    String candidate;
+    bool exists(String value) {
+      if (_document.layers.any((layer) =>
+          layer.id == value ||
+          layer.effects.any((effect) => effect.id == value) ||
+          layer.masks.any((mask) => mask.id == value))) {
+        return true;
+      }
+      return _document.transitions.any((item) => item.id == value) ||
+          _document.audioBuses.any((item) => item.id == value);
+    }
+
+    do {
+      candidate = '${prefix}_${_nextId++}';
+    } while (exists(candidate));
+    return candidate;
+  }
   int _frameAlignedTransitionStart(int milliseconds) {
     final fps = _document.frameRate;
     if (fps <= 0) return milliseconds.clamp(0, _document.durationMs - 1);

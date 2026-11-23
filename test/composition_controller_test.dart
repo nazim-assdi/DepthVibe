@@ -1872,23 +1872,37 @@ void main() {
               MaskModel(id: 'source-mask', name: 'Mask'),
             ],
           ),
+          CompositionLayer(
+            id: 'layer_3',
+            name: 'Existing layer',
+            kind: LayerKind.image,
+          ),
         ],
         selectedLayerId: 'source',
       ),
     );
 
     expect(controller.duplicateLayer('source'), isTrue);
-    expect(controller.document.layers, hasLength(2));
+    expect(controller.document.layers, hasLength(3));
     final duplicate = controller.selectedLayer!;
+    expect(duplicate.id, isNot('layer_3'));
     expect(duplicate.id, isNot('source'));
     expect(duplicate.name, 'Title Copy');
     expect(duplicate.transform.opacity, 65);
     expect(duplicate.keyframeTracks.single.keyframes.single.value, 65);
     expect(duplicate.effects.single.id, isNot('source-effect'));
     expect(duplicate.masks.single.id, isNot('source-mask'));
+    final allIds = <String>[
+      for (final layer in controller.document.layers) layer.id,
+      for (final layer in controller.document.layers)
+        for (final effect in layer.effects) effect.id,
+      for (final layer in controller.document.layers)
+        for (final mask in layer.masks) mask.id,
+    ];
+    expect(allIds.toSet().length, allIds.length);
 
     controller.undo();
-    expect(controller.document.layers, hasLength(1));
+    expect(controller.document.layers, hasLength(2));
     expect(controller.selectedLayer!.id, 'source');
     controller.dispose();
   });

@@ -3118,19 +3118,22 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                         tooltip: 'Edit layer',
                         iconSize: 16,
                         onSelected: (action) {
-                          switch (action) {
-                            case 'rename':
-                              unawaited(_renameLayerDialog(layer));
-                            case 'duplicate':
-                              final duplicated = _controller.duplicateLayer(layer.id);
-                              if (mounted && duplicated) {
-                                setState(() => _notice = 'Duplicated "${layer.name}".');
-                              }
-                            case 'delete':
-                              final deleted = _controller.removeLayer(layer.id);
-                              if (mounted && deleted) {
-                                setState(() => _notice = 'Deleted "${layer.name}". Use Undo to restore it.');
-                              }
+                          if (action == 'rename') {
+                            unawaited(_renameLayerDialog(layer));
+                            return;
+                          }
+                          if (action == 'duplicate') {
+                            final duplicated = _controller.duplicateLayer(layer.id);
+                            if (mounted && duplicated) {
+                              setState(() => _notice = 'Duplicated "${layer.name}".');
+                            }
+                            return;
+                          }
+                          if (action == 'delete') {
+                            final deleted = _controller.removeLayer(layer.id);
+                            if (mounted && deleted) {
+                              setState(() => _notice = 'Deleted "${layer.name}". Use Undo to restore it.');
+                            }
                           }
                         },
                         itemBuilder: (_) => const [
@@ -7671,7 +7674,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _panelHeader('SELECTED LAYER', _iconFor(layer.kind)),
-        Text(layer.textContent ?? layer.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+        Text(layer.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+        if (layer.kind == LayerKind.text && layer.textContent != null) ...[
+          const SizedBox(height: 3),
+          Text(
+            layer.textContent!,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 10, color: Color(0xFF9BAAC1)),
+          ),
+        ],
         const SizedBox(height: 7),
         Wrap(
           spacing: 6,
