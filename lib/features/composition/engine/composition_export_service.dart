@@ -513,19 +513,57 @@ class CompositionExportService {
       // Pen paths occupy composition space, matching their preview bounds.
       final width = style.primitive == ShapePrimitive.path ? document.width : 160;
       final height = style.primitive == ShapePrimitive.path ? document.height : 120;
-      final png = await rasterizer.rasterize(
-        layer,
-        width: width,
-        height: height,
-        timeMs: layer.startMs,
+      final hasAnimatedPath = layer.keyframeTracks.any(
+        (track) => track.enabled && track.property.startsWith('shape.vertex.'),
       );
-      cancellation?.throwIfCancelled();
-      final file = File(
+      final layerDirectory = Directory(
         directory.path + Platform.pathSeparator +
-            'shape_' + index.toString().padLeft(4, '0') + '.png',
+            'shape_' + index.toString().padLeft(4, '0'),
       );
-      await file.writeAsBytes(png, flush: true);
-      result[layer.id] = file.path;
+
+      if (hasAnimatedPath) {
+        final frameCount = math.max(
+          1,
+          (layer.durationMs * document.frameRate / 1000).ceil(),
+        ).toInt();
+        if (frameCount > 36000) {
+          throw StateError(
+            'Animated shape layer ${layer.name} exceeds the 36,000-frame export limit.',
+          );
+        }
+        await layerDirectory.create(recursive: true);
+        for (var frameIndex = 0; frameIndex < frameCount; frameIndex++) {
+          cancellation?.throwIfCancelled();
+          final compositionTimeMs = layer.startMs +
+              (frameIndex * 1000 / document.frameRate).round();
+          final png = await rasterizer.rasterize(
+            layer,
+            width: width,
+            height: height,
+            timeMs: compositionTimeMs,
+          );
+          final frameFile = File(
+            layerDirectory.path + Platform.pathSeparator +
+                'frame_' + frameIndex.toString().padLeft(6, '0') + '.png',
+          );
+          await frameFile.writeAsBytes(png, flush: true);
+        }
+        result[layer.id] = layerDirectory.path +
+            Platform.pathSeparator + 'frame_%06d.png';
+      } else {
+        final png = await rasterizer.rasterize(
+          layer,
+          width: width,
+          height: height,
+          timeMs: layer.startMs,
+        );
+        final file = File(
+          directory.path + Platform.pathSeparator +
+              'shape_' + index.toString().padLeft(4, '0') + '.png',
+        );
+        await file.writeAsBytes(png, flush: true);
+        result[layer.id] = file.path;
+      }
     }
     return result;
   }
@@ -735,7 +773,15 @@ class CompositionExportService {
         if (shapeImage == null) {
           throw StateError('Shape layer ' + layer.name + ' has no rasterized shape image.');
         }
-        buffer.write('-loop 1 -t ' + duration + ' -i ' + _quote(shapeImage) + ' ');
+        final hasAnimatedPath = layer.keyframeTracks.any(
+          (track) => track.enabled && track.property.startsWith('shape.vertex.'),
+        );
+        if (hasAnimatedPath) {
+          buffer.write('-framerate ' + document.frameRate.toString() +
+              ' -start_number 0 -i ' + _quote(shapeImage) + ' ');
+        } else {
+          buffer.write('-loop 1 -t ' + duration + ' -i ' + _quote(shapeImage) + ' ');
+        }
         continue;
       }
       if (layer.kind == LayerKind.text) {
@@ -774,7 +820,13 @@ class CompositionExportService {
           timeMs: document.playheadMs,
           animationCompiler: animationCompiler,
         );
-        var adjusted = previous;
+        if (adjustmentEffects.isEmpty) continue;
+
+        final baseLabel = 'adjustmentBase' + index.toString();
+        var adjusted = 'adjustmentWork' + index.toString();
+        filters.add(
+          '[' + previous + ']split=2[' + baseLabel + '][' + adjusted + ']',
+        );
         for (var effectIndex = 0;
             effectIndex < adjustmentEffects.length;
             effectIndex++) {
@@ -786,7 +838,23 @@ class CompositionExportService {
           );
           adjusted = outputLabel;
         }
-        previous = adjusted;
+
+        final start = (layer.startMs / 1000).toStringAsFixed(6);
+        final end = (layer.endMs / 1000).toStringAsFixed(6);
+        final opacity = animationCompiler.scalarExpression(
+          layer: layer,
+          property: 'opacity',
+          fallback: layer.transform.opacity,
+        );
+        final mix = 'if(between(T,' + start + ',' + end +
+            '),A*(1-max(0,min(1,(' + opacity + ')/100)))+' +
+            'B*max(0,min(1,(' + opacity + ')/100)),A)';
+        final next = 'base' + (index + 1).toString();
+        filters.add(
+          '[' + baseLabel + '][' + adjusted + ']blend=all_expr=' +
+              _quote(mix) + ':shortest=1:repeatlast=0,format=rgba[' + next + ']',
+        );
+        previous = next;
         continue;
       }
       final inputIndex = mediaInputIndices[layer.id]!;
