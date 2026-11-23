@@ -390,6 +390,10 @@ class CompositionProjectCodec {
 
   static Map<String, Object?> _encodeCamera(CameraSettings camera) => {
         'projection': camera.projection,
+        'cameraMode': camera.cameraMode,
+        'pointOfInterestX': camera.pointOfInterestX,
+        'pointOfInterestY': camera.pointOfInterestY,
+        'pointOfInterestZ': camera.pointOfInterestZ,
         'fieldOfView': camera.fieldOfView,
         'focalLength': camera.focalLength,
         'focusDistance': camera.focusDistance,
@@ -404,6 +408,10 @@ class CompositionProjectCodec {
     final json = _asMap(raw, 'camera settings');
     return CameraSettings(
       projection: _string(json['projection'], 'perspective'),
+      cameraMode: _string(json['cameraMode'], 'oneNode'),
+      pointOfInterestX: _number(json['pointOfInterestX'], 0),
+      pointOfInterestY: _number(json['pointOfInterestY'], 0),
+      pointOfInterestZ: _number(json['pointOfInterestZ'], 0),
       fieldOfView: _number(json['fieldOfView'], 50),
       focalLength: _number(json['focalLength'], 50),
       focusDistance: _number(json['focusDistance'], 1000),
