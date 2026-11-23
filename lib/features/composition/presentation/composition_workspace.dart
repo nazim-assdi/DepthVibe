@@ -12378,7 +12378,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final labelWidth = math.min(228.0, constraints.maxWidth * 0.46);
+        final labelWidth = math.min(228.0, constraints.maxWidth * 0.46).toDouble();
         return SizedBox(
           height: 27,
           child: Row(
@@ -12412,17 +12412,17 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   behavior: HitTestBehavior.opaque,
                   onTapDown: (details) => _scrubTimelineAt(
                     details.localPosition.dx,
-                    constraints.maxWidth - labelWidth,
+                    (constraints.maxWidth - labelWidth).toDouble(),
                     duration,
                   ),
                   onHorizontalDragStart: (details) => _scrubTimelineAt(
                     details.localPosition.dx,
-                    constraints.maxWidth - labelWidth,
+                    (constraints.maxWidth - labelWidth).toDouble(),
                     duration,
                   ),
                   onHorizontalDragUpdate: (details) => _scrubTimelineAt(
                     details.localPosition.dx,
-                    constraints.maxWidth - labelWidth,
+                    (constraints.maxWidth - labelWidth).toDouble(),
                     duration,
                   ),
                   child: CustomPaint(
@@ -12455,14 +12455,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final contentX = (x + scrollOffset).clamp(0.0, contentWidth);
     final timeMs = (contentX / contentWidth * duration).round();
     _pausePreviewPlayback();
-    _controller.setPlayhead(timeMs.clamp(0, duration));
+    _controller.setPlayhead(timeMs.clamp(0, duration).toInt());
   }
 
   Widget _buildTimelineZoomNavigator() {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final labelWidth = math.min(228.0, constraints.maxWidth * 0.46);
+        final labelWidth = math.min(228.0, constraints.maxWidth * 0.46).toDouble();
         return SizedBox(
           height: 19,
           child: Row(
@@ -12692,9 +12692,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   ) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final labelWidth = math.min(228.0, constraints.maxWidth * 0.46);
-        final trackWidth = math.max(1.0, constraints.maxWidth - labelWidth);
-        final contentWidth = trackWidth * _timelineZoom;
+        final labelWidth = math.min(228.0, constraints.maxWidth * 0.46).toDouble();
+        final trackWidth = math.max(1.0, constraints.maxWidth - labelWidth).toDouble();
+        final contentWidth = (trackWidth * _timelineZoom).toDouble();
         final scrollOffset =
             (contentWidth - trackWidth) * _timelineScrollRatio;
         final selectedId = _controller.document.selectedLayerId;
@@ -14523,10 +14523,10 @@ class _PremiereTimelineRulerPainter extends CustomPainter {
     final visibleStart =
         scrollOffset / visibleContentWidth * durationMs;
     final visibleDuration = durationMs / zoom;
-    final visibleEnd = math.min(durationMs.toDouble(), visibleStart + visibleDuration);
+    final visibleEnd = math.min(durationMs.toDouble(), visibleStart + visibleDuration).toDouble();
     final step = _niceStep(visibleDuration * 95 / math.max(1, size.width));
     final minorStep = step / 5;
-    final firstTick = (visibleStart / minorStep).floor() * minorStep;
+    final firstTick = ((visibleStart / minorStep).floor() * minorStep).toDouble();
 
     final minorPaint = Paint()
       ..color = lineColor.withValues(alpha: 0.62)
@@ -14541,9 +14541,9 @@ class _PremiereTimelineRulerPainter extends CustomPainter {
       fontFeatures: const [ui.FontFeature.tabularFigures()],
     );
 
-    for (var value = firstTick; value <= visibleEnd + minorStep; value += minorStep) {
+    for (double value = firstTick; value <= visibleEnd + minorStep; value += minorStep) {
       if (value < 0 || value > durationMs) continue;
-      final x = value / durationMs * visibleContentWidth - scrollOffset;
+      final x = (value / durationMs * visibleContentWidth - scrollOffset).toDouble();
       if (x < -1 || x > size.width + 1) continue;
       final major = (value / step - (value / step).round()).abs() < 0.0001;
       canvas.drawLine(
@@ -14556,7 +14556,7 @@ class _PremiereTimelineRulerPainter extends CustomPainter {
           text: TextSpan(text: _label(value.round()), style: labelStyle),
           textDirection: TextDirection.ltr,
         )..layout();
-        final labelX = (x + 4).clamp(0.0, math.max(0.0, size.width - painter.width));
+        final labelX = (x + 4).clamp(0.0, math.max(0.0, size.width - painter.width)).toDouble();
         painter.paint(canvas, Offset(labelX, 1));
         painter.dispose();
       }
