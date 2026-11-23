@@ -286,6 +286,34 @@ void main() {
     expect(restored.layers.last.light!.areaSamples, 32);
   });
 
+  test('round-trips camera-aware 3D text plane mode', () {
+    const document = CompositionDocument(
+      layers: [
+        CompositionLayer(
+          id: 'text-3d',
+          name: '3D Title',
+          kind: LayerKind.text,
+          textContent: 'DepthVibe',
+          is3dText: true,
+          transform: LayerTransform(
+            position: Vector3(960, 540, 180),
+            rotation: Vector3(18, -24, 0),
+            scale: Vector3(140, 140, 100),
+          ),
+        ),
+      ],
+    );
+
+    final encoded = CompositionProjectCodec.encodeDocument(document);
+    final rawLayer = (encoded['layers'] as List).single as Map<String, Object?>;
+    expect(rawLayer['is3dText'], isTrue);
+    final restored = CompositionProjectCodec.decodeDocument(encoded);
+    expect(restored.layers.single.is3dText, isTrue);
+    expect(restored.layers.single.transform.position.z, 180);
+    expect(restored.layers.single.transform.rotation.x, 18);
+    expect(restored.layers.single.transform.rotation.y, -24);
+  });
+
   test('rejects duplicate layer ids and invalid parameter numbers', () {
     const duplicate = CompositionDocument(
       layers: [
