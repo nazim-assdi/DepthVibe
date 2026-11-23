@@ -2322,6 +2322,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           body: Column(
             children: [
               _buildWorkspaceMenuBar(),
+              _buildPreviewToolsToolbar(),
               _buildLayerToolbar(),
               Expanded(
                 child: LayoutBuilder(
@@ -2711,6 +2712,221 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 letterSpacing: 0.8,
                 color: palette.secondaryText,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreviewToolsToolbar() {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return Container(
+      height: 42,
+      decoration: BoxDecoration(
+        color: palette.toolbar,
+        border: Border(bottom: BorderSide(color: palette.border)),
+      ),
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.build_outlined, size: 14, color: palette.accent),
+                const SizedBox(width: 6),
+                Text(
+                  'TOOLS',
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.7,
+                    color: palette.secondaryText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          VerticalDivider(width: 1, color: palette.border),
+          Expanded(
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              children: [
+          SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                  _toolChip(
+                    'Select',
+                    Icons.mouse,
+                    _activePreviewTool == 'Select',
+                    onTap: () => setState(() => _activePreviewTool = 'Select'),
+                  ),
+                  _toolChip(
+                    'Hand',
+                    Icons.pan_tool_alt,
+                    _activePreviewTool == 'Hand',
+                    onTap: () => setState(() => _activePreviewTool = 'Hand'),
+                  ),
+                  _toolChip(
+                    'Rectangle',
+                    Icons.rectangle_outlined,
+                    _activePreviewTool == 'DrawRectangle',
+                    onTap: () => setState(() => _activePreviewTool = 'DrawRectangle'),
+                  ),
+                  _toolChip(
+                    'Rounded Rect',
+                    Icons.rounded_corner,
+                    _activePreviewTool == 'DrawRoundedRectangle',
+                    onTap: () => setState(() => _activePreviewTool = 'DrawRoundedRectangle'),
+                  ),
+                  _toolChip(
+                    'Ellipse',
+                    Icons.circle_outlined,
+                    _activePreviewTool == 'DrawEllipse',
+                    onTap: () => setState(() => _activePreviewTool = 'DrawEllipse'),
+                  ),
+                  _toolChip(
+                    'Polygon',
+                    Icons.pentagon_outlined,
+                    _activePreviewTool == 'DrawPolygon',
+                    onTap: () => setState(() => _activePreviewTool = 'DrawPolygon'),
+                  ),
+                  _toolChip(
+                    'Star',
+                    Icons.star_outline,
+                    _activePreviewTool == 'DrawStar',
+                    onTap: () => setState(() => _activePreviewTool = 'DrawStar'),
+                  ),
+                  _toolChip(
+                    'Mask',
+                    Icons.crop_free,
+                    _activePreviewTool == 'Mask',
+                    onTap: () {
+                      final layer = _controller.selectedLayer;
+                      if (layer == null || layer.locked) {
+                        setState(() => _notice = 'Select an unlocked layer before editing masks.');
+                        return;
+                      }
+                      if (layer.masks.isEmpty) {
+                        _controller.addMask(shape: MaskShape.rectangle);
+                      }
+                      setState(() {
+                        _panel = 'Masks';
+                        _activePreviewTool = 'Mask';
+                      });
+                    },
+                  ),
+                  _toolChip(
+                    'Path',
+                    Icons.edit,
+                    _activePreviewTool == 'Shape',
+                    onTap: () {
+                      if (_controller.selectedLayer?.kind == LayerKind.shape &&
+                          _controller.selectedLayer?.shapeStyle?.primitive ==
+                              ShapePrimitive.path) {
+                        setState(() => _activePreviewTool = 'Shape');
+                      } else {
+                        setState(() => _notice = 'Select a shape layer with a Bezier path first.');
+                      }
+                    },
+                  ),
+                  if (_controller.selectedLayer?.kind == LayerKind.shape &&
+                      _controller.selectedLayer?.shapeStyle?.primitive ==
+                          ShapePrimitive.path) ...[
+                    _toolChip(
+                      'Add Point',
+                      Icons.add_circle_outline,
+                      _activePreviewTool == 'AddVertex',
+                      onTap: () {
+                        final layer = _controller.selectedLayer!;
+                        if (_shapePathIsAnimated(layer)) {
+                          setState(() => _notice =
+                              'Add Point is disabled while path keyframes exist.');
+                        } else {
+                          setState(() {
+                            _activePreviewTool = 'AddVertex';
+                            _notice = 'Click a path segment to insert a vertex.';
+                          });
+                        }
+                      },
+                    ),
+                    _toolChip(
+                      'Delete',
+                      Icons.remove_circle_outline,
+                      _activePreviewTool == 'DeleteVertex',
+                      onTap: () => setState(() {
+                        _activePreviewTool = 'DeleteVertex';
+                        _notice = 'Click a path vertex to delete it.';
+                      }),
+                    ),
+                    _toolChip(
+                      'Corner / Smooth',
+                      Icons.account_tree_outlined,
+                      _activePreviewTool == 'ConvertVertex',
+                      onTap: () => setState(() {
+                        _activePreviewTool = 'ConvertVertex';
+                        _notice = 'Click a path vertex to toggle Corner / Smooth.';
+                      }),
+                    ),
+                  ],
+                  _toolChip(
+                    'Pen',
+                    Icons.gesture,
+                    _activePreviewTool == 'Pen',
+                    onTap: () {
+                      var layer = _controller.selectedLayer;
+                      if (layer == null) {
+                        _controller.addLayer(
+                          LayerKind.shape,
+                          name: 'Bezier Shape',
+                        );
+                        layer = _controller.selectedLayer;
+                      }
+                      if (layer == null || layer.locked) {
+                        setState(() => _notice = 'Select an unlocked layer before drawing a path.');
+                        return;
+                      }
+                      _beginPreviewPenPath(layer);
+                    },
+                  ),
+                  if (_activePreviewTool == 'Pen' &&
+                      _controller.selectedLayer?.kind == LayerKind.shape)
+                    _toolChip(
+                      _previewPenPathClosed ? 'Closed' : 'Open',
+                      _previewPenPathClosed ? Icons.check_box : Icons.check_box_outline_blank,
+                      _previewPenPathClosed,
+                      onTap: () => setState(
+                        () => _previewPenPathClosed = !_previewPenPathClosed,
+                      ),
+                    ),
+                  if (_activePreviewTool == 'Pen') ...[
+                    _toolChip(
+                      'Finish Path',
+                      Icons.check,
+                      false,
+                      onTap: _finishPreviewPenPath,
+                    ),
+                    _toolChip(
+                      'Cancel',
+                      Icons.close,
+                      false,
+                      onTap: _cancelPreviewPenPath,
+                    ),
+                  ],
+                  _toolChip(
+                    'Keyframe',
+                    Icons.key,
+                    false,
+                    onTap: _addPreviewTransformKeyframes,
+                  ),
+                ],
+                  ],
+                ),
+              ),
+              ],
             ),
           ),
         ],
@@ -5414,176 +5630,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              _toolChip(
-                'Select',
-                Icons.mouse,
-                _activePreviewTool == 'Select',
-                onTap: () => setState(() => _activePreviewTool = 'Select'),
-              ),
-              _toolChip(
-                'Hand',
-                Icons.pan_tool_alt,
-                _activePreviewTool == 'Hand',
-                onTap: () => setState(() => _activePreviewTool = 'Hand'),
-              ),
-              _toolChip(
-                'Rectangle',
-                Icons.rectangle_outlined,
-                _activePreviewTool == 'DrawRectangle',
-                onTap: () => setState(() => _activePreviewTool = 'DrawRectangle'),
-              ),
-              _toolChip(
-                'Rounded Rect',
-                Icons.rounded_corner,
-                _activePreviewTool == 'DrawRoundedRectangle',
-                onTap: () => setState(() => _activePreviewTool = 'DrawRoundedRectangle'),
-              ),
-              _toolChip(
-                'Ellipse',
-                Icons.circle_outlined,
-                _activePreviewTool == 'DrawEllipse',
-                onTap: () => setState(() => _activePreviewTool = 'DrawEllipse'),
-              ),
-              _toolChip(
-                'Polygon',
-                Icons.pentagon_outlined,
-                _activePreviewTool == 'DrawPolygon',
-                onTap: () => setState(() => _activePreviewTool = 'DrawPolygon'),
-              ),
-              _toolChip(
-                'Star',
-                Icons.star_outline,
-                _activePreviewTool == 'DrawStar',
-                onTap: () => setState(() => _activePreviewTool = 'DrawStar'),
-              ),
-              _toolChip(
-                'Mask',
-                Icons.crop_free,
-                _activePreviewTool == 'Mask',
-                onTap: () {
-                  final layer = _controller.selectedLayer;
-                  if (layer == null || layer.locked) {
-                    setState(() => _notice = 'Select an unlocked layer before editing masks.');
-                    return;
-                  }
-                  if (layer.masks.isEmpty) {
-                    _controller.addMask(shape: MaskShape.rectangle);
-                  }
-                  setState(() {
-                    _panel = 'Masks';
-                    _activePreviewTool = 'Mask';
-                  });
-                },
-              ),
-              _toolChip(
-                'Path',
-                Icons.edit,
-                _activePreviewTool == 'Shape',
-                onTap: () {
-                  if (_controller.selectedLayer?.kind == LayerKind.shape &&
-                      _controller.selectedLayer?.shapeStyle?.primitive ==
-                          ShapePrimitive.path) {
-                    setState(() => _activePreviewTool = 'Shape');
-                  } else {
-                    setState(() => _notice = 'Select a shape layer with a Bezier path first.');
-                  }
-                },
-              ),
-              if (_controller.selectedLayer?.kind == LayerKind.shape &&
-                  _controller.selectedLayer?.shapeStyle?.primitive ==
-                      ShapePrimitive.path) ...[
-                _toolChip(
-                  'Add Point',
-                  Icons.add_circle_outline,
-                  _activePreviewTool == 'AddVertex',
-                  onTap: () {
-                    final layer = _controller.selectedLayer!;
-                    if (_shapePathIsAnimated(layer)) {
-                      setState(() => _notice =
-                          'Add Point is disabled while path keyframes exist.');
-                    } else {
-                      setState(() {
-                        _activePreviewTool = 'AddVertex';
-                        _notice = 'Click a path segment to insert a vertex.';
-                      });
-                    }
-                  },
-                ),
-                _toolChip(
-                  'Delete',
-                  Icons.remove_circle_outline,
-                  _activePreviewTool == 'DeleteVertex',
-                  onTap: () => setState(() {
-                    _activePreviewTool = 'DeleteVertex';
-                    _notice = 'Click a path vertex to delete it.';
-                  }),
-                ),
-                _toolChip(
-                  'Corner / Smooth',
-                  Icons.account_tree_outlined,
-                  _activePreviewTool == 'ConvertVertex',
-                  onTap: () => setState(() {
-                    _activePreviewTool = 'ConvertVertex';
-                    _notice = 'Click a path vertex to toggle Corner / Smooth.';
-                  }),
-                ),
-              ],
-              _toolChip(
-                'Pen',
-                Icons.gesture,
-                _activePreviewTool == 'Pen',
-                onTap: () {
-                  var layer = _controller.selectedLayer;
-                  if (layer == null) {
-                    _controller.addLayer(
-                      LayerKind.shape,
-                      name: 'Bezier Shape',
-                    );
-                    layer = _controller.selectedLayer;
-                  }
-                  if (layer == null || layer.locked) {
-                    setState(() => _notice = 'Select an unlocked layer before drawing a path.');
-                    return;
-                  }
-                  _beginPreviewPenPath(layer);
-                },
-              ),
-              if (_activePreviewTool == 'Pen' &&
-                  _controller.selectedLayer?.kind == LayerKind.shape)
-                _toolChip(
-                  _previewPenPathClosed ? 'Closed' : 'Open',
-                  _previewPenPathClosed ? Icons.check_box : Icons.check_box_outline_blank,
-                  _previewPenPathClosed,
-                  onTap: () => setState(
-                    () => _previewPenPathClosed = !_previewPenPathClosed,
-                  ),
-                ),
-              if (_activePreviewTool == 'Pen') ...[
-                _toolChip(
-                  'Finish Path',
-                  Icons.check,
-                  false,
-                  onTap: _finishPreviewPenPath,
-                ),
-                _toolChip(
-                  'Cancel',
-                  Icons.close,
-                  false,
-                  onTap: _cancelPreviewPenPath,
-                ),
-              ],
-              _toolChip(
-                'Keyframe',
-                Icons.key,
-                false,
-                onTap: _addPreviewTransformKeyframes,
-              ),
-            ],
-          ),
+
         ],
       ),
     );
