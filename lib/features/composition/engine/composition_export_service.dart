@@ -858,6 +858,11 @@ class CompositionExportService {
     for (var index = 0; index < visualLayers.length; index++) {
       final layer = visualLayers[index];
       if (layer.kind == LayerKind.adjustment) {
+        final adjustmentTransform = parentTransformResolver.resolve(
+          layer: layer,
+          layers: document.layers,
+        );
+        if (!adjustmentTransform.enabled) continue;
         final adjustmentEffects = filterCompiler.compileEffects(
           layer,
           timeMs: document.playheadMs,
@@ -887,12 +892,17 @@ class CompositionExportService {
         final opacity = animationCompiler.scalarExpression(
           layer: layer,
           property: 'opacity',
-          fallback: layer.transform.opacity,
+          fallback: adjustmentTransform.opacity,
           timeVariable: 'T',
         );
-        final mix = 'if(between(T,' + start + ',' + end +
-            '),A*(1-max(0,min(1,(' + opacity + ')/100)))+' +
-            'B*max(0,min(1,(' + opacity + ')/100)),A)';
+        final maskAlpha = animationCompiler.maskAlphaExpression(
+          layer.masks,
+          timeVariable: 'T',
+        );
+        final mixAlpha = '(min(1,max(0,(' + opacity + ')/100))*(' +
+            maskAlpha + '))';
+        final mix = 'if(gte(T,' + start + ')*lt(T,' + end +
+            '),A*(1-' + mixAlpha + ')+B*' + mixAlpha + ',A)';
         final next = 'base' + (index + 1).toString();
         filters.add(
           '[' + baseLabel + '][' + adjusted + ']blend=all_expr=' +
