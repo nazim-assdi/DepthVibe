@@ -143,6 +143,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       Object.hashAll(fontManager.fallbackFamilies),
       layer.id,
       layer.textContent,
+      layer.textExtrusionDepth,
+      layer.textColor,
       layer.textFontFamily,
       layer.textFontAssetUri,
       layer.textFontSize,
@@ -252,7 +254,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         data.offsetInBytes,
         data.lengthInBytes,
       );
-      return const TextPlaneMeshBuilder().fromPngBytes(bytes);
+      return const TextPlaneMeshBuilder().fromPngBytes(
+        bytes,
+        extrusionDepth: layer.textExtrusionDepth / 100,
+        sideColor: layer.textColor,
+      );
     } finally {
       image.dispose();
     }
