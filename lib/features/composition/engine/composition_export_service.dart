@@ -889,12 +889,7 @@ class CompositionExportService {
 
         final start = (layer.startMs / 1000).toStringAsFixed(6);
         final end = (layer.endMs / 1000).toStringAsFixed(6);
-        final opacity = animationCompiler.scalarExpression(
-          layer: layer,
-          property: 'opacity',
-          fallback: adjustmentTransform.opacity,
-          timeVariable: 'T',
-        );
+        final opacity = adjustmentTransform.opacity;
         final maskAlpha = animationCompiler.maskAlphaExpression(
           layer.masks,
           timeVariable: 'T',
