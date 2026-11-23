@@ -113,12 +113,19 @@ class CameraProjectionResolver {
     final targetZ = '(' + _n(settings.pointOfInterestZ) + '-(' +
         camera.positionZ + '))';
 
+    final targetLength =
+        'sqrt(pow((' + targetX + '),2)+pow((' + targetY +
+        '),2)+pow((' + targetZ + '),2))';
     final rotationX = settings.cameraMode == 'twoNode'
-        ? 'atan2(-(' + targetY + '),sqrt(pow((' + targetX +
-            '),2)+pow((' + targetZ + '),2)))'
+        ? 'if(gt(' + targetLength + ',0.000001),atan2(-(' +
+            targetY + '),sqrt(pow((' + targetX +
+            '),2)+pow((' + targetZ + '),2))),((' +
+            camera.rotationX + ')*PI/180))'
         : '((' + camera.rotationX + ')*PI/180)';
     final rotationY = settings.cameraMode == 'twoNode'
-        ? 'atan2((' + targetX + '),(' + targetZ + '))'
+        ? 'if(gt(' + targetLength + ',0.000001),atan2((' +
+            targetX + '),(' + targetZ + ')),((' +
+            camera.rotationY + ')*PI/180))'
         : '((' + camera.rotationY + ')*PI/180)';
 
     // Inverse camera rotation: Rz(-z), then Ry(-y), then Rx(-x).
