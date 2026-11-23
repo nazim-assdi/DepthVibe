@@ -459,6 +459,28 @@ void main() {
     expect(filter, contains(':eval=frame'));
   });
 
+
+  test('compiles the expanded original effects into FFmpeg filter strings', () {
+    const compiler=FfmpegFilterCompiler();
+    final cases=<String,Map<String,double>>{
+      'solarize':{'threshold':174},
+      'color_temperature':{'temperature':0.25,'tint':0.04,'intensity':0.8},
+      'soft_focus':{'radius':1.8,'brightness':0.04},
+      'ripple_warp':{'amount':6,'wavelength':88,'speed':1.2},
+      'zoom_warp':{'amount':0.12,'center_x':0.5,'center_y':0.5},
+      'color_key':{'similarity':0.3,'blend':0.12},
+      'high_pass_sharpen':{'amount':1.4},
+      'chroma_smear':{'shift':3.5},
+    };
+    for(final entry in cases.entries){
+      final filters=compiler.compileEffects(CompositionLayer(
+        id:entry.key,name:entry.key,kind:LayerKind.video,
+        effects:[EffectInstance(id:'fx-'+entry.key,effectId:entry.key,name:entry.key,parameters:entry.value)],
+      ),timeMs:0);
+      expect(filters,isNotEmpty,reason:entry.key);
+    }
+  });
+
   test('skips disabled effects', () {
     const layer = CompositionLayer(
       id: 'video-1',

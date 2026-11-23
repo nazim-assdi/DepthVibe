@@ -654,6 +654,16 @@ class EffectCatalog {
       ],
       ffmpegFilter: 'edgedetect,gblur,eq',
     ),
+
+    EffectDefinition(id:'solarize',name:'Solarize',category:'Stylize',description:'Photographic solarization with adjustable tonal threshold.',parameters:[EffectParameterDefinition(id:'threshold',label:'Threshold',min:0,max:255,defaultValue:128)],ffmpegFilter:'lutrgb'),
+    EffectDefinition(id:'color_temperature',name:'Color Temperature',category:'Color',description:'Warm/cool balance with independent tint.',parameters:[EffectParameterDefinition(id:'temperature',label:'Temperature',min:-1,max:1,defaultValue:0),EffectParameterDefinition(id:'tint',label:'Tint',min:-1,max:1,defaultValue:0),EffectParameterDefinition(id:'intensity',label:'Intensity',min:0,max:1,defaultValue:1)],ffmpegFilter:'colorbalance'),
+    EffectDefinition(id:'soft_focus',name:'Soft Focus',category:'Blur & Sharpen',description:'Diffusion-style soft focus.',parameters:[EffectParameterDefinition(id:'radius',label:'Diffusion',min:0,max:16,defaultValue:2),EffectParameterDefinition(id:'brightness',label:'Highlight lift',min:0,max:0.25,defaultValue:0.03)],ffmpegFilter:'gblur,eq'),
+    EffectDefinition(id:'ripple_warp',name:'Ripple Warp',category:'VFX',description:'Two-axis animated ripple distortion.',parameters:[EffectParameterDefinition(id:'amount',label:'Amplitude',min:0,max:24,defaultValue:5,unit:'px'),EffectParameterDefinition(id:'wavelength',label:'Wavelength',min:8,max:300,defaultValue:84,unit:'px'),EffectParameterDefinition(id:'speed',label:'Speed',min:0,max:8,defaultValue:1.1)],ffmpegFilter:'geq'),
+    EffectDefinition(id:'zoom_warp',name:'Zoom Warp',category:'VFX',description:'Centred radial zoom distortion with adjustable focal point.',parameters:[EffectParameterDefinition(id:'amount',label:'Warp amount',min:-0.45,max:0.45,defaultValue:0.08),EffectParameterDefinition(id:'center_x',label:'Center X',min:0,max:1,defaultValue:0.5),EffectParameterDefinition(id:'center_y',label:'Center Y',min:0,max:1,defaultValue:0.5)],ffmpegFilter:'geq'),
+    EffectDefinition(id:'color_key',name:'Color Key',category:'Keying',description:'Green-screen colour key with adjustable tolerance and edge blend.',parameters:[EffectParameterDefinition(id:'similarity',label:'Similarity',min:0.01,max:1,defaultValue:0.3),EffectParameterDefinition(id:'blend',label:'Edge blend',min:0,max:1,defaultValue:0.1)],ffmpegFilter:'colorkey'),
+    EffectDefinition(id:'high_pass_sharpen',name:'High-Pass Sharpen',category:'Blur & Sharpen',description:'Controlled high-frequency sharpening.',parameters:[EffectParameterDefinition(id:'amount',label:'Amount',min:0,max:5,defaultValue:1.2)],ffmpegFilter:'unsharp'),
+    EffectDefinition(id:'chroma_smear',name:'Chroma Smear',category:'Stylize',description:'Offset chroma channels for analogue colour smearing.',parameters:[EffectParameterDefinition(id:'shift',label:'Smear distance',min:0,max:16,defaultValue:3,unit:'px')],ffmpegFilter:'chromashift'),
+
   ];
 
   static final Map<String, EffectDefinition> _extensionEffects = {};
@@ -677,6 +687,8 @@ class EffectCatalog {
     'frame_blend', 'wave_distortion', 'heat_haze', 'film_gate_weave',
     'camera_flash', 'letterbox', 'frame_border', 'old_film', 'analog_glitch',
     'bleach_bypass', 'sepia', 'edge_glow',
+    'solarize', 'color_temperature', 'soft_focus', 'ripple_warp',
+    'zoom_warp', 'color_key', 'high_pass_sharpen', 'chroma_smear',
   };
 
   static List<EffectDefinition> get allEffects =>

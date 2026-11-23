@@ -155,6 +155,18 @@ class AdjustmentPreviewCompiler {
             0, 0, 0, 1, 0,
           ],
         );
+
+      case 'color_temperature':
+        final temperature=_value(effect,'temperature',timeMs,0).clamp(-1.0,1.0).toDouble();
+        final tint=_value(effect,'tint',timeMs,0).clamp(-1.0,1.0).toDouble();
+        final intensity=_value(effect,'intensity',timeMs,1).clamp(0.0,1.0).toDouble();
+        return AdjustmentPreviewOperation(kind:AdjustmentPreviewKind.colorMatrix,colorMatrix:[
+          1,0,0,0,temperature*intensity*58,0,1,0,0,tint*intensity*30,
+          0,0,1,0,-temperature*intensity*58,0,0,0,1,0,
+        ]);
+      case 'soft_focus':
+        return AdjustmentPreviewOperation(kind:AdjustmentPreviewKind.gaussianBlur,
+          amount:_value(effect,'radius',timeMs,2).clamp(0.0,16.0).toDouble());
       case 'gaussian_blur':
         return AdjustmentPreviewOperation(
           kind: AdjustmentPreviewKind.gaussianBlur,
