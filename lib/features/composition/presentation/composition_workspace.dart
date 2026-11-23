@@ -7726,7 +7726,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           contentPadding: EdgeInsets.zero,
           title: const Text('3D Text Plane'),
           subtitle: const Text(
-            'Camera-aware 3D plane. Glyph extrusion is not included.',
+            'Camera-aware mesh text with editable front, back and side depth.',
             style: TextStyle(fontSize: 10),
           ),
           value: layer.is3dText,
@@ -7784,6 +7784,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 textBoxWidth: value.clamp(1, 20000).toDouble(),
               ),
             ),
+            if (layer.is3dText)
+              numericField(
+                'Extrusion depth (%)',
+                layer.textExtrusionDepth,
+                (value) => _controller.updateTextLayer(
+                  textExtrusionDepth: value.clamp(0, 100).toDouble(),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 8),
