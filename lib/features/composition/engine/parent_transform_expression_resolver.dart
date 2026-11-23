@@ -110,17 +110,38 @@ class ParentTransformExpressionResolver {
     ResolvedTransformExpressions parent,
     ResolvedTransformExpressions child,
   ) {
-    String position(String parentPosition, String childPosition, String scale) =>
-        '(' + parentPosition + '+(' + childPosition + ')*(' + scale + ')/100)';
+    String radians(String value) => '((' + value + ')*PI/180)';
+    final rx = radians(parent.rotationX);
+    final ry = radians(parent.rotationY);
+    final rz = radians(parent.rotationZ);
+
+    final scaledX = '((' + child.positionX + ')*(' + parent.scaleX + ')/100)';
+    final scaledY = '((' + child.positionY + ')*(' + parent.scaleY + ')/100)';
+    final scaledZ = '((' + child.positionZ + ')*(' + parent.scaleZ + ')/100)';
+
+    // Rotate the scaled child offset around the parent's X, Y and Z axes.
+    final yAfterX = '((' + scaledY + ')*cos(' + rx + ')-(' +
+        scaledZ + ')*sin(' + rx + '))';
+    final zAfterX = '((' + scaledY + ')*sin(' + rx + ')+(' +
+        scaledZ + ')*cos(' + rx + '))';
+    final xAfterY = '((' + scaledX + ')*cos(' + ry + ')+(' +
+        zAfterX + ')*sin(' + ry + '))';
+    final zAfterY = '(-(' + scaledX + ')*sin(' + ry + ')+(' +
+        zAfterX + ')*cos(' + ry + '))';
+    final xAfterZ = '((' + xAfterY + ')*cos(' + rz + ')-(' +
+        yAfterX + ')*sin(' + rz + '))';
+    final yAfterZ = '((' + xAfterY + ')*sin(' + rz + ')+(' +
+        yAfterX + ')*cos(' + rz + '))';
+
     String scale(String parentScale, String childScale) =>
         '((' + parentScale + ')*(' + childScale + ')/100)';
     String rotation(String parentRotation, String childRotation) =>
         '((' + parentRotation + ')+(' + childRotation + '))';
 
     return ResolvedTransformExpressions(
-      positionX: position(parent.positionX, child.positionX, parent.scaleX),
-      positionY: position(parent.positionY, child.positionY, parent.scaleY),
-      positionZ: position(parent.positionZ, child.positionZ, parent.scaleZ),
+      positionX: '(' + parent.positionX + '+(' + xAfterZ + '))',
+      positionY: '(' + parent.positionY + '+(' + yAfterZ + '))',
+      positionZ: '(' + parent.positionZ + '+(' + zAfterY + '))',
       scaleX: scale(parent.scaleX, child.scaleX),
       scaleY: scale(parent.scaleY, child.scaleY),
       scaleZ: scale(parent.scaleZ, child.scaleZ),
