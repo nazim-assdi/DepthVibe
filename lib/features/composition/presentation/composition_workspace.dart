@@ -2607,7 +2607,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ),
           ),
           PopupMenuButton<double>(
-            tooltip: 'Composition magnification',
+            tooltip: 'Composition magnification · mouse wheel to zoom',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 40, minHeight: 26),
             initialValue: _previewZoom,
@@ -4743,6 +4743,28 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  void _handlePreviewPointerSignal(PointerSignalEvent signal) {
+    if (signal is! PointerScrollEvent || _activePreviewTool == 'Hand') return;
+    final oldZoom = _previewZoom;
+    final nextZoom = (oldZoom * math.pow(1.0015, -signal.scrollDelta.dy))
+        .clamp(0.25, 4.0)
+        .toDouble();
+    if ((nextZoom - oldZoom).abs() < 0.0001) return;
+    final cursor = signal.localPosition;
+    final contentPoint = Offset(
+      (cursor.dx - _previewPanOffset.dx) / oldZoom,
+      (cursor.dy - _previewPanOffset.dy) / oldZoom,
+    );
+    final nextPan = Offset(
+      cursor.dx - contentPoint.dx * nextZoom,
+      cursor.dy - contentPoint.dy * nextZoom,
+    );
+    setState(() {
+      _previewZoom = nextZoom;
+      _previewPanOffset = nextPan;
+    });
+  }
+
   Widget _buildCanvas(CompositionDocument doc, CompositionLayer? selected) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     final resolvedTransforms = const ParentTransformResolver().resolveAll(
@@ -4780,9 +4802,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: const Color(0xFF36445F)),
                       ),
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onPanUpdate: _activePreviewTool == 'Hand'
+                      child: Listener(
+                        onPointerSignal: _handlePreviewPointerSignal,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onPanUpdate: _activePreviewTool == 'Hand'
                             ? (details) => setState(() {
                                   _previewPanOffset += details.delta;
                                 })
@@ -4921,6 +4945,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                               ],
                             ),
                           ),
+                        ),
                         ),
                       ),
                     );
