@@ -968,6 +968,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
   double _timelineHeight = 260;
+  double _compactPanelHeight = 285;
   final Set<String> _expandedTimelineLayers = {};
   String _effectCategory = 'All';
   String _effectSearch = '';
@@ -2332,7 +2333,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       return Column(
                         children: [
                           Expanded(child: _buildPlayheadAwareCanvas()),
-                          SizedBox(height: 285, child: _buildActivePanel(layer)),
+                          _buildCompactPanelSplitter(),
+                          SizedBox(
+                            height: _compactPanelHeight,
+                            child: _buildActivePanel(layer),
+                          ),
                         ],
                       );
                     }
@@ -3148,7 +3153,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
-  Widget _buildTimelineSplitter() {
+  Widget _buildCompactPanelSplitter() {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return MouseRegion(
       cursor: SystemMouseCursors.resizeRow,
@@ -3156,17 +3161,58 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         behavior: HitTestBehavior.translucent,
         onVerticalDragUpdate: (details) {
           setState(() {
-            _timelineHeight =
-                (_timelineHeight - details.delta.dy).clamp(150.0, 560.0).toDouble();
+            _compactPanelHeight =
+                (_compactPanelHeight - details.delta.dy)
+                    .clamp(150.0, 520.0)
+                    .toDouble();
           });
         },
-        onDoubleTap: () => setState(() => _timelineHeight = 260),
+        onDoubleTap: () => setState(() => _compactPanelHeight = 285),
         child: SizedBox(
-          height: 6,
+          height: 10,
           child: Center(
             child: Container(
-              height: 1,
-              color: palette.border,
+              width: 54,
+              height: 3,
+              decoration: BoxDecoration(
+                color: palette.secondaryText.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimelineSplitter() {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return Tooltip(
+      message: 'Drag to resize the Timeline and Composition Preview · double-click to reset',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.resizeRow,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onVerticalDragUpdate: (details) {
+            setState(() {
+              _timelineHeight =
+                  (_timelineHeight - details.delta.dy)
+                      .clamp(120.0, 680.0)
+                      .toDouble();
+            });
+          },
+          onDoubleTap: () => setState(() => _timelineHeight = 260),
+          child: SizedBox(
+            height: 10,
+            child: Center(
+              child: Container(
+                width: 70,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: palette.secondaryText.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
             ),
           ),
         ),
@@ -3176,35 +3222,47 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   Widget _buildWorkspaceSplitter({required bool left}) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
-    return MouseRegion(
-      cursor: SystemMouseCursors.resizeColumn,
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onHorizontalDragUpdate: (details) {
-          setState(() {
-            if (left) {
-              _leftPanelWidth = (_leftPanelWidth + details.delta.dx)
-                  .clamp(205.0, 420.0)
-                  .toDouble();
-            } else {
-              _rightPanelWidth = (_rightPanelWidth - details.delta.dx)
-                  .clamp(300.0, 560.0)
-                  .toDouble();
-            }
-          });
-        },
-        onDoubleTap: () {
-          setState(() {
-            _leftPanelWidth = 270;
-            _rightPanelWidth = 340;
-          });
-        },
-        child: SizedBox(
-          width: 6,
-          child: Center(
-            child: Container(
-              width: 1,
-              color: palette.border,
+    return Tooltip(
+      message: left
+          ? 'Drag to resize Project / Effects dock · double-click to reset'
+          : 'Drag to resize Properties / Effects dock · double-click to reset',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.resizeColumn,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onHorizontalDragUpdate: (details) {
+            final availableWidth = MediaQuery.sizeOf(context).width;
+            setState(() {
+              if (left) {
+                final maxLeft =
+                    (availableWidth - _rightPanelWidth - 290).clamp(190.0, 520.0);
+                _leftPanelWidth =
+                    (_leftPanelWidth + details.delta.dx).clamp(165.0, maxLeft).toDouble();
+              } else {
+                final maxRight =
+                    (availableWidth - _leftPanelWidth - 290).clamp(220.0, 620.0);
+                _rightPanelWidth =
+                    (_rightPanelWidth - details.delta.dx).clamp(205.0, maxRight).toDouble();
+              }
+            });
+          },
+          onDoubleTap: () {
+            setState(() {
+              _leftPanelWidth = 270;
+              _rightPanelWidth = 340;
+            });
+          },
+          child: SizedBox(
+            width: 10,
+            child: Center(
+              child: Container(
+                width: 3,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: palette.secondaryText.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
             ),
           ),
         ),
