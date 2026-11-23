@@ -210,9 +210,11 @@
       controller.name = "DepthVibe Parent Controller";
       controller.threeDLayer = use3D;
       controller.label = 9;
+      var controllerPosition = [comp.width / 2, comp.height / 2];
+      if (use3D) controllerPosition.push(0);
       controller.property("ADBE Transform Group")
         .property("ADBE Position")
-        .setValue([comp.width / 2, comp.height / 2, 0]);
+        .setValue(controllerPosition);
       controller.moveToBeginning();
       var attached = 0;
       for (var j = 0; j < layers.length; j++) {
@@ -304,11 +306,13 @@
           : ParagraphJustification.CENTER_JUSTIFY;
         source.setValue(document);
       }
+      var textPosition = lowerThird
+        ? [comp.width * 0.12, comp.height * 0.82]
+        : [comp.width / 2, comp.height / 2];
+      if (make3D) textPosition.push(0);
       layer.property("ADBE Transform Group")
         .property("ADBE Position")
-        .setValue(lowerThird
-          ? [comp.width * 0.12, comp.height * 0.82]
-          : [comp.width / 2, comp.height / 2]);
+        .setValue(textPosition);
       layer.moveToBeginning();
     });
   }
@@ -400,80 +404,97 @@
       ? target
       : new Window("palette", "DepthVibe Motion Tools", undefined, {resizeable:true});
     panel.orientation = "column";
-    panel.alignChildren = ["fill", "top"];
-    panel.spacing = 7;
+    panel.alignChildren = ["fill", "fill"];
+    panel.spacing = 8;
     panel.margins = 12;
 
     var heading = panel.add("statictext", undefined, "DEPTHVIBE / AFTER EFFECTS TOOLKIT");
     heading.graphics.font = ScriptUI.newFont("Arial", "BOLD", 13);
 
-    panel.add("statictext", undefined, "LAYERS & 3D");
-    panel.add("button", undefined, "Create 3D Null Controller").onClick = createNullController;
-    panel.add("button", undefined, "Parent Selected Layers to Null").onClick = parentSelectedToNull;
-    panel.add("button", undefined, "Create Adjustment Layer").onClick = createAdjustmentLayer;
-    panel.add("button", undefined, "Create Camera Rig").onClick = createCameraRig;
-    panel.add("button", undefined, "Create Editable Shape").onClick = createShapeAccent;
-    panel.add("button", undefined, "Create Editable 3D Text").onClick = function () {
+    var tabs = panel.add("tabbedpanel");
+    tabs.alignChildren = ["fill", "top"];
+    tabs.preferredSize = [390, 505];
+
+    function makeTab(label) {
+      var item = tabs.add("tab", undefined, label);
+      item.orientation = "column";
+      item.alignChildren = ["fill", "top"];
+      item.spacing = 7;
+      item.margins = 10;
+      return item;
+    }
+
+    function addButton(parent, label, action) {
+      parent.add("button", undefined, label).onClick = action;
+    }
+
+    var layersTab = makeTab("LAYERS");
+    addButton(layersTab, "Create 3D Null Controller", createNullController);
+    addButton(layersTab, "Parent Selected Layers to Null", parentSelectedToNull);
+    addButton(layersTab, "Create Adjustment Layer", createAdjustmentLayer);
+    addButton(layersTab, "Create Camera Rig", createCameraRig);
+    addButton(layersTab, "Create Editable Shape", createShapeAccent);
+    addButton(layersTab, "Create Editable 3D Text", function () {
       createTextLayer("DEPTHVIBE TITLE", true, false);
-    };
-    panel.add("button", undefined, "Create Lower Third").onClick = function () {
+    });
+    addButton(layersTab, "Create Lower Third", function () {
       createTextLayer("HOST NAME\nROLE / TITLE", false, true);
-    };
+    });
 
-    panel.add("statictext", undefined, "NATIVE EFFECTS");
-    panel.add("button", undefined, "Add Gaussian Blur").onClick = function () {
+    var effectsTab = makeTab("EFFECTS");
+    addButton(effectsTab, "Add Gaussian Blur", function () {
       addNativeEffect("ADBE Gaussian Blur 2", "Gaussian Blur");
-    };
-    panel.add("button", undefined, "Add Glow").onClick = function () {
+    });
+    addButton(effectsTab, "Add Glow", function () {
       addNativeEffect("ADBE Glo2", "Glow");
-    };
-    panel.add("button", undefined, "Add Drop Shadow").onClick = function () {
+    });
+    addButton(effectsTab, "Add Drop Shadow", function () {
       addNativeEffect("ADBE Drop Shadow", "Drop Shadow");
-    };
-    panel.add("button", undefined, "Add Tint").onClick = function () {
+    });
+    addButton(effectsTab, "Add Tint", function () {
       addNativeEffect("ADBE Tint", "Tint");
-    };
-    panel.add("button", undefined, "Add Sharpen").onClick = function () {
+    });
+    addButton(effectsTab, "Add Sharpen", function () {
       addNativeEffect("ADBE Sharpen", "Sharpen");
-    };
-    panel.add("button", undefined, "Add Posterize Time").onClick = function () {
+    });
+    addButton(effectsTab, "Add Posterize Time", function () {
       addNativeEffect("ADBE Posterize Time", "Posterize Time");
-    };
+    });
 
-    panel.add("statictext", undefined, "MOTION PRESETS");
-    panel.add("button", undefined, "Fade In").onClick = function () {
+    var motionTab = makeTab("MOTION");
+    addButton(motionTab, "Fade In", function () {
       animateSelected("fade-in", "Fade In");
-    };
-    panel.add("button", undefined, "Fade Out").onClick = function () {
+    });
+    addButton(motionTab, "Fade Out", function () {
       animateSelected("fade-out", "Fade Out");
-    };
-    panel.add("button", undefined, "Fade + Pop").onClick = function () {
+    });
+    addButton(motionTab, "Fade + Pop", function () {
       animateSelected("fade-pop", "Fade and Pop");
-    };
-    panel.add("button", undefined, "Slide Up").onClick = function () {
+    });
+    addButton(motionTab, "Slide Up", function () {
       animateSelected("slide-up", "Slide Up");
-    };
-    panel.add("button", undefined, "Slide Left").onClick = function () {
+    });
+    addButton(motionTab, "Slide Left", function () {
       animateSelected("slide-left", "Slide Left");
-    };
-    panel.add("button", undefined, "Spin In").onClick = function () {
+    });
+    addButton(motionTab, "Spin In", function () {
       animateSelected("spin-in", "Spin In");
-    };
-    panel.add("button", undefined, "Bounce In").onClick = function () {
+    });
+    addButton(motionTab, "Bounce In", function () {
       animateSelected("bounce-in", "Bounce In");
-    };
-    panel.add("button", undefined, "Scale Punch").onClick = function () {
+    });
+    addButton(motionTab, "Scale Punch", function () {
       animateSelected("scale-punch", "Scale Punch");
-    };
-    panel.add("button", undefined, "Stagger Selected Layers").onClick = staggerSelectedLayers;
-    panel.add("button", undefined, "Easy Ease Selected Keys").onClick = easyEaseSelectedKeys;
+    });
+    addButton(motionTab, "Stagger Selected Layers", staggerSelectedLayers);
+    addButton(motionTab, "Easy Ease Selected Keys", easyEaseSelectedKeys);
 
-    panel.add("statictext", undefined, "Actions target unlocked selections and support Ctrl/Cmd+Z.");
+    panel.add("statictext", undefined, "Actions target unlocked layers and support Ctrl/Cmd+Z.");
+    panel.preferredSize = [410, 590];
     panel.onResizing = panel.onResize = function () { this.layout.resize(); };
     panel.layout.layout(true);
     return panel;
   }
-
   var ui = panelFor(thisObj);
   if (ui instanceof Window) {
     ui.center();

@@ -86,6 +86,7 @@ void main() {
     );
 
     expect(filters, hasLength(1));
+    expect(filters.single, contains('format=rgba'));
     expect(filters.single, contains('scale=w='));
     expect(filters.single, contains('eval=frame'));
     expect(filters.single, contains('rotate=angle='));

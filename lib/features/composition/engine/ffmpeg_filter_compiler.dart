@@ -67,7 +67,7 @@ class FfmpegFilterCompiler {
       final safeScale = 'max(0.001,min(400,(' + scale + ')))';
       final safeRotation = 'max(-360,min(360,(' + rotation + ')))';
       final angle = '(' + safeRotation + ')*PI/180';
-      return 'scale=w='
+      return 'format=rgba,scale=w='
           "'max(1,iw*(" + safeScale + ")/100)':"
           "h='max(1,ih*(" + safeScale + ")/100)':eval=frame,"
           'rotate=angle=' + "'" + angle + "'" +

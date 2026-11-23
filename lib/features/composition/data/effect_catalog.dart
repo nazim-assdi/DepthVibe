@@ -251,7 +251,7 @@ class EffectCatalog {
       id: 'transform',
       name: 'Transform',
       category: 'Transform',
-      description: '2D position, scale, rotation and anchor transform.',
+      description: 'Scale and rotate a layer about its centre; use layer transform controls for position and anchor.',
       parameters: [EffectParameterDefinition(id: 'scale', label: 'Scale', min: 0, max: 400, defaultValue: 100, unit: '%'), EffectParameterDefinition(id: 'rotation', label: 'Rotation', min: -360, max: 360, defaultValue: 0, unit: '°')],
       ffmpegFilter: 'rotate',
     ),
