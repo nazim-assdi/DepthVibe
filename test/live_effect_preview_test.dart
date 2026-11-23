@@ -1,5 +1,6 @@
 import 'package:depthvibe/features/composition/domain/composition_models.dart';
 import 'package:depthvibe/features/composition/engine/live_effect_preview.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -38,15 +39,22 @@ void main() {
     expect(atEnd[4], closeTo(127.5, 0.0001));
   });
 
-  test('disabled effects remain absent from the live effect stack model', () {
+  test('disabled effects do not wrap or alter the live preview child', () {
     const disabled = EffectInstance(
       id: 'invert-1',
       effectId: 'invert',
       name: 'Invert',
       enabled: false,
     );
+    const child = SizedBox.shrink();
 
-    expect(disabled.enabled, isFalse);
-    expect(LiveEffectPreview.colorMatrixFor(disabled, 0), isNotNull);
+    final preview = LiveEffectPreview.apply(
+      child: child,
+      effects: const [disabled],
+      timeMs: 0,
+      canvasSize: Size(1920, 1080),
+    );
+
+    expect(identical(preview, child), isTrue);
   });
 }
