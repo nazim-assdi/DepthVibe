@@ -32,19 +32,19 @@ class LiveEffectPreview {
 
     switch (effect.effectId) {
       case 'brightness':
-        final lift = value('value', 0).clamp(-1.0, 1.0) * 255;
+        final lift = value('value', 0).clamp(-1.0, 1.0).toDouble() * 255;
         return _matrix(1, 0, 0, 0, lift, 0, 1, 0, 0, lift, 0, 0, 1, 0, lift);
       case 'contrast':
-        final factor = value('value', 1).clamp(0.0, 3.0);
+        final factor = value('value', 1).clamp(0.0, 3.0).toDouble();
         final offset = 128 * (1 - factor);
         return _matrix(factor, 0, 0, 0, offset, 0, factor, 0, 0, offset, 0, 0, factor, 0, offset);
       case 'gamma':
         // Preview approximation. Native export uses FFmpeg's nonlinear gamma.
-        final factor = (1 / value('value', 1).clamp(0.2, 3.0)).clamp(0.333, 5.0);
+        final factor = (1 / value('value', 1).clamp(0.2, 3.0)).clamp(0.333, 5.0).toDouble();
         final offset = 128 * (1 - factor);
         return _matrix(factor, 0, 0, 0, offset, 0, factor, 0, 0, offset, 0, 0, factor, 0, offset);
       case 'saturation':
-        return _saturation(value('value', 1).clamp(0.0, 3.0));
+        return _saturation(value('value', 1).clamp(0.0, 3.0).toDouble());
       case 'grayscale':
         return _saturation(0);
       case 'invert':
@@ -68,11 +68,11 @@ class LiveEffectPreview {
           0, 0, blue, 0, 128 * (1 - blue),
         );
       case 'camera_flash':
-        final lift = value('brightness', 0.35).clamp(0.0, 2.0) * 90;
+        final lift = value('brightness', 0.35).clamp(0.0, 2.0).toDouble() * 90;
         return _matrix(1, 0, 0, 0, lift, 0, 1, 0, 0, lift, 0, 0, 1, 0, lift);
       case 'bleach_bypass':
-        final saturation = value('saturation', 0.45).clamp(0.0, 1.0);
-        final contrast = value('contrast', 1.35).clamp(0.5, 2.5);
+        final saturation = value('saturation', 0.45).clamp(0.0, 1.0).toDouble();
+        final contrast = value('contrast', 1.35).clamp(0.5, 2.5).toDouble();
         return _compose(
           _saturation(saturation),
           _matrix(
@@ -103,7 +103,7 @@ class LiveEffectPreview {
       }
       switch (effect.effectId) {
         case 'gaussian_blur':
-          final sigma = value('sigma', 2).clamp(0.0, 30.0);
+          final sigma = value('sigma', 2).clamp(0.0, 30.0).toDouble();
           if (sigma > 0.01) {
             result = ImageFiltered(
               imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
@@ -112,7 +112,7 @@ class LiveEffectPreview {
           }
           break;
         case 'box_blur':
-          final sigma = value('radius', 2).clamp(0.0, 20.0) * 0.62;
+          final sigma = value('radius', 2).clamp(0.0, 20.0).toDouble() * 0.62;
           if (sigma > 0.01) {
             result = ImageFiltered(
               imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
@@ -121,7 +121,7 @@ class LiveEffectPreview {
           }
           break;
         case 'vignette':
-          final strength = (value('angle', 0.8) / 1.5).clamp(0.0, 1.0);
+          final strength = (value('angle', 0.8) / 1.5).clamp(0.0, 1.0).toDouble();
           result = Stack(fit: StackFit.passthrough, children: [
             result,
             Positioned.fill(child: IgnorePointer(child: DecoratedBox(
@@ -134,7 +134,7 @@ class LiveEffectPreview {
           ]);
           break;
         case 'letterbox':
-          final ratio = value('ratio', 0.1).clamp(0.02, 0.2);
+          final ratio = value('ratio', 0.1).clamp(0.02, 0.2).toDouble();
           result = Stack(fit: StackFit.passthrough, children: [
             result,
             Positioned(left: 0, right: 0, top: 0, height: canvasSize.height * ratio,
@@ -144,8 +144,8 @@ class LiveEffectPreview {
           ]);
           break;
         case 'frame_border':
-          final thickness = value('thickness', 6).clamp(1.0, 30.0);
-          final opacity = value('opacity', 0.8).clamp(0.0, 1.0);
+          final thickness = value('thickness', 6).clamp(1.0, 30.0).toDouble();
+          final opacity = value('opacity', 0.8).clamp(0.0, 1.0).toDouble();
           result = Container(
             foregroundDecoration: BoxDecoration(
               border: Border.all(color: Color.fromRGBO(255, 255, 255, opacity), width: thickness),
@@ -154,18 +154,18 @@ class LiveEffectPreview {
           );
           break;
         case 'transform':
-          final scale = value('scale', 100).clamp(0.0, 400.0) / 100;
+          final scale = value('scale', 100).clamp(0.0, 400.0).toDouble() / 100;
           final rotation = value('rotation', 0) * math.pi / 180;
           result = Transform.rotate(angle: rotation, child: Transform.scale(scale: scale, child: result));
           break;
         case 'film_gate_weave':
-          final amplitude = value('amplitude', 0.45).clamp(0.0, 3.0);
-          final speed = value('speed', 2).clamp(0.1, 10.0);
+          final amplitude = value('amplitude', 0.45).clamp(0.0, 3.0).toDouble();
+          final speed = value('speed', 2).clamp(0.1, 10.0).toDouble();
           final angle = amplitude * math.sin(timeMs / 1000 * speed * math.pi * 2) * math.pi / 180;
           result = Transform.rotate(angle: angle, child: result);
           break;
         case 'old_film':
-          final vignette = value('vignette', 0.7).clamp(0.1, 1.5);
+          final vignette = value('vignette', 0.7).clamp(0.1, 1.5).toDouble();
           result = Stack(fit: StackFit.passthrough, children: [
             result,
             Positioned.fill(child: IgnorePointer(child: DecoratedBox(
