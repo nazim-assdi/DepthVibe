@@ -12507,7 +12507,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     final thumbWidth = (barWidth / _timelineZoom)
                         .clamp(math.min(18.0, barWidth), barWidth)
                         .toDouble();
-                    final travel = math.max(0.0, barWidth - thumbWidth);
+                    final travel = math.max(0.0, barWidth - thumbWidth).toDouble();
                     final thumbLeft = travel * _timelineScrollRatio;
                     void updateFromX(double x) {
                       if (travel <= 0) {
@@ -14519,7 +14519,7 @@ class _PremiereTimelineRulerPainter extends CustomPainter {
 
     final visibleContentWidth = size.width * zoom;
     final scrollOffset =
-        (visibleContentWidth - size.width) * scrollRatio.clamp(0.0, 1.0);
+        ((visibleContentWidth - size.width) * scrollRatio.clamp(0.0, 1.0)).toDouble();
     final visibleStart =
         scrollOffset / visibleContentWidth * durationMs;
     final visibleDuration = durationMs / zoom;
