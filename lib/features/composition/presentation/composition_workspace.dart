@@ -2200,11 +2200,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           _workspaceMenuButton(
             'Composition',
             const [
+              PopupMenuItem(value: 'settings', child: Text('Composition Settings…')),
               PopupMenuItem(value: 'info', child: Text('Composition Information')),
               PopupMenuItem(value: 'transform', child: Text('Open Layer Properties')),
               PopupMenuItem(value: 'graph', child: Text('Open Graph Editor')),
             ],
             (action) {
+              if (action == 'settings') {
+                unawaited(_showCompositionSettings());
+                return;
+              }
               setState(() {
                 switch (action) {
                   case 'info':
@@ -2904,6 +2909,166 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ),
       ],
     );
+  }
+
+  Future<void> _showCompositionSettings() async {
+    final document = _controller.document;
+    final nameController = TextEditingController(text: document.name);
+    final widthController =
+        TextEditingController(text: document.width.toString());
+    final heightController =
+        TextEditingController(text: document.height.toString());
+    final frameRateController =
+        TextEditingController(text: document.frameRate.toString());
+    final durationController = TextEditingController(
+      text: (document.durationMs / 1000).toStringAsFixed(2),
+    );
+    String? error;
+
+    try {
+      final result = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, refreshDialog) => AlertDialog(
+            title: const Text('Composition Settings'),
+            content: SizedBox(
+              width: 420,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Composition name',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: widthController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Width (px)',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: heightController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Height (px)',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: frameRateController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: const InputDecoration(
+                              labelText: 'Frame rate (FPS)',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: durationController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: const InputDecoration(
+                              labelText: 'Duration (seconds)',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (error != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        error!,
+                        style: const TextStyle(
+                          color: Color(0xFFFF8E8E),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Allowed: 16–16384 px, 1–240 FPS, 1–3600 seconds.',
+                      style: TextStyle(fontSize: 10, color: Color(0xFF929EB2)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final width = int.tryParse(widthController.text.trim());
+                  final height = int.tryParse(heightController.text.trim());
+                  final frameRate =
+                      double.tryParse(frameRateController.text.trim());
+                  final duration =
+                      double.tryParse(durationController.text.trim());
+                  if (width == null ||
+                      height == null ||
+                      frameRate == null ||
+                      duration == null) {
+                    refreshDialog(
+                      () => error = 'Enter valid numeric values for all settings.',
+                    );
+                    return;
+                  }
+                  final saved = _controller.updateCompositionSettings(
+                    name: nameController.text,
+                    width: width,
+                    height: height,
+                    frameRate: frameRate,
+                    durationMs: (duration * 1000).round(),
+                  );
+                  if (!saved) {
+                    refreshDialog(
+                      () => error =
+                          'Check the name and ranges. No settings were changed.',
+                    );
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop(true);
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (result == true && mounted) {
+        setState(() => _notice = 'Composition settings updated.');
+      }
+    } finally {
+      nameController.dispose();
+      widthController.dispose();
+      heightController.dispose();
+      frameRateController.dispose();
+      durationController.dispose();
+    }
   }
 
   Widget _buildCompositionInfoPanel(CompositionDocument document) {
@@ -7276,6 +7441,36 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           value: style.strokeWidth.clamp(0, 30).toDouble(),
           onChanged: (value) => _controller.setShapeStyle(style.copyWith(strokeWidth: value)),
         ),
+        if (style.primitive == ShapePrimitive.polygon ||
+            style.primitive == ShapePrimitive.star) ...[
+          Text('Points: ${style.points}'),
+          Slider(
+            min: 3,
+            max: 24,
+            divisions: 21,
+            value: style.points.clamp(3, 24).toDouble(),
+            onChanged: (value) => _controller.setShapeStyle(
+              style.copyWith(points: value.round()),
+            ),
+          ),
+        ],
+        if (style.primitive == ShapePrimitive.path) ...[
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Closed path'),
+            value: style.pathClosed,
+            onChanged: (value) => _controller.setShapeStyle(
+              style.copyWith(
+                pathClosed: value,
+                fillColor: value ? style.fillColor : 'transparent',
+                strokeWidth: !value && style.strokeWidth <= 0
+                    ? 2
+                    : style.strokeWidth,
+              ),
+            ),
+          ),
+        ],
         Text('Corner radius: ${style.cornerRadius.toStringAsFixed(1)} px'),
         Slider(
           min: 0,

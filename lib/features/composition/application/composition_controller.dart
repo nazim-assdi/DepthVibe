@@ -160,6 +160,34 @@ class CompositionController extends ChangeNotifier {
     );
   }
 
+  bool updateCompositionSettings({
+    String? name,
+    int? width,
+    int? height,
+    double? frameRate,
+    int? durationMs,
+  }) {
+    final nextName = name?.trim();
+    if (nextName != null && nextName.isEmpty) return false;
+    if (width != null && (width < 16 || width > 16384)) return false;
+    if (height != null && (height < 16 || height > 16384)) return false;
+    if (frameRate != null &&
+        (!frameRate.isFinite || frameRate < 1 || frameRate > 240)) {
+      return false;
+    }
+    if (durationMs != null && (durationMs < 1000 || durationMs > 3600000)) {
+      return false;
+    }
+    _set(_document.copyWith(
+      name: nextName,
+      width: width,
+      height: height,
+      frameRate: frameRate,
+      durationMs: durationMs,
+    ));
+    return true;
+  }
+
   String addShapeLayer({
     required ShapeStyle style,
     required Vector3 position,

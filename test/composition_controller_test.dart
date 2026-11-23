@@ -1612,4 +1612,47 @@ void main() {
     controller.dispose();
   });
 
+
+  test('composition settings update atomically and can be undone', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        name: 'Before',
+        width: 1920,
+        height: 1080,
+        frameRate: 30,
+        durationMs: 30000,
+      ),
+    );
+    expect(
+      controller.updateCompositionSettings(
+        name: 'Main Film',
+        width: 2560,
+        height: 1440,
+        frameRate: 23.976,
+        durationMs: 90000,
+      ),
+      isTrue,
+    );
+    expect(controller.document.name, 'Main Film');
+    expect(controller.document.width, 2560);
+    expect(controller.document.height, 1440);
+    expect(controller.document.frameRate, 23.976);
+    expect(controller.document.durationMs, 90000);
+
+    expect(controller.updateCompositionSettings(width: 1), isFalse);
+    expect(controller.document.width, 2560);
+    expect(controller.updateCompositionSettings(frameRate: 0), isFalse);
+    expect(controller.document.frameRate, 23.976);
+    expect(controller.updateCompositionSettings(name: '   '), isFalse);
+    expect(controller.document.name, 'Main Film');
+
+    controller.undo();
+    expect(controller.document.name, 'Before');
+    expect(controller.document.width, 1920);
+    expect(controller.document.height, 1080);
+    expect(controller.document.frameRate, 30);
+    expect(controller.document.durationMs, 30000);
+    controller.dispose();
+  });
+
 }
