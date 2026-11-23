@@ -342,6 +342,7 @@ class CompositionController extends ChangeNotifier {
   void updateTextLayer({
     String? textContent,
     bool? is3dText,
+    double? textExtrusionDepth,
     String? textFontFamily,
     String? textFontAssetUri,
     List<String>? textFontFallback,
@@ -361,6 +362,7 @@ class CompositionController extends ChangeNotifier {
     _replace(layer.copyWith(
       textContent: textContent,
       is3dText: is3dText,
+      textExtrusionDepth: textExtrusionDepth?.clamp(0, 100).toDouble(),
       textFontFamily: textFontFamily,
       textFontAssetUri: textFontAssetUri,
       textFontFallback: textFontFallback,
