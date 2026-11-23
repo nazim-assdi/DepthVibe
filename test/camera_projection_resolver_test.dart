@@ -250,7 +250,7 @@ void main() {
     const camera = ResolvedLayerTransform(
       position: Vector3(960, 540, 0),
       scale: Vector3(100, 100, 100),
-      rotation: Vector3(0, 0, 0),
+      rotation: Vector3(0, 0, 30),
       opacity: 100,
       enabled: true,
     );
@@ -270,6 +270,7 @@ void main() {
     expect(direction.x, closeTo(0, 0.0001));
     expect(direction.y, closeTo(0, 0.0001));
     expect(direction.z, greaterThan(1000));
+    expect(rotation.z, 30);
   });
 
   test('two-node export expressions contain the saved point of interest', () {
