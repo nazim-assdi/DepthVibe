@@ -50,6 +50,8 @@ import '../engine/composition_project_service.dart';
 import '../engine/composition_recovery_service.dart';
 import '../engine/obj_mesh_loader.dart';
 import '../engine/scene_mesh_loader.dart';
+import '../engine/text_plane_mesh_builder.dart';
+import '../engine/software_3d_mesh_view.dart';
 import '../engine/software_3d_renderer.dart';
 import '../engine/gpu_3d_mesh_view.dart';
 import '../engine/audio_waveform_service.dart';
@@ -99,6 +101,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       LinkedHashMap<String, Future<FileStat>>();
   final Map<String, Future<img.Image?>> _scopeImageJobs = {};
   final Map<String, Future<ObjMesh>> _meshJobs = {};
+  final LinkedHashMap<String, Future<ObjMesh>> _textPlaneMeshJobs =
+      LinkedHashMap<String, Future<ObjMesh>>();
   final Map<String, Future<void>> _previewChunkJobs = {};
   Future<void> _previewChunkTail = Future<void>.value();
   final PreviewProxyService _previewProxyService = PreviewProxyService();
@@ -129,6 +133,125 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   Future<ObjMesh> _meshFor(String path) =>
       _meshJobs.putIfAbsent(path, () => const SceneMeshLoader().load(path));
+
+  Future<ObjMesh> _textPlaneMeshFor(CompositionLayer layer) {
+    final key = Object.hash(
+      layer.id,
+      layer.textContent,
+      layer.textFontFamily,
+      layer.textFontAssetUri,
+      layer.textFontSize,
+      layer.textFontWeight,
+      layer.textItalic,
+      layer.textColor,
+      layer.textLetterSpacing,
+      layer.textLineHeight,
+      layer.textAlign,
+      layer.textBoxWidth,
+      Object.hashAll(layer.textFontFallback),
+    ).toString();
+    final existing = _textPlaneMeshJobs.remove(key);
+    if (existing != null) {
+      _textPlaneMeshJobs[key] = existing;
+      return existing;
+    }
+    final job = _buildTextPlaneMesh(layer);
+    _textPlaneMeshJobs[key] = job;
+    while (_textPlaneMeshJobs.length > 64) {
+      _textPlaneMeshJobs.remove(_textPlaneMeshJobs.keys.first);
+    }
+    return job;
+  }
+
+  Future<ObjMesh> _buildTextPlaneMesh(CompositionLayer layer) async {
+    final fontManager = FontManagerService.instance;
+    final family = layer.textFontFamily ?? fontManager.activeFamily;
+    final fontPath = layer.textFontAssetUri ??
+        (layer.textFontFamily == null ? fontManager.activeFontPath : null);
+    try {
+      await fontManager.ensureFontsLoaded(
+        family: family,
+        path: fontPath,
+        fallbackFamilies: [
+          ...layer.textFontFallback,
+          ...fontManager.fallbackFamilies,
+        ],
+      );
+    } catch (_) {}
+
+    final content = layer.textContent ?? layer.name;
+    final rawColor = layer.textColor.replaceFirst('#', '');
+    final parsedColor = int.tryParse(rawColor, radix: 16);
+    final color = parsedColor == null
+        ? const Color(0xFFFFFFFF)
+        : Color(rawColor.length == 6 ? 0xFF000000 | parsedColor : parsedColor);
+    final weightIndex = ((layer.textFontWeight.clamp(100, 900) / 100)
+                .round() - 1)
+            .clamp(0, 8)
+            .toInt();
+    final textDirection = RegExp(r'[\\u0590-\\u08FF\\uFB1D-\\uFEFF]')
+            .hasMatch(content)
+        ? TextDirection.rtl
+        : TextDirection.ltr;
+    final alignment = switch (layer.textAlign) {
+      'center' => TextAlign.center,
+      'right' => TextAlign.right,
+      'justify' => TextAlign.justify,
+      _ => TextAlign.left,
+    };
+    final painter = TextPainter(
+      text: TextSpan(
+        text: content,
+        style: TextStyle(
+          color: color,
+          fontFamily: family,
+          fontFamilyFallback: [
+            ...layer.textFontFallback,
+            ...fontManager.fallbackFamilies,
+          ],
+          fontSize: layer.textFontSize.clamp(1.0, 2000.0).toDouble(),
+          fontWeight: FontWeight.values[weightIndex],
+          fontStyle: layer.textItalic ? FontStyle.italic : FontStyle.normal,
+          letterSpacing: layer.textLetterSpacing.clamp(-100.0, 500.0).toDouble(),
+          height: layer.textLineHeight.clamp(0.1, 10.0).toDouble(),
+          shadows: const [Shadow(color: Color(0xDD000000), blurRadius: 8)],
+        ),
+      ),
+      textAlign: alignment,
+      textDirection: textDirection,
+    );
+    painter.layout(
+      maxWidth: layer.textBoxWidth.clamp(1.0, 20000.0).toDouble(),
+    );
+    const padding = 8;
+    final width = math.max(1, painter.width.ceil() + padding * 2).toInt();
+    final height = math.max(1, painter.height.ceil() + padding * 2).toInt();
+    if (width > 8192 || height > 8192 || width * height > 16 * 1024 * 1024) {
+      painter.dispose();
+      throw StateError('3D text layer exceeds the safe 16-megapixel raster limit.');
+    }
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(
+      recorder,
+      ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+    );
+    painter.paint(canvas, const ui.Offset(padding.toDouble(), padding.toDouble()));
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(width, height);
+    picture.dispose();
+    painter.dispose();
+    try {
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) throw StateError('Could not rasterize 3D text layer.');
+      final bytes = data.buffer.asUint8List(
+        data.offsetInBytes,
+        data.lengthInBytes,
+      );
+      return const TextPlaneMeshBuilder().fromPngBytes(bytes);
+    } finally {
+      image.dispose();
+    }
+  }
 
   String _quoteFfmpeg(String value) =>
       "'" + value.replaceAll("'", "'\\''") + "'";
@@ -5409,7 +5532,67 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               );
         break;
       case LayerKind.text:
-        baseWidth = layer.textBoxWidth;
+        if (layer.is3dText) {
+          baseWidth = 760;
+          baseHeight = 760;
+          final meshCamera = cameraTransform != null && cameraTransform.enabled
+              ? cameraTransform
+              : const ResolvedLayerTransform(
+                  position: Vector3(0, 0, 0),
+                  scale: Vector3(100, 100, 100),
+                  rotation: Vector3(0, 0, 0),
+                  opacity: 100,
+                  enabled: true,
+                );
+          final meshCameraSettings =
+              cameraTransform != null && cameraTransform.enabled
+                  ? cameraLayer?.camera ?? const CameraSettings()
+                  : const CameraSettings();
+          final meshLights = <SceneLight>[
+            for (final item in doc.layers.where(
+              (candidate) =>
+                  candidate.kind == LayerKind.light && candidate.enabled,
+            ))
+              SceneLight(
+                transform: resolvedTransforms[item.id]!,
+                settings: item.light ?? const LightSettings(),
+              ),
+          ];
+          visual = FutureBuilder<ObjMesh>(
+            future: _textPlaneMeshFor(layer),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Center(
+                  child: Icon(Icons.broken_image_outlined,
+                      color: Color(0xFFFF8E8E), size: 38),
+                );
+              }
+              final mesh = snapshot.data;
+              if (mesh == null) {
+                return const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                );
+              }
+              return Software3dMeshView(
+                mesh: mesh,
+                timeMs: math.max(0, timeMs - layer.startMs).toInt(),
+                modelTransform: resolved,
+                cameraTransform: meshCamera,
+                cameraSettings: meshCameraSettings,
+                lights: meshLights,
+                compositionWidth: doc.width.toDouble(),
+                compositionHeight: doc.height.toDouble(),
+                maximumPreviewDimension: DepthVibeSettingsService
+                    .instance.performanceMode.maximumPreviewDimension,
+              );
+            },
+          );
+        } else {
+          baseWidth = layer.textBoxWidth;
         final content = layer.textContent ?? layer.name;
         final approximateCharactersPerLine =
             (baseWidth / (layer.textFontSize * 0.52))
@@ -5471,6 +5654,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ),
           ),
         );
+        }
         break;
       case LayerKind.nullObject:
         visual = const Icon(Icons.control_camera, color: Color(0xFFB5A4FF), size: 30);
@@ -5568,7 +5752,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         break;
     }
 
-    final isMeshLayer = layer.kind == LayerKind.threeDModel;
+    final isMeshLayer = layer.kind == LayerKind.threeDModel ||
+        (layer.kind == LayerKind.text && layer.is3dText);
     final meshCameraScaleX = projected != null && resolved.scale.x.abs() > 0.0001
         ? projected.scale.x.abs() / resolved.scale.x.abs()
         : 1.0;
