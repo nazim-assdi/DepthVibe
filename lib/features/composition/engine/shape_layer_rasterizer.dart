@@ -94,7 +94,9 @@ class ShapeLayerRasterizer {
   ui.Color _color(String value) {
     final normalized = value.replaceFirst('#', '');
     final parsed = int.tryParse(normalized, radix: 16) ?? 0x7C8CFF;
-    return ui.Color(0xFF000000 | parsed);
+    return ui.Color(
+      normalized.length == 8 ? parsed : (0xFF000000 | parsed),
+    );
   }
 
   ui.Path _vectorPath(ui.Size size, ShapeStyle style) {
