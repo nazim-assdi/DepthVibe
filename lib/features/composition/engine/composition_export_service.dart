@@ -22,6 +22,7 @@ import 'obj_mesh_loader.dart';
 import 'scene_mesh_loader.dart';
 import 'software_3d_renderer.dart';
 import 'software_3d_png_encoder.dart';
+import 'shape_layer_rasterizer.dart';
 
 typedef CompositionExportProgress = void Function(double value);
 
@@ -112,6 +113,7 @@ class CompositionExportService {
       LayerKind.photoshopLayer,
       LayerKind.threeDModel,
       LayerKind.text,
+      LayerKind.shape,
     };
     final anySolo = document.layers.any((layer) =>
         layer.enabled &&
@@ -130,7 +132,7 @@ class CompositionExportService {
 
     for (final layer in enabled) {
       cancellation?.throwIfCancelled();
-      if (layer.kind == LayerKind.text) {
+      if (layer.kind == LayerKind.text || layer.kind == LayerKind.shape) {
         visualLayers.add(layer);
       } else if (visualKinds.contains(layer.kind)) {
         final path = layer.sourceUri;
@@ -188,6 +190,10 @@ class CompositionExportService {
       outputDirectory.path + Platform.pathSeparator + '.text-render-' +
       DateTime.now().microsecondsSinceEpoch.toString(),
     );
+    final shapeTempDirectory = Directory(
+      outputDirectory.path + Platform.pathSeparator + '.shape-render-' +
+      DateTime.now().microsecondsSinceEpoch.toString(),
+    );
 
     try {
       final meshVideoPaths = await _prepareMeshLayerVideos(
@@ -205,6 +211,13 @@ class CompositionExportService {
         cancellation: cancellation,
       );
       cancellation?.throwIfCancelled();
+      final shapeImagePaths = await _prepareShapeLayerImages(
+        document,
+        visualLayers.where((layer) => layer.kind == LayerKind.shape).toList(),
+        shapeTempDirectory,
+        cancellation: cancellation,
+      );
+      cancellation?.throwIfCancelled();
       final command = await _buildCommand(
         document,
         visualLayers,
@@ -212,6 +225,7 @@ class CompositionExportService {
         output.path,
         meshVideoPaths: meshVideoPaths,
         textImagePaths: textImagePaths,
+        shapeImagePaths: shapeImagePaths,
       );
       final completion = Completer<void>();
       final start = FFmpegKit.executeAsync(
@@ -256,6 +270,9 @@ class CompositionExportService {
       if (await textTempDirectory.exists()) {
         await textTempDirectory.delete(recursive: true);
       }
+      if (await shapeTempDirectory.exists()) {
+        await shapeTempDirectory.delete(recursive: true);
+      }
       onProgress?.call(1);
       return CompositionExportResult(
         file: output,
@@ -269,6 +286,9 @@ class CompositionExportService {
       }
       if (await textTempDirectory.exists()) {
         await textTempDirectory.delete(recursive: true);
+      }
+      if (await shapeTempDirectory.exists()) {
+        await shapeTempDirectory.delete(recursive: true);
       }
       rethrow;
     } finally {
@@ -474,6 +494,42 @@ class CompositionExportService {
   }
 
 
+  Future<Map<String, String>> _prepareShapeLayerImages(
+    CompositionDocument document,
+    List<CompositionLayer> shapeLayers,
+    Directory directory, {
+    CompositionExportCancellation? cancellation,
+  }) async {
+    if (shapeLayers.isEmpty) return const <String, String>{};
+    await directory.create(recursive: true);
+    const rasterizer = ShapeLayerRasterizer();
+    final result = <String, String>{};
+
+    for (var index = 0; index < shapeLayers.length; index++) {
+      cancellation?.throwIfCancelled();
+      final layer = shapeLayers[index];
+      final style = layer.shapeStyle ?? const ShapeStyle();
+      // Primitive shapes use the same 160x120 local canvas as the editor.
+      // Pen paths occupy composition space, matching their preview bounds.
+      final width = style.primitive == ShapePrimitive.path ? document.width : 160;
+      final height = style.primitive == ShapePrimitive.path ? document.height : 120;
+      final png = await rasterizer.rasterize(
+        layer,
+        width: width,
+        height: height,
+        timeMs: layer.startMs,
+      );
+      cancellation?.throwIfCancelled();
+      final file = File(
+        directory.path + Platform.pathSeparator +
+            'shape_' + index.toString().padLeft(4, '0') + '.png',
+      );
+      await file.writeAsBytes(png, flush: true);
+      result[layer.id] = file.path;
+    }
+    return result;
+  }
+
   Future<Map<String, String>> _prepareTextLayerImages(
     CompositionDocument document,
     List<CompositionLayer> textLayers,
@@ -605,6 +661,7 @@ class CompositionExportService {
     String outputPath, {
     required Map<String, String> meshVideoPaths,
     required Map<String, String> textImagePaths,
+    required Map<String, String> shapeImagePaths,
   }) async {
     final total = (document.durationMs / 1000).toStringAsFixed(3);
     final width = document.width;
@@ -618,7 +675,8 @@ class CompositionExportService {
             layer.kind == LayerKind.image ||
             layer.kind == LayerKind.photoshopLayer ||
             layer.kind == LayerKind.threeDModel ||
-            layer.kind == LayerKind.text)
+            layer.kind == LayerKind.text ||
+            layer.kind == LayerKind.shape)
         .toList();
     final mediaInputIndices = <String, int>{
       for (var index = 0; index < mediaLayers.length; index++)
@@ -672,6 +730,14 @@ class CompositionExportService {
         continue;
       }
       final duration = (layer.durationMs / 1000).toStringAsFixed(3);
+      if (layer.kind == LayerKind.shape) {
+        final shapeImage = shapeImagePaths[layer.id];
+        if (shapeImage == null) {
+          throw StateError('Shape layer ' + layer.name + ' has no rasterized shape image.');
+        }
+        buffer.write('-loop 1 -t ' + duration + ' -i ' + _quote(shapeImage) + ' ');
+        continue;
+      }
       if (layer.kind == LayerKind.text) {
         final textImage = textImagePaths[layer.id];
         if (textImage == null) {
