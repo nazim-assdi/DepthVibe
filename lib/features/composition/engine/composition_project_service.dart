@@ -687,12 +687,31 @@ class CompositionProjectService {
     return result;
   }
 
-  static bool _isInside(String root, String path) =>
-      path.replaceAll('/', Platform.pathSeparator)
-          .replaceAll(String.fromCharCode(92), Platform.pathSeparator)
-          .startsWith(root.endsWith(Platform.pathSeparator)
-              ? root
-              : root + Platform.pathSeparator);
+  static String _normalizeContainmentPath(String value) {
+    var normalized = value.replaceAll(String.fromCharCode(92), '/');
+    if (Platform.isWindows) {
+      normalized = normalized.toLowerCase();
+      if (normalized.startsWith('//?/unc/')) {
+        normalized = '//' + normalized.substring(8);
+      } else if (normalized.startsWith('//?/')) {
+        normalized = normalized.substring(4);
+      } else if (normalized.startsWith('//./')) {
+        normalized = normalized.substring(4);
+      }
+    }
+    final isUnc = normalized.startsWith('//');
+    final remainder = isUnc ? normalized.substring(2) : normalized;
+    final collapsed = remainder.replaceAll(RegExp(r'/+'), '/');
+    final joined = (isUnc ? '//' : '') + collapsed;
+    return joined.endsWith('/') ? joined : '$joined/';
+  }
+
+  static bool _isInside(String root, String path) {
+    final normalizedRoot = _normalizeContainmentPath(root);
+    final normalizedPath = _normalizeContainmentPath(path);
+    return normalizedPath.length > normalizedRoot.length &&
+        normalizedPath.startsWith(normalizedRoot);
+  }
 
   static String _join(String first, String second) {
     final cleaned = second
