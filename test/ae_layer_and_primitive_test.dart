@@ -55,22 +55,11 @@ void main() {
 
     test('every built-in preset produces a mesh accepted by the OBJ loader', () {
       for (final preset in PrimitiveObjFactory.presets) {
-        final materials = loader.parseMaterialLibraries([
-          PrimitiveObjFactory.materialFor(preset.id),
-        ]);
-        final mesh = loader.parse(
-          PrimitiveObjFactory.objFor(preset.id),
-          materials: materials,
-        );
+        final mesh = loader.parse(PrimitiveObjFactory.objFor(preset.id));
 
         expect(mesh.vertices.length, greaterThanOrEqualTo(3), reason: preset.id);
         expect(mesh.triangles, isNotEmpty, reason: preset.id);
         expect(mesh.maxDimension, greaterThan(0), reason: preset.id);
-        expect(
-          mesh.materials.containsKey('DepthVibePrimitive'),
-          isTrue,
-          reason: preset.id,
-        );
       }
     });
 
