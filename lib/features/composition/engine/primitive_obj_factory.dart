@@ -96,8 +96,8 @@ class PrimitiveObjFactory {
     for (var index = 0; index < segments; index++) {
       final next = (index + 1) % segments;
       mesh.face([bottom[index], top[index], top[next], bottom[next]]);
-      mesh.face([bottomCenter, bottom[next], bottom[index]]);
-      mesh.face([topCenter, top[index], top[next]]);
+      mesh.face([bottomCenter, bottom[index], bottom[next]]);
+      mesh.face([topCenter, top[next], top[index]]);
     }
   }
 
@@ -136,7 +136,7 @@ class PrimitiveObjFactory {
     for (var index = 0; index < segments; index++) {
       final next = (index + 1) % segments;
       mesh.face([base[index], apex, base[next]]);
-      mesh.face([center, base[next], base[index]]);
+      mesh.face([center, base[index], base[next]]);
     }
   }
 
@@ -178,15 +178,15 @@ class PrimitiveObjFactory {
     final last = rings.last;
     for (var index = 0; index < longitudeSegments; index++) {
       final next = (index + 1) % longitudeSegments;
-      mesh.face([bottom, first[next], first[index]]);
-      mesh.face([last[index], last[next], top]);
+      mesh.face([bottom, first[index], first[next]]);
+      mesh.face([last[index], top, last[next]]);
     }
     for (var ringIndex = 0; ringIndex < rings.length - 1; ringIndex++) {
       final lower = rings[ringIndex];
       final upper = rings[ringIndex + 1];
       for (var index = 0; index < longitudeSegments; index++) {
         final next = (index + 1) % longitudeSegments;
-        mesh.face([lower[index], lower[next], upper[next], upper[index]]);
+        mesh.face([lower[index], upper[index], upper[next], lower[next]]);
       }
     }
   }
@@ -209,7 +209,7 @@ class PrimitiveObjFactory {
       final nextMajor = (major + 1) % majorSegments;
       for (var minor = 0; minor < minorSegments; minor++) {
         final nextMinor = (minor + 1) % minorSegments;
-        mesh.face([rings[major][minor], rings[nextMajor][minor], rings[nextMajor][nextMinor], rings[major][nextMinor]]);
+        mesh.face([rings[major][minor], rings[major][nextMinor], rings[nextMajor][nextMinor], rings[nextMajor][minor]]);
       }
     }
   }
@@ -229,11 +229,11 @@ class PrimitiveObjFactory {
     final c = mesh.vertex(0.5, -0.5, 0.5);
     final d = mesh.vertex(-0.5, -0.5, 0.5);
     final apex = mesh.vertex(0, 0.5, 0);
-    mesh.face([a, d, c, b]);
-    mesh.face([a, b, apex]);
-    mesh.face([b, c, apex]);
-    mesh.face([c, d, apex]);
-    mesh.face([d, a, apex]);
+    mesh.face([a, b, c, d]);
+    mesh.face([a, apex, b]);
+    mesh.face([b, apex, c]);
+    mesh.face([c, apex, d]);
+    mesh.face([d, apex, a]);
   }
 
   static void _triangularPrism(_ObjBuilder mesh) {
@@ -243,11 +243,11 @@ class PrimitiveObjFactory {
     final d = mesh.vertex(-0.5, 0.5, -0.35);
     final e = mesh.vertex(0.5, 0.5, -0.35);
     final f = mesh.vertex(0, 0.5, 0.5);
-    mesh.face([a, c, b]);
-    mesh.face([d, e, f]);
-    mesh.face([a, b, e, d]);
-    mesh.face([b, c, f, e]);
-    mesh.face([c, a, d, f]);
+    mesh.face([a, b, c]);
+    mesh.face([d, f, e]);
+    mesh.face([a, d, e, b]);
+    mesh.face([b, e, f, c]);
+    mesh.face([c, f, d, a]);
   }
 }
 
