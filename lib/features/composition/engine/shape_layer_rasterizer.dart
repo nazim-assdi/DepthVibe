@@ -178,20 +178,6 @@ class ShapeLayerRasterizer {
     return path;
   }
 
-  double _sin(double value) {
-    // Dart's math functions are kept out of the public API for this small
-    // deterministic rasterizer; these are standard radians.
-    return _trig(value, true);
-  }
-
-  double _cos(double value) => _trig(value, false);
-
-  double _trig(double value, bool sine) {
-    // Use dart:math through a tiny local import-free approximation is not
-    // accurate enough for vector geometry; this method is replaced below.
-    return sine ? value : value;
-  }
-
   void _paint(ui.Canvas canvas, ui.Size size, ShapeStyle style) {
     final path = _primitivePath(size, style);
     final hasFill = style.primitive != ShapePrimitive.path || style.pathClosed;
