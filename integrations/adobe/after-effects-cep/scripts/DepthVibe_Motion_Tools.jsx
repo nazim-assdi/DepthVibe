@@ -614,6 +614,25 @@
     });
   }
 
+  function visibleCenterInComp(layer, time) {
+    if (typeof layer.sourceRectAtTime !== "function" ||
+        typeof layer.toComp !== "function") return null;
+    try {
+      var rect = layer.sourceRectAtTime(time, false);
+      if (!rect || !isFinite(rect.left) || !isFinite(rect.top) ||
+          !isFinite(rect.width) || !isFinite(rect.height)) return null;
+      var center = layer.toComp([
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2
+      ]);
+      if (!center || center.length < 2 ||
+          !isFinite(center[0]) || !isFinite(center[1])) return null;
+      return [center[0], center[1]];
+    } catch (_) {
+      return null;
+    }
+  }
+
   function alignSelectedLayers(axisMode) {
     var comp = activeComp();
     if (!comp) return;
@@ -627,19 +646,30 @@
       if (layers[i].threeDLayer || layers[i].parent) continue;
       var position = positionProperty(layers[i]);
       var value = positionValueAt(position, comp.time);
-      if (value && value.length >= 2 && !position.expressionEnabled) {
-        eligible.push({layer: layers[i], property: position, value: value});
+      var center = visibleCenterInComp(layers[i], comp.time);
+      if (value && value.length >= 2 && center &&
+          !position.expressionEnabled) {
+        eligible.push({
+          layer: layers[i],
+          property: position,
+          value: value,
+          center: center
+        });
       }
     }
     if (!eligible.length) {
-      alert("Select unparented 2D layers with editable Position properties.");
+      alert("Select unparented 2D layers with measurable visible bounds and editable Position.");
       return;
     }
-    undoGroup("Align Selected Layers", function () {
+    undoGroup("Align Visible Layer Bounds", function () {
       for (var j = 0; j < eligible.length; j++) {
         var item = eligible[j];
-        if (axisMode === "x" || axisMode === "both") item.value[0] = comp.width / 2;
-        if (axisMode === "y" || axisMode === "both") item.value[1] = comp.height / 2;
+        if (axisMode === "x" || axisMode === "both") {
+          item.value[0] += comp.width / 2 - item.center[0];
+        }
+        if (axisMode === "y" || axisMode === "both") {
+          item.value[1] += comp.height / 2 - item.center[1];
+        }
         setPositionValueAt(item.property, comp.time, item.value);
       }
     });
@@ -658,24 +688,32 @@
       if (layers[i].threeDLayer || layers[i].parent) continue;
       var position = positionProperty(layers[i]);
       var value = positionValueAt(position, comp.time);
-      if (value && value.length >= 2 && !position.expressionEnabled) {
-        eligible.push({layer: layers[i], property: position, value: value});
+      var center = visibleCenterInComp(layers[i], comp.time);
+      if (value && value.length >= 2 && center &&
+          !position.expressionEnabled) {
+        eligible.push({
+          layer: layers[i],
+          property: position,
+          value: value,
+          center: center
+        });
       }
     }
     if (eligible.length < 3) {
-      alert("Select at least three unparented 2D layers with editable Position.");
+      alert("Select at least three unparented 2D layers with measurable visible bounds.");
       return;
     }
     var dimension = axis === "x" ? 0 : 1;
     eligible.sort(function (a, b) {
-      return a.value[dimension] - b.value[dimension];
+      return a.center[dimension] - b.center[dimension];
     });
-    undoGroup(axis === "x" ? "Distribute Layers Horizontally" : "Distribute Layers Vertically", function () {
-      var first = eligible[0].value[dimension];
-      var last = eligible[eligible.length - 1].value[dimension];
+    undoGroup(axis === "x" ? "Distribute Visible Layer Bounds Horizontally" : "Distribute Visible Layer Bounds Vertically", function () {
+      var first = eligible[0].center[dimension];
+      var last = eligible[eligible.length - 1].center[dimension];
       var intervals = eligible.length - 1;
       for (var j = 1; j < eligible.length - 1; j++) {
-        eligible[j].value[dimension] = first + (last - first) * j / intervals;
+        var target = first + (last - first) * j / intervals;
+        eligible[j].value[dimension] += target - eligible[j].center[dimension];
         setPositionValueAt(eligible[j].property, comp.time, eligible[j].value);
       }
     });
@@ -818,19 +856,19 @@
     addButton(timelineTab, "Add Markers to Selected Layers", addSelectedLayerMarkers);
 
     var alignTab = makeTab("ALIGN");
-    addButton(alignTab, "Center Horizontally", function () {
+    addButton(alignTab, "Center Visible Bounds Horizontally", function () {
       alignSelectedLayers("x");
     });
-    addButton(alignTab, "Center Vertically", function () {
+    addButton(alignTab, "Center Visible Bounds Vertically", function () {
       alignSelectedLayers("y");
     });
-    addButton(alignTab, "Center Both Axes", function () {
+    addButton(alignTab, "Center Visible Bounds (Both)", function () {
       alignSelectedLayers("both");
     });
-    addButton(alignTab, "Distribute Horizontally", function () {
+    addButton(alignTab, "Distribute Visible Centers Horizontally", function () {
       distributeSelectedLayers("x");
     });
-    addButton(alignTab, "Distribute Vertically", function () {
+    addButton(alignTab, "Distribute Visible Centers Vertically", function () {
       distributeSelectedLayers("y");
     });
 

@@ -16,7 +16,7 @@ This is an original ExtendScript / ScriptUI palette for After Effects. It is not
 - Native AE effect actions in separate EFFECTS and VFX tabs: Gaussian/Box/Directional Blur, Glow, Drop Shadow, Tint, Sharpen, Posterize Time, Hue/Saturation, Curves, Levels, Lumetri, Vibrance, Exposure, Fractal Noise, Turbulent Displace, Wave Warp, Displacement Map, Optics Compensation, Echo, Pixel Motion Blur, Linear/Radial Wipe, Block Dissolve, 4-Color Gradient and CC Light Sweep
 - Editable keyframe presets: Fade In/Out, Fade + Pop, Slide Up/Down/Left/Right, Spin In, Bounce In, Scale Punch, Zoom In, Elastic Pop, Text Rise, Pulse and Whip In
 - Timeline tools: sequence selected layers at the playhead with configurable gap, trim in/out to playhead, split selected layers at playhead, add composition/layer markers
-- 2D layout tools: centre selected layers and distribute three or more layers horizontally/vertically
+- 2D layout tools: centre the visible bounds and distribute visible centres horizontally/vertically for unparented 2D layers
 - Layer staggering and Easy Ease for selected transform keys
 
 Effects are added using After Effects' native effect registry. If an effect match name is not available in the installed After Effects version, the script reports the layer/effect error instead of pretending it was added.
