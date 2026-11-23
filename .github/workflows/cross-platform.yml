@@ -45,9 +45,11 @@ jobs:
           dart format lib test
           flutter analyze --no-fatal-infos
           flutter test
-      - name: Validate After Effects ScriptUI source syntax
+      - name: Validate After Effects ScriptUI source syntax and controls
         shell: bash
-        run: node --check < integrations/adobe/after-effects-cep/scripts/DepthVibe_Motion_Tools.jsx
+        run: |
+          node --check < integrations/adobe/after-effects-cep/scripts/DepthVibe_Motion_Tools.jsx
+          node integrations/adobe/after-effects-cep/scripts/validate_scriptui.js
       - name: Build Windows desktop release
         run: flutter build windows --release
       - name: Verify and package portable Windows application

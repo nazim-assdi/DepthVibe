@@ -453,6 +453,234 @@
     });
   }
 
+
+  function positionProperty(layer) {
+    var transform = layer.property("ADBE Transform Group");
+    return transform ? transform.property("ADBE Position") : null;
+  }
+
+  function positionValueAt(position, time) {
+    if (!position) return null;
+    if (position.dimensionsSeparated &&
+        typeof position.getSeparationFollower === "function") {
+      var dimensions = position.isSpatial ? 3 : 2;
+      var values = [];
+      for (var i = 0; i < dimensions; i++) {
+        var follower = position.getSeparationFollower(i);
+        if (!follower) return null;
+        values.push(follower.valueAtTime(time, false));
+      }
+      return values;
+    }
+    var value = position.valueAtTime(time, false);
+    return value instanceof Array ? value.slice(0) : null;
+  }
+
+  function setPositionValueAt(position, time, values) {
+    if (!position || !values || !(values instanceof Array)) return false;
+    if (position.dimensionsSeparated &&
+        typeof position.getSeparationFollower === "function") {
+      for (var i = 0; i < values.length; i++) {
+        var follower = position.getSeparationFollower(i);
+        if (!follower || follower.expressionEnabled) return false;
+        if (follower.numKeys > 0) follower.setValueAtTime(time, values[i]);
+        else follower.setValue(values[i]);
+      }
+      return true;
+    }
+    if (position.expressionEnabled) return false;
+    if (position.numKeys > 0) position.setValueAtTime(time, values);
+    else position.setValue(values);
+    return true;
+  }
+
+  function sequenceSelectedLayersAtPlayhead() {
+    var comp = activeComp();
+    if (!comp) return;
+    var layers = selectedLayers(comp);
+    if (layers.length < 2) {
+      alert("Select at least two unlocked layers to sequence.");
+      return;
+    }
+    var gapInput = prompt("Gap between layers in seconds:", "0.12");
+    if (gapInput === null) return;
+    var gap = parseFloat(gapInput);
+    if (isNaN(gap) || gap < 0 || gap > 60) {
+      alert("Enter a gap from 0 to 60 seconds.");
+      return;
+    }
+    undoGroup("Sequence Selected Layers", function () {
+      var cursor = comp.time;
+      var moved = 0;
+      for (var i = 0; i < layers.length; i++) {
+        var layer = layers[i];
+        var duration = layer.outPoint - layer.inPoint;
+        if (duration <= 0) continue;
+        var delta = cursor - layer.inPoint;
+        layer.startTime = layer.startTime + delta;
+        layer.inPoint = cursor;
+        layer.outPoint = cursor + duration;
+        cursor += duration + gap;
+        moved++;
+      }
+      if (!moved) alert("No selected layers had a valid duration.");
+    });
+  }
+
+  function trimSelectedLayersToPlayhead(trimStart) {
+    var comp = activeComp();
+    if (!comp) return;
+    var layers = selectedLayers(comp);
+    if (!layers.length) {
+      alert("Select one or more unlocked layers first.");
+      return;
+    }
+    undoGroup(trimStart ? "Trim Layer Starts to Playhead" : "Trim Layer Ends to Playhead", function () {
+      var changed = 0;
+      var time = comp.time;
+      for (var i = 0; i < layers.length; i++) {
+        var layer = layers[i];
+        if (trimStart && time > layer.inPoint && time < layer.outPoint) {
+          layer.inPoint = time;
+          changed++;
+        } else if (!trimStart && time > layer.inPoint && time < layer.outPoint) {
+          layer.outPoint = time;
+          changed++;
+        }
+      }
+      if (!changed) alert("The playhead must be inside the selected layer(s).");
+    });
+  }
+
+  function splitSelectedLayersAtPlayhead() {
+    var comp = activeComp();
+    if (!comp) return;
+    var layers = selectedLayers(comp);
+    if (!layers.length) {
+      alert("Select one or more unlocked layers first.");
+      return;
+    }
+    undoGroup("Split Selected Layers at Playhead", function () {
+      var split = 0;
+      var frame = comp.frameDuration;
+      for (var i = 0; i < layers.length; i++) {
+        var layer = layers[i];
+        if (comp.time <= layer.inPoint + frame * 0.25 ||
+            comp.time >= layer.outPoint - frame * 0.25) continue;
+        var originalName = layer.name;
+        var right = layer.duplicate();
+        right.name = originalName + " [Right]";
+        right.inPoint = comp.time;
+        layer.outPoint = comp.time;
+        layer.name = originalName + " [Left]";
+        split++;
+      }
+      if (!split) alert("Move the playhead inside the selected layer(s) to split them.");
+    });
+  }
+
+  function addCompositionMarker() {
+    var comp = activeComp();
+    if (!comp) return;
+    var label = prompt("Composition marker comment:", "DepthVibe Marker");
+    if (label === null) return;
+    undoGroup("Add Composition Marker", function () {
+      comp.markerProperty.setValueAtTime(comp.time, new MarkerValue(label));
+    });
+  }
+
+  function addSelectedLayerMarkers() {
+    var comp = activeComp();
+    if (!comp) return;
+    var layers = selectedLayers(comp);
+    if (!layers.length) {
+      alert("Select one or more unlocked layers first.");
+      return;
+    }
+    var label = prompt("Layer marker comment:", "DepthVibe Marker");
+    if (label === null) return;
+    undoGroup("Add Markers to Selected Layers", function () {
+      var added = 0;
+      for (var i = 0; i < layers.length; i++) {
+        try {
+          var marker = layers[i].property("ADBE Marker");
+          if (marker) {
+            marker.setValueAtTime(comp.time, new MarkerValue(label));
+            added++;
+          }
+        } catch (_) {}
+      }
+      if (!added) alert("No markers could be added to the selected layers.");
+    });
+  }
+
+  function alignSelectedLayers(axisMode) {
+    var comp = activeComp();
+    if (!comp) return;
+    var layers = selectedLayers(comp);
+    if (!layers.length) {
+      alert("Select one or more unlocked layers first.");
+      return;
+    }
+    var eligible = [];
+    for (var i = 0; i < layers.length; i++) {
+      if (layers[i].threeDLayer || layers[i].parent) continue;
+      var position = positionProperty(layers[i]);
+      var value = positionValueAt(position, comp.time);
+      if (value && value.length >= 2 && !position.expressionEnabled) {
+        eligible.push({layer: layers[i], property: position, value: value});
+      }
+    }
+    if (!eligible.length) {
+      alert("Select unparented 2D layers with editable Position properties.");
+      return;
+    }
+    undoGroup("Align Selected Layers", function () {
+      for (var j = 0; j < eligible.length; j++) {
+        var item = eligible[j];
+        if (axisMode === "x" || axisMode === "both") item.value[0] = comp.width / 2;
+        if (axisMode === "y" || axisMode === "both") item.value[1] = comp.height / 2;
+        setPositionValueAt(item.property, comp.time, item.value);
+      }
+    });
+  }
+
+  function distributeSelectedLayers(axis) {
+    var comp = activeComp();
+    if (!comp) return;
+    var layers = selectedLayers(comp);
+    if (layers.length < 3) {
+      alert("Select at least three layers to distribute.");
+      return;
+    }
+    var eligible = [];
+    for (var i = 0; i < layers.length; i++) {
+      if (layers[i].threeDLayer || layers[i].parent) continue;
+      var position = positionProperty(layers[i]);
+      var value = positionValueAt(position, comp.time);
+      if (value && value.length >= 2 && !position.expressionEnabled) {
+        eligible.push({layer: layers[i], property: position, value: value});
+      }
+    }
+    if (eligible.length < 3) {
+      alert("Select at least three unparented 2D layers with editable Position.");
+      return;
+    }
+    var dimension = axis === "x" ? 0 : 1;
+    eligible.sort(function (a, b) {
+      return a.value[dimension] - b.value[dimension];
+    });
+    undoGroup(axis === "x" ? "Distribute Layers Horizontally" : "Distribute Layers Vertically", function () {
+      var first = eligible[0].value[dimension];
+      var last = eligible[eligible.length - 1].value[dimension];
+      var intervals = eligible.length - 1;
+      for (var j = 1; j < eligible.length - 1; j++) {
+        eligible[j].value[dimension] = first + (last - first) * j / intervals;
+        setPositionValueAt(eligible[j].property, comp.time, eligible[j].value);
+      }
+    });
+  }
+
   function panelFor(target) {
     var panel = target instanceof Panel
       ? target
@@ -577,6 +805,35 @@
       addNativeEffect("CC Light Sweep", "CC Light Sweep");
     });
 
+    var timelineTab = makeTab("TIMELINE");
+    addButton(timelineTab, "Sequence Selected Layers", sequenceSelectedLayersAtPlayhead);
+    addButton(timelineTab, "Trim Layer Starts to Playhead", function () {
+      trimSelectedLayersToPlayhead(true);
+    });
+    addButton(timelineTab, "Trim Layer Ends to Playhead", function () {
+      trimSelectedLayersToPlayhead(false);
+    });
+    addButton(timelineTab, "Split Selected Layers at Playhead", splitSelectedLayersAtPlayhead);
+    addButton(timelineTab, "Add Composition Marker", addCompositionMarker);
+    addButton(timelineTab, "Add Markers to Selected Layers", addSelectedLayerMarkers);
+
+    var alignTab = makeTab("ALIGN");
+    addButton(alignTab, "Center Horizontally", function () {
+      alignSelectedLayers("x");
+    });
+    addButton(alignTab, "Center Vertically", function () {
+      alignSelectedLayers("y");
+    });
+    addButton(alignTab, "Center Both Axes", function () {
+      alignSelectedLayers("both");
+    });
+    addButton(alignTab, "Distribute Horizontally", function () {
+      distributeSelectedLayers("x");
+    });
+    addButton(alignTab, "Distribute Vertically", function () {
+      distributeSelectedLayers("y");
+    });
+
     var motionTab = makeTab("MOTION");
     addButton(motionTab, "Fade In", function () {
       animateSelected("fade-in", "Fade In");
@@ -630,7 +887,7 @@
     addButton(motionTab, "Easy Ease Selected Keys", easyEaseSelectedKeys);
 
     panel.add("statictext", undefined, "Actions target unlocked layers and support Ctrl/Cmd+Z.");
-    panel.preferredSize = [410, 730];
+    panel.preferredSize = [440, 790];
     panel.onResizing = panel.onResize = function () { this.layout.resize(); };
     panel.layout.layout(true);
     return panel;

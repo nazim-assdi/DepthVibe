@@ -60,7 +60,7 @@ After Effects export first applies explicit DepthVibe-to-AE mappings, then attem
 
 ## Original After Effects motion tools
 
-The repository includes a standalone ScriptUI palette at `integrations/adobe/after-effects-cep/scripts/DepthVibe_Motion_Tools.jsx`. It provides original quick actions for Null Controllers, Adjustment Layers, Camera Rigs, editable text layers, fade/pop entrances, layer staggering and keyframe easing. Run it in After Effects through **File > Scripts > Run Script File**. It is original utility code; it does not install third-party plugins or execute scripts imported from user packs.
+The repository includes a standalone ScriptUI palette at `integrations/adobe/after-effects-cep/scripts/DepthVibe_Motion_Tools.jsx`. It provides original quick actions for Null Controllers, parenting, Adjustment Layers, Camera Rigs, editable shapes/text/lower thirds, a native AE effect/VFX shelf, editable motion entrances, layer staggering and keyframe easing. The Timeline tab can sequence selected layers at the playhead, trim in/out points, split layers and place composition/layer markers. The Align tab centres unparented 2D layers and distributes three or more layers horizontally or vertically. Run it in After Effects through **File > Scripts > Run Script File**. It is original utility code; it does not install third-party plugins or execute scripts imported from user packs.
 
 ## After Effects helper scripts
 
