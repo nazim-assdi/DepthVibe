@@ -39,16 +39,6 @@ class PrimitiveObjFactory {
     return null;
   }
 
-  static String materialFor(String id) {
-    if (find(id) == null) {
-      throw ArgumentError.value(id, 'id', 'Unknown primitive preset.');
-    }
-    return 'newmtl DepthVibePrimitive\n'
-        'Kd 0.40 0.58 0.92\n'
-        'Ka 0.08 0.10 0.16\n'
-        'd 1.0\n';
-  }
-
   static String objFor(String id) {
     final preset = find(id);
     if (preset == null) {
@@ -282,8 +272,6 @@ class _ObjBuilder {
       throw StateError('Primitive "$name" did not produce a valid mesh.');
     }
     return '# DepthVibe procedural primitive: $name\n'
-        'mtllib primitive_$name.mtl\n'
-        'usemtl DepthVibePrimitive\n'
         '${_vertices.map((value) => 'v $value').join('\n')}\n'
         '${_faces.join('\n')}\n';
   }
