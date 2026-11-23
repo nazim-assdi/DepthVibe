@@ -11962,7 +11962,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   ) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final labelWidth = math.min(130.0, constraints.maxWidth);
+        final labelWidth = math.min(238.0, constraints.maxWidth);
         final trackWidth = math.max(0.0, constraints.maxWidth - labelWidth);
         final selectedId = _controller.document.selectedLayerId;
         return Stack(
@@ -11987,11 +11987,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       child: Row(
                         children: [
                           SizedBox(
-                            width: 130,
+                            width: labelWidth,
                             child: Row(
                               children: [
                                 SizedBox(
-                                  width: 21,
+                                  width: 20,
                                   child: IconButton(
                                     padding: EdgeInsets.zero,
                                     visualDensity: VisualDensity.compact,
@@ -12013,6 +12013,71 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                     ),
                                   ),
                                 ),
+                                IconButton(
+                                  padding: EdgeInsets.zero,
+                                  visualDensity: VisualDensity.compact,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 22,
+                                    minHeight: 22,
+                                  ),
+                                  tooltip: layer.enabled ? 'Hide layer' : 'Show layer',
+                                  onPressed: () => _controller.setLayerEnabled(
+                                    layer.id,
+                                    !layer.enabled,
+                                  ),
+                                  icon: Icon(
+                                    layer.enabled
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                    size: 13,
+                                  ),
+                                ),
+                                IconButton(
+                                  padding: EdgeInsets.zero,
+                                  visualDensity: VisualDensity.compact,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 22,
+                                    minHeight: 22,
+                                  ),
+                                  tooltip: layer.solo ? 'Disable Solo' : 'Solo layer',
+                                  color: layer.solo ? palette.accent : null,
+                                  onPressed: () => _controller.setLayerSolo(
+                                    layer.id,
+                                    !layer.solo,
+                                  ),
+                                  icon: Icon(
+                                    layer.solo
+                                        ? Icons.headphones
+                                        : Icons.headphones_outlined,
+                                    size: 13,
+                                  ),
+                                ),
+                                IconButton(
+                                  padding: EdgeInsets.zero,
+                                  visualDensity: VisualDensity.compact,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 22,
+                                    minHeight: 22,
+                                  ),
+                                  tooltip: layer.locked ? 'Unlock layer' : 'Lock layer',
+                                  onPressed: () => _controller.setLayerLocked(
+                                    layer.id,
+                                    !layer.locked,
+                                  ),
+                                  icon: Icon(
+                                    layer.locked ? Icons.lock : Icons.lock_open,
+                                    size: 13,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  _iconFor(layer.kind),
+                                  size: 13,
+                                  color: selected
+                                      ? const Color(0xFFEAF0FF)
+                                      : paletteText(context),
+                                ),
+                                const SizedBox(width: 4),
                                 Expanded(
                                   child: InkWell(
                                     onTap: () => _controller.selectLayer(layer.id),
