@@ -36,8 +36,6 @@ class TextPlaneMeshBuilder {
         ));
         final aspect = height / width;
         final halfHeight = aspect / 2;
-        const boundsMin = Vector3(-0.5, -0.5, 0);
-        const boundsMax = Vector3(0.5, 0.5, 0);
 
         return ObjMesh(
           vertices: [
@@ -67,10 +65,10 @@ class TextPlaneMeshBuilder {
           boundsMin: Vector3(-0.5, -halfHeight, 0),
           boundsMax: Vector3(0.5, halfHeight, 0),
           textureCoordinates: const [
-            ui.Offset(0, 0),
-            ui.Offset(1, 0),
-            ui.Offset(1, 1),
             ui.Offset(0, 1),
+            ui.Offset(1, 1),
+            ui.Offset(1, 0),
+            ui.Offset(0, 0),
           ],
           hasTextureCoordinates: true,
           vertexNormals: const [
