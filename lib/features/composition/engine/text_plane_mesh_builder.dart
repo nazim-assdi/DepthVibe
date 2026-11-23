@@ -120,7 +120,7 @@ class TextPlaneMeshBuilder {
     final halfHeight = height / width / 2;
     final halfDepth = depth / 2;
     final step = (width > height ? width : height) / _maxGridDimension;
-    final cellSize = step.ceil().clamp(1, _maxDimension);
+    final cellSize = step.ceil().clamp(1, _maxDimension).toInt();
     final columns = (width / cellSize).ceil();
     final rows = (height / cellSize).ceil();
     final occupied = List<bool>.filled(rows * columns, false);
@@ -138,8 +138,8 @@ class TextPlaneMeshBuilder {
       for (var column = 0; column < columns; column++) {
         final left = column * cellSize;
         final top = row * cellSize;
-        final right = (left + cellSize).clamp(0, width);
-        final bottom = (top + cellSize).clamp(0, height);
+        final right = (left + cellSize).clamp(0, width).toInt();
+        final bottom = (top + cellSize).clamp(0, height).toInt();
         occupied[row * columns + column] =
             hasVisiblePixel(left, top, right, bottom);
       }
