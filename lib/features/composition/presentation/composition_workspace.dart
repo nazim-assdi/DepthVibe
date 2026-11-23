@@ -8059,7 +8059,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             IconButton(
               visualDensity: VisualDensity.compact,
               tooltip: 'Add keyframe at current playhead',
-              onPressed: () => _addKeyframe(property),
+              onPressed: layer.locked ? null : () => _addKeyframe(property),
               icon: Icon(
                 Icons.diamond,
                 size: 16,
@@ -8072,6 +8072,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               PopupMenuButton<Interpolation>(
                 tooltip: 'Set keyframe interpolation at playhead',
                 icon: const Icon(Icons.linear_scale, size: 16),
+                enabled: !layer.locked,
                 onSelected: (value) =>
                     _controller.setInterpolation(property, value),
                 itemBuilder: (_) => Interpolation.values
@@ -8086,10 +8087,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 visualDensity: VisualDensity.compact,
                 tooltip: 'Edit Bezier graph',
                 icon: const Icon(Icons.timeline, size: 16),
-                onPressed: () => _editBezierCurve(
-                  property,
-                  activeKeyframe!.bezier,
-                ),
+                onPressed: layer.locked
+                    ? null
+                    : () => _editBezierCurve(
+                          property,
+                          activeKeyframe!.bezier,
+                        ),
               ),
             SizedBox(
               width: 54,
@@ -8105,12 +8108,26 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           min: min,
           max: max,
           value: value.clamp(min, max).toDouble(),
-          onChanged: (next) => _controller.setTransformValue(property, next),
-          onChangeEnd: (next) {
-            if (keyframes > 0) {
-              _controller.setTransformValue(property, next, keyframe: true);
-            }
-          },
+          onChangeStart: layer.locked
+              ? null
+              : (_) => _controller.beginInteractiveEdit(),
+          onChanged: layer.locked
+              ? null
+              : (next) => _controller.setTransformValue(
+                    property,
+                    next,
+                    recordHistory: false,
+                  ),
+          onChangeEnd: layer.locked
+              ? null
+              : (next) {
+                  _controller.setTransformValue(
+                    property,
+                    next,
+                    recordHistory: false,
+                  );
+                  _controller.endInteractiveEdit();
+                },
         ),
       ],
     );
@@ -11938,17 +11955,23 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   top: 3,
                   bottom: 3,
                   child: GestureDetector(
+                    onHorizontalDragStart: layer.locked
+                        ? null
+                        : (_) => _controller.beginInteractiveEdit(),
                     onHorizontalDragUpdate: layer.locked
                         ? null
                         : (details) {
                             final delta = (details.delta.dx / width *
                                     safeDuration)
                                 .round();
-                            _controller.setLayerTiming(
-                              layer.id,
-                              startMs: layer.startMs + delta,
-                            );
+                            _controller.moveLayerOnTimeline(layer.id, delta);
                           },
+                    onHorizontalDragEnd: layer.locked
+                        ? null
+                        : (_) => _controller.endInteractiveEdit(),
+                    onHorizontalDragCancel: layer.locked
+                        ? null
+                        : _controller.endInteractiveEdit,
                     child: Container(
                       decoration: BoxDecoration(
                         color: color,
@@ -12001,19 +12024,58 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             ),
                           ),
                           Align(
-                            alignment: Alignment.centerRight,
+                            alignment: Alignment.centerLeft,
                             child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onHorizontalDragStart: layer.locked
+                                  ? null
+                                  : (_) => _controller.beginInteractiveEdit(),
                               onHorizontalDragUpdate: layer.locked
                                   ? null
                                   : (details) {
                                       final delta = (details.delta.dx /
                                               width * safeDuration)
                                           .round();
-                                      _controller.setLayerTiming(
-                                        layer.id,
-                                        durationMs: layer.durationMs + delta,
-                                      );
+                                      _controller.trimLayerStart(layer.id, delta);
                                     },
+                              onHorizontalDragEnd: layer.locked
+                                  ? null
+                                  : (_) => _controller.endInteractiveEdit(),
+                              onHorizontalDragCancel: layer.locked
+                                  ? null
+                                  : _controller.endInteractiveEdit,
+                              child: Container(
+                                width: 9,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFB8C8FF),
+                                  borderRadius: BorderRadius.horizontal(
+                                    left: Radius.circular(4),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onHorizontalDragStart: layer.locked
+                                  ? null
+                                  : (_) => _controller.beginInteractiveEdit(),
+                              onHorizontalDragUpdate: layer.locked
+                                  ? null
+                                  : (details) {
+                                      final delta = (details.delta.dx /
+                                              width * safeDuration)
+                                          .round();
+                                      _controller.trimLayerEnd(layer.id, delta);
+                                    },
+                              onHorizontalDragEnd: layer.locked
+                                  ? null
+                                  : (_) => _controller.endInteractiveEdit(),
+                              onHorizontalDragCancel: layer.locked
+                                  ? null
+                                  : _controller.endInteractiveEdit,
                               child: Container(
                                 width: 9,
                                 decoration: const BoxDecoration(

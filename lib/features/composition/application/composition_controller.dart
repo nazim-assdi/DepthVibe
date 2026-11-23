@@ -23,6 +23,7 @@ class CompositionController extends ChangeNotifier {
   static const maxUndoHistory = 80;
   final List<CompositionDocument> _undoHistory = [];
   final List<CompositionDocument> _redoHistory = [];
+  bool _interactiveEditActive = false;
 
   CompositionDocument get document => _document;
   ValueListenable<int> get playhead => playheadListenable;
@@ -32,6 +33,7 @@ class CompositionController extends ChangeNotifier {
   int get undoHistoryLength => _undoHistory.length;
 
   void undo() {
+    _interactiveEditActive = false;
     if (_undoHistory.isEmpty) return;
     _redoHistory.add(_document);
     _document = _undoHistory.removeLast();
@@ -40,6 +42,7 @@ class CompositionController extends ChangeNotifier {
   }
 
   void redo() {
+    _interactiveEditActive = false;
     if (_redoHistory.isEmpty) return;
     _undoHistory.add(_document);
     if (_undoHistory.length > maxUndoHistory) {
@@ -69,17 +72,33 @@ class CompositionController extends ChangeNotifier {
       );
 
 
+  void _recordUndoSnapshot() {
+    _undoHistory.add(_document);
+    if (_undoHistory.length > maxUndoHistory) {
+      _undoHistory.removeAt(0);
+    }
+    _redoHistory.clear();
+  }
+
+  /// Groups a continuous pointer/slider gesture into one undo step.
+  void beginInteractiveEdit() {
+    if (_interactiveEditActive) return;
+    _recordUndoSnapshot();
+    _interactiveEditActive = true;
+  }
+
+  /// Ends the current continuous edit transaction.
+  void endInteractiveEdit() {
+    _interactiveEditActive = false;
+  }
+
   void _set(
     CompositionDocument next, {
     bool recordHistory = true,
   }) {
     if (identical(next, _document)) return;
-    if (recordHistory) {
-      _undoHistory.add(_document);
-      if (_undoHistory.length > maxUndoHistory) {
-        _undoHistory.removeAt(0);
-      }
-      _redoHistory.clear();
+    if (recordHistory && !_interactiveEditActive) {
+      _recordUndoSnapshot();
     }
     _document = next;
     if (playheadListenable.value != next.playheadMs) {
@@ -1487,20 +1506,35 @@ class CompositionController extends ChangeNotifier {
     );
   }
 
-  void setTransformValue(String property, double value, {bool keyframe = false}) {
+  void setTransformValue(
+    String property,
+    double value, {
+    bool keyframe = false,
+    bool recordHistory = true,
+  }) {
     final layer = selectedLayer;
-    if (layer == null) return;
-    if (keyframe) {
-      final trackIndex = layer.keyframeTracks.indexWhere(
-        (track) => track.property == property,
-      );
+    if (layer == null || layer.locked || !value.isFinite) return;
+    final trackIndex = layer.keyframeTracks.indexWhere(
+      (track) => track.property == property,
+    );
+    // Once a property is animated, editing its value at the playhead must
+    // update/create a keyframe instead of silently changing the hidden base.
+    final writeKeyframe = keyframe || trackIndex >= 0;
+    if (writeKeyframe) {
       final track = trackIndex < 0
           ? KeyframeTrack(property: property)
           : layer.keyframeTracks[trackIndex];
+      final existing = track.keyframes
+          .where((frame) => frame.timeMs == _document.playheadMs)
+          .firstOrNull;
       final updated = track.upsert(ScalarKeyframe(
         timeMs: _document.playheadMs,
         value: value,
-        interpolation: Interpolation.easeInOut,
+        interpolation: existing?.interpolation ?? Interpolation.easeInOut,
+        inTangent: existing?.inTangent ?? 0,
+        outTangent: existing?.outTangent ?? 0,
+        bezier: existing?.bezier ?? const BezierCurve(),
+        metadata: existing?.metadata ?? const {},
       ));
       final tracks = [...layer.keyframeTracks];
       if (trackIndex < 0) {
@@ -1508,11 +1542,15 @@ class CompositionController extends ChangeNotifier {
       } else {
         tracks[trackIndex] = updated;
       }
-      _replace(layer.copyWith(keyframeTracks: tracks));
+      _replace(
+        layer.copyWith(keyframeTracks: tracks),
+        recordHistory: recordHistory,
+      );
     } else {
-      _replace(layer.copyWith(
-        transform: layer.transform.withValue(property, value),
-      ));
+      _replace(
+        layer.copyWith(transform: layer.transform.withValue(property, value)),
+        recordHistory: recordHistory,
+      );
     }
   }
 
@@ -1838,6 +1876,58 @@ class CompositionController extends ChangeNotifier {
       durationMs: nextDuration,
       sourceInMs: nextSourceIn,
     ));
+  }
+
+  /// Trims a layer from its left edge while keeping its timeline out-point fixed.
+  /// Moving the edge right advances the source in-point for video/audio; moving
+  /// it left restores media only while earlier source frames remain available.
+  bool trimLayerStart(String id, int deltaMs) {
+    final layer = _find(id);
+    if (layer == null || layer.locked || deltaMs == 0) return false;
+    final sourceBacked = layer.kind == LayerKind.video ||
+        layer.kind == LayerKind.audio;
+    final minimumDelta = sourceBacked
+        ? -math.min(layer.sourceInMs, layer.startMs)
+        : -layer.startMs;
+    final safeDelta = deltaMs
+        .clamp(minimumDelta, layer.durationMs - 1)
+        .toInt();
+    if (safeDelta == 0) return false;
+    final nextStart = layer.startMs + safeDelta;
+    final nextDuration = layer.durationMs - safeDelta;
+    final nextSourceIn = sourceBacked
+        ? layer.sourceInMs + safeDelta
+        : layer.sourceInMs;
+    _replace(layer.copyWith(
+      startMs: nextStart,
+      durationMs: nextDuration,
+      sourceInMs: nextSourceIn,
+    ));
+    return true;
+  }
+
+  /// Resizes the right edge using the latest layer state on every drag update.
+  bool trimLayerEnd(String id, int deltaMs) {
+    final layer = _find(id);
+    if (layer == null || layer.locked || deltaMs == 0) return false;
+    final maximum = _document.durationMs - layer.startMs;
+    final nextDuration = (layer.durationMs + deltaMs)
+        .clamp(1, maximum)
+        .toInt();
+    if (nextDuration == layer.durationMs) return false;
+    _replace(layer.copyWith(durationMs: nextDuration));
+    return true;
+  }
+
+  /// Moves a layer without altering its source in-point or duration.
+  bool moveLayerOnTimeline(String id, int deltaMs) {
+    final layer = _find(id);
+    if (layer == null || layer.locked || deltaMs == 0) return false;
+    final maximum = _document.durationMs - layer.durationMs;
+    final nextStart = (layer.startMs + deltaMs).clamp(0, maximum).toInt();
+    if (nextStart == layer.startMs) return false;
+    _replace(layer.copyWith(startMs: nextStart));
+    return true;
   }
 
   void setLayerEnabled(String id, bool enabled) {

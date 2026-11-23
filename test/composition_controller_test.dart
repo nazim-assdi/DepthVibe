@@ -1655,4 +1655,178 @@ void main() {
     controller.dispose();
   });
 
+  test('animated transform slider edits the key at the playhead in one undo step', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 4000,
+        playheadMs: 1000,
+        layers: [
+          CompositionLayer(
+            id: 'clip',
+            name: 'Clip',
+            kind: LayerKind.video,
+            transform: LayerTransform(opacity: 82),
+            keyframeTracks: [
+              KeyframeTrack(
+                property: 'opacity',
+                keyframes: [
+                  ScalarKeyframe(timeMs: 0, value: 100),
+                  ScalarKeyframe(timeMs: 2000, value: 40),
+                ],
+              ),
+            ],
+          ),
+        ],
+        selectedLayerId: 'clip',
+      ),
+    );
+
+    controller.beginInteractiveEdit();
+    controller.setTransformValue('opacity', 63, recordHistory: false);
+    controller.setTransformValue('opacity', 27, recordHistory: false);
+    controller.endInteractiveEdit();
+
+    final edited = controller.selectedLayer!;
+    final opacityTrack = edited.keyframeTracks.single;
+    expect(opacityTrack.keyframes.length, 3);
+    expect(
+      opacityTrack.keyframes.firstWhere((frame) => frame.timeMs == 1000).value,
+      27,
+    );
+    expect(edited.transform.opacity, 82);
+    expect(controller.undoHistoryLength, 1);
+
+    controller.undo();
+    final restored = controller.selectedLayer!;
+    expect(restored.keyframeTracks.single.keyframes.length, 2);
+    expect(restored.transform.opacity, 82);
+    controller.dispose();
+  });
+
+  test('transform edits respect locked layers and preserve base transform', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(
+            id: 'locked',
+            name: 'Locked',
+            kind: LayerKind.video,
+            locked: true,
+            transform: LayerTransform(opacity: 75),
+          ),
+        ],
+        selectedLayerId: 'locked',
+      ),
+    );
+
+    controller.setTransformValue('opacity', 10);
+    expect(controller.selectedLayer!.transform.opacity, 75);
+    expect(controller.canUndo, isFalse);
+    controller.dispose();
+  });
+
+  test('left trim preserves clip out-point and advances media source in-point', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 10000,
+        layers: [
+          CompositionLayer(
+            id: 'video',
+            name: 'Video',
+            kind: LayerKind.video,
+            startMs: 1000,
+            durationMs: 4000,
+            sourceInMs: 500,
+          ),
+        ],
+        selectedLayerId: 'video',
+      ),
+    );
+
+    expect(controller.trimLayerStart('video', 750), isTrue);
+    var layer = controller.document.layers.single;
+    expect(layer.startMs, 1750);
+    expect(layer.durationMs, 3250);
+    expect(layer.sourceInMs, 1250);
+    expect(layer.endMs, 5000);
+
+    // Extending the left edge cannot request media before source time zero.
+    expect(controller.trimLayerStart('video', -2000), isTrue);
+    layer = controller.document.layers.single;
+    expect(layer.startMs, 500);
+    expect(layer.durationMs, 4500);
+    expect(layer.sourceInMs, 0);
+    expect(layer.endMs, 5000);
+
+    controller.undo();
+    layer = controller.document.layers.single;
+    expect(layer.startMs, 1750);
+    expect(layer.sourceInMs, 1250);
+    controller.dispose();
+  });
+
+  test('timeline left and right trims clamp to composition and one frame minimum', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 5000,
+        layers: [
+          CompositionLayer(
+            id: 'audio',
+            name: 'Audio',
+            kind: LayerKind.audio,
+            startMs: 1000,
+            durationMs: 3000,
+            sourceInMs: 200,
+          ),
+        ],
+        selectedLayerId: 'audio',
+      ),
+    );
+
+    expect(controller.trimLayerStart('audio', 99999), isTrue);
+    var layer = controller.document.layers.single;
+    expect(layer.startMs, 3999);
+    expect(layer.durationMs, 1);
+    expect(layer.sourceInMs, 3199);
+
+    expect(controller.trimLayerEnd('audio', 99999), isTrue);
+    layer = controller.document.layers.single;
+    expect(layer.endMs, 5000);
+    expect(layer.durationMs, 1001);
+
+    expect(controller.moveLayerOnTimeline('audio', -99999), isTrue);
+    layer = controller.document.layers.single;
+    expect(layer.startMs, 0);
+    expect(layer.sourceInMs, 3199);
+    controller.dispose();
+  });
+
+  test('left trim is disabled for locked layers', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        durationMs: 5000,
+        layers: [
+          CompositionLayer(
+            id: 'locked',
+            name: 'Locked',
+            kind: LayerKind.video,
+            locked: true,
+            startMs: 1000,
+            durationMs: 2000,
+            sourceInMs: 300,
+          ),
+        ],
+        selectedLayerId: 'locked',
+      ),
+    );
+
+    expect(controller.trimLayerStart('locked', 250), isFalse);
+    final layer = controller.document.layers.single;
+    expect(layer.startMs, 1000);
+    expect(layer.durationMs, 2000);
+    expect(layer.sourceInMs, 300);
+    expect(controller.canUndo, isFalse);
+    controller.dispose();
+  });
+
 }
