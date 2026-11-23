@@ -115,6 +115,7 @@ class CompositionExportService {
     };
     final anySolo = document.layers.any((layer) =>
         layer.enabled &&
+        !layer.guideLayer &&
         layer.solo &&
         (visualKinds.contains(layer.kind) ||
             layer.kind == LayerKind.adjustment ||
@@ -130,6 +131,7 @@ class CompositionExportService {
 
     for (final layer in enabled) {
       cancellation?.throwIfCancelled();
+      if (layer.guideLayer) continue;
       if (layer.kind == LayerKind.text) {
         visualLayers.add(layer);
       } else if (visualKinds.contains(layer.kind)) {
