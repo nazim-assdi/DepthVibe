@@ -969,6 +969,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   double _rightPanelWidth = 340;
   double _timelineHeight = 260;
   double _compactPanelHeight = 285;
+  double _timelineZoom = 1.0;
+  double _timelineScrollRatio = 0.0;
   final Set<String> _expandedTimelineLayers = {};
   String _effectCategory = 'All';
   String _effectSearch = '';
@@ -12139,142 +12141,435 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
       height: _timelineHeight,
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
       decoration: BoxDecoration(
         color: palette.toolbar,
         border: Border(top: BorderSide(color: palette.border)),
       ),
       child: Column(
         children: [
-          Row(
+          SizedBox(
+            height: 34,
+            child: Row(
+              children: [
+                const Icon(Icons.movie_filter_outlined, size: 16),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    'SEQUENCE  ·  ${_controller.document.name.toUpperCase()}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0D1927),
+                    border: Border.all(color: const Color(0xFF2F4967)),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    _time(playhead),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF71B6FF),
+                      fontFeatures: [ui.FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${_controller.document.frameRate.toStringAsFixed(0)} FPS',
+                  style: TextStyle(fontSize: 8, color: palette.secondaryText),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Hide Shy Tracks',
+                  onPressed: () => setState(() => _hideShyLayers = !_hideShyLayers),
+                  icon: Icon(
+                    Icons.filter_alt_outlined,
+                    size: 15,
+                    color: _hideShyLayers ? palette.accent : palette.secondaryText,
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Go to sequence start',
+                  onPressed: () {
+                    _pausePreviewPlayback();
+                    _controller.setPlayhead(0);
+                  },
+                  icon: const Icon(Icons.first_page, size: 17),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Step one frame back',
+                  onPressed: () {
+                    _pausePreviewPlayback();
+                    _controller.setPlayhead(
+                      playhead - (1000 / _controller.document.frameRate).round(),
+                    );
+                  },
+                  icon: const Icon(Icons.chevron_left, size: 17),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: _previewPlaying ? 'Pause sequence' : 'Play sequence',
+                  onPressed: duration <= 0 ? null : _togglePreviewPlayback,
+                  icon: Icon(
+                    _previewPlaying ? Icons.pause : Icons.play_arrow,
+                    size: 20,
+                    color: palette.accent,
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Step one frame forward',
+                  onPressed: () {
+                    _pausePreviewPlayback();
+                    _controller.setPlayhead(
+                      playhead + (1000 / _controller.document.frameRate).round(),
+                    );
+                  },
+                  icon: const Icon(Icons.chevron_right, size: 17),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Go to sequence end',
+                  onPressed: () {
+                    _pausePreviewPlayback();
+                    _controller.setPlayhead(duration);
+                  },
+                  icon: const Icon(Icons.last_page, size: 17),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Previous keyframe',
+                  onPressed: () => _jumpToKeyframe(forward: false),
+                  icon: const Icon(Icons.skip_previous, size: 16),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Next keyframe',
+                  onPressed: () => _jumpToKeyframe(forward: true),
+                  icon: const Icon(Icons.skip_next, size: 16),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Add position keyframe',
+                  onPressed: _selected == null
+                      ? null
+                      : () => _addKeyframe('position.x'),
+                  icon: const Icon(Icons.diamond_outlined, size: 16),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Split selected clip at playhead',
+                  onPressed: _selected == null || _selected!.locked
+                      ? null
+                      : _splitSelectedLayer,
+                  icon: const Icon(Icons.content_cut, size: 16),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Delete selected clip',
+                  onPressed: _selected == null ? null : _deleteSelectedLayer,
+                  icon: const Icon(Icons.delete_outline, size: 16),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: _graphEditorVisible ? 'Show tracks' : 'Show Graph Editor',
+                  color: _graphEditorVisible ? palette.accent : null,
+                  onPressed: () => setState(() {
+                    _graphEditorVisible = !_graphEditorVisible;
+                    _panel = 'Animation';
+                  }),
+                  icon: const Icon(Icons.show_chart, size: 17),
+                ),
+                PopupMenuButton<TransitionKind>(
+                  tooltip: 'Add transition',
+                  onSelected: _controller.addTransition,
+                  itemBuilder: (_) => TransitionKind.values
+                      .map((kind) => PopupMenuItem(value: kind, child: Text(kind.name)))
+                      .toList(),
+                  child: const Padding(
+                    padding: EdgeInsets.all(7),
+                    child: Icon(Icons.auto_awesome_motion, size: 16),
+                  ),
+                ),
+                PopupMenuButton<double>(
+                  tooltip: 'Timeline zoom preset',
+                  onSelected: _setTimelineZoom,
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 1, child: Text('Fit sequence')),
+                    PopupMenuItem(value: 1.5, child: Text('150%')),
+                    PopupMenuItem(value: 2, child: Text('200%')),
+                    PopupMenuItem(value: 4, child: Text('400%')),
+                    PopupMenuItem(value: 8, child: Text('800%')),
+                    PopupMenuItem(value: 12, child: Text('1200%')),
+                  ],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    child: Text(
+                      '${(_timelineZoom * 100).round()}%',
+                      style: TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w900,
+                        color: palette.accent,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 3),
+          _buildTimelineTimeRuler(duration, playhead),
+          Expanded(
+            child: Listener(
+              onPointerSignal: _handleTimelinePointerSignal,
+              child: _graphEditorVisible
+                  ? _buildGraphEditor(duration)
+                  : layerRows,
+            ),
+          ),
+          _buildTimelineZoomNavigator(),
+        ],
+      ),
+    );
+  }
+
+  void _setTimelineZoom(double value) {
+    setState(() {
+      _timelineZoom = value.clamp(1.0, 12.0).toDouble();
+      _timelineScrollRatio = _timelineScrollRatio.clamp(0.0, 1.0).toDouble();
+    });
+  }
+
+  void _handleTimelinePointerSignal(PointerSignalEvent signal) {
+    if (signal is! PointerScrollEvent) return;
+    final shift = HardwareKeyboard.instance.isShiftPressed;
+    final control = HardwareKeyboard.instance.isControlPressed;
+    if (control) {
+      final multiplier = math.exp(-signal.scrollDelta.dy * 0.002);
+      _setTimelineZoom(_timelineZoom * multiplier);
+      return;
+    }
+    final horizontalDelta = signal.scrollDelta.dx != 0
+        ? signal.scrollDelta.dx
+        : shift
+            ? signal.scrollDelta.dy
+            : 0.0;
+    if (horizontalDelta == 0) return;
+    setState(() {
+      _timelineScrollRatio =
+          (_timelineScrollRatio + horizontalDelta / 650).clamp(0.0, 1.0).toDouble();
+    });
+  }
+
+  Widget _buildTimelineTimeRuler(int duration, int playhead) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final labelWidth = math.min(228.0, constraints.maxWidth * 0.46);
+        return SizedBox(
+          height: 27,
+          child: Row(
             children: [
-              const Icon(Icons.timeline, size: 16),
-              const SizedBox(width: 8),
-              Text(
-                'TIMELINE  ·  ${_controller.document.name.toUpperCase()}',
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
+              SizedBox(
+                width: labelWidth,
+                child: Container(
+                  padding: const EdgeInsets.only(left: 8),
+                  alignment: Alignment.centerLeft,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF182538),
+                    border: Border(
+                      right: BorderSide(color: palette.border),
+                      top: BorderSide(color: palette.border),
+                      bottom: BorderSide(color: palette.border),
+                    ),
+                  ),
+                  child: Text(
+                    'TRACKS  /  TIME',
+                    style: TextStyle(
+                      color: palette.secondaryText,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.65,
+                    ),
+                  ),
                 ),
               ),
-              const Spacer(),
-              Text(_time(playhead), style: const TextStyle(fontSize: 10, color: Color(0xFFB7C4DC))),
-              Text(
-                '${_controller.document.frameRate.toStringAsFixed(0)} FPS',
-                style: const TextStyle(
-                  fontSize: 8,
-                  color: Color(0xFF8D9CB3),
-                ),
-              ),
-              IconButton(
-                tooltip: _hideShyLayers ? 'Show Shy Layers' : 'Hide Shy Layers',
-                onPressed: () => setState(
-                  () => _hideShyLayers = !_hideShyLayers,
-                ),
-                icon: Icon(
-                  _hideShyLayers ? Icons.filter_alt : Icons.filter_alt_outlined,
-                  size: 15,
-                  color: _hideShyLayers ? palette.accent : palette.secondaryText,
-                ),
-              ),
-              IconButton(
-                tooltip: _previewPlaying ? 'Pause realtime preview' : 'Play realtime preview',
-                onPressed: duration <= 0 ? null : _togglePreviewPlayback,
-                icon: Icon(
-                  _previewPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
-                  size: 21,
-                ),
-              ),
-              IconButton(
-                tooltip: 'Previous frame',
-                onPressed: () {
-                  _pausePreviewPlayback();
-                  _controller.setPlayhead(
-                    playhead - (1000 / _controller.document.frameRate).round(),
-                  );
-                },
-                icon: const Icon(Icons.chevron_left, size: 18),
-              ),
-              IconButton(
-                tooltip: 'Next frame',
-                onPressed: () {
-                  _pausePreviewPlayback();
-                  _controller.setPlayhead(
-                    playhead + (1000 / _controller.document.frameRate).round(),
-                  );
-                },
-                icon: const Icon(Icons.chevron_right, size: 18),
-              ),
-              IconButton(
-                tooltip: 'Previous keyframe',
-                onPressed: () => _jumpToKeyframe(forward: false),
-                icon: const Icon(Icons.skip_previous, size: 18),
-              ),
-              IconButton(
-                tooltip: 'Next keyframe',
-                onPressed: () => _jumpToKeyframe(forward: true),
-                icon: const Icon(Icons.skip_next, size: 18),
-              ),
-              IconButton(
-                tooltip: 'Add position keyframe',
-                onPressed: _selected == null
-                    ? null
-                    : () => _addKeyframe('position.x'),
-                icon: const Icon(Icons.diamond_outlined, size: 17),
-              ),
-              IconButton(
-                tooltip: 'Split selected clip at playhead',
-                onPressed: _selected == null || _selected!.locked
-                    ? null
-                    : _splitSelectedLayer,
-                icon: const Icon(Icons.content_cut, size: 17),
-              ),
-              IconButton(
-                tooltip: 'Delete selected layer',
-                onPressed: _selected == null ? null : _deleteSelectedLayer,
-                icon: const Icon(Icons.delete_outline, size: 17),
-              ),
-              IconButton(
-                tooltip: _graphEditorVisible
-                    ? 'Show layer timeline'
-                    : 'Show Graph Editor',
-                color: _graphEditorVisible ? palette.accent : null,
-                onPressed: () => setState(() {
-                  _graphEditorVisible = !_graphEditorVisible;
-                  _panel = 'Animation';
-                }),
-                icon: const Icon(Icons.show_chart, size: 18),
-              ),
-              PopupMenuButton<TransitionKind>(
-                tooltip: 'Add transition',
-                onSelected: _controller.addTransition,
-                itemBuilder: (_) => TransitionKind.values
-                    .map((kind) => PopupMenuItem(value: kind, child: Text(kind.name)))
-                    .toList(),
-                child: const Padding(
-                  padding: EdgeInsets.all(8),
-                  child: Icon(Icons.auto_awesome_motion, size: 18),
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (details) => _scrubTimelineAt(
+                    details.localPosition.dx,
+                    constraints.maxWidth - labelWidth,
+                    duration,
+                  ),
+                  onHorizontalDragStart: (details) => _scrubTimelineAt(
+                    details.localPosition.dx,
+                    constraints.maxWidth - labelWidth,
+                    duration,
+                  ),
+                  onHorizontalDragUpdate: (details) => _scrubTimelineAt(
+                    details.localPosition.dx,
+                    constraints.maxWidth - labelWidth,
+                    duration,
+                  ),
+                  child: CustomPaint(
+                    painter: _PremiereTimelineRulerPainter(
+                      durationMs: duration,
+                      playheadMs: playhead,
+                      frameRate: _controller.document.frameRate,
+                      zoom: _timelineZoom,
+                      scrollRatio: _timelineScrollRatio,
+                      background: const Color(0xFF101A29),
+                      lineColor: const Color(0xFF354760),
+                      textColor: palette.secondaryText,
+                      playheadColor: const Color(0xFF48A7FF),
+                    ),
+                    child: const SizedBox.expand(),
+                  ),
                 ),
               ),
             ],
           ),
-          Slider(
-            value: playhead.toDouble().clamp(0, duration.toDouble()).toDouble(),
-            min: 0,
-            max: duration.toDouble(),
-            onChanged: (value) {
-              _pausePreviewPlayback();
-              _controller.setPlayhead(value.round());
-            },
+        );
+      },
+    );
+  }
+
+  void _scrubTimelineAt(double x, double viewportWidth, int duration) {
+    if (viewportWidth <= 0 || duration <= 0) return;
+    final contentWidth = viewportWidth * _timelineZoom;
+    final scrollOffset = (contentWidth - viewportWidth) * _timelineScrollRatio;
+    final contentX = (x + scrollOffset).clamp(0.0, contentWidth);
+    final timeMs = (contentX / contentWidth * duration).round();
+    _pausePreviewPlayback();
+    _controller.setPlayhead(timeMs.clamp(0, duration));
+  }
+
+  Widget _buildTimelineZoomNavigator() {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final labelWidth = math.min(228.0, constraints.maxWidth * 0.46);
+        return SizedBox(
+          height: 19,
+          child: Row(
+            children: [
+              SizedBox(
+                width: labelWidth,
+                child: Row(
+                  children: [
+                    Text(
+                      'ZOOM / SCROLL',
+                      style: TextStyle(
+                        fontSize: 7,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                        color: palette.secondaryText,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(minWidth: 19, minHeight: 18),
+                      tooltip: 'Zoom out',
+                      onPressed: () => _setTimelineZoom(_timelineZoom / 1.5),
+                      icon: const Icon(Icons.remove, size: 12),
+                    ),
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(minWidth: 19, minHeight: 18),
+                      tooltip: 'Zoom in',
+                      onPressed: () => _setTimelineZoom(_timelineZoom * 1.5),
+                      icon: const Icon(Icons.add, size: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, barConstraints) {
+                    final barWidth = barConstraints.maxWidth;
+                    final thumbWidth = (barWidth / _timelineZoom)
+                        .clamp(math.min(18.0, barWidth), barWidth)
+                        .toDouble();
+                    final travel = math.max(0.0, barWidth - thumbWidth);
+                    final thumbLeft = travel * _timelineScrollRatio;
+                    void updateFromX(double x) {
+                      if (travel <= 0) {
+                        setState(() => _timelineScrollRatio = 0);
+                        return;
+                      }
+                      setState(() {
+                        _timelineScrollRatio =
+                            ((x - thumbWidth / 2) / travel).clamp(0.0, 1.0).toDouble();
+                      });
+                    }
+
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapDown: (details) => updateFromX(details.localPosition.dx),
+                      onHorizontalDragUpdate: (details) {
+                        if (travel <= 0) return;
+                        setState(() {
+                          _timelineScrollRatio =
+                              (_timelineScrollRatio + details.delta.dx / travel)
+                                  .clamp(0.0, 1.0)
+                                  .toDouble();
+                        });
+                      },
+                      child: SizedBox.expand(
+                        child: Stack(
+                          alignment: Alignment.centerLeft,
+                          children: [
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              height: 5,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF26374C),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: thumbLeft,
+                              width: thumbWidth,
+                              height: 11,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF6C8EBB),
+                                  border: Border.all(color: const Color(0xFF9AC7F8)),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: _graphEditorVisible
-                ? _buildGraphEditor(duration)
-                : layerRows,
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -12303,6 +12598,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     KeyframeTrack track,
     int duration, {
     required double labelWidth,
+    required double trackContentWidth,
+    required double scrollOffset,
   }) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     final safeDuration = math.max(1, duration);
@@ -12318,52 +12615,66 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 8,
-                  color: palette.secondaryText,
-                ),
+                style: TextStyle(fontSize: 8, color: palette.secondaryText),
               ),
             ),
           ),
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: palette.appBackground.withValues(alpha: 0.6),
-                border: Border(
-                  top: BorderSide(color: palette.border.withValues(alpha: 0.45)),
-                  bottom: BorderSide(color: palette.border.withValues(alpha: 0.45)),
-                ),
-              ),
-              child: LayoutBuilder(
-                builder: (context, constraints) => Stack(
-                  clipBehavior: Clip.hardEdge,
-                  children: [
-                    for (final keyframe in track.keyframes)
-                      Positioned(
-                        left: (keyframe.timeMs / safeDuration *
-                                constraints.maxWidth - 5)
-                            .clamp(0.0, math.max(0.0, constraints.maxWidth - 10))
-                            .toDouble(),
-                        top: 2,
-                        bottom: 2,
-                        child: Tooltip(
-                          message:
-                              '${_time(keyframe.timeMs)} · ${keyframe.value.toStringAsFixed(3)} · ${keyframe.interpolation.name}',
-                          child: GestureDetector(
-                            onTap: () {
-                              _pausePreviewPlayback();
-                              _controller.setPlayhead(keyframe.timeMs);
-                            },
-                            child: const Icon(
-                              Icons.diamond,
-                              size: 10,
-                              color: Color(0xFFE4C36B),
-                            ),
-                          ),
+            child: ClipRect(
+              child: Stack(
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  Positioned(
+                    left: -scrollOffset,
+                    width: trackContentWidth,
+                    top: 0,
+                    bottom: 0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: palette.appBackground.withValues(alpha: 0.6),
+                        border: Border(
+                          top: BorderSide(color: palette.border.withValues(alpha: 0.45)),
+                          bottom: BorderSide(color: palette.border.withValues(alpha: 0.45)),
                         ),
                       ),
-                  ],
-                ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) => Stack(
+                          clipBehavior: Clip.hardEdge,
+                          children: [
+                            for (final keyframe in track.keyframes)
+                              Positioned(
+                                left: (keyframe.timeMs / safeDuration *
+                                            constraints.maxWidth -
+                                        5)
+                                    .clamp(
+                                      0.0,
+                                      math.max(0.0, constraints.maxWidth - 10),
+                                    )
+                                    .toDouble(),
+                                top: 2,
+                                bottom: 2,
+                                child: Tooltip(
+                                  message:
+                                      '${_time(keyframe.timeMs)} · ${keyframe.value.toStringAsFixed(3)} · ${keyframe.interpolation.name}',
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      _pausePreviewPlayback();
+                                      _controller.setPlayhead(keyframe.timeMs);
+                                    },
+                                    child: const Icon(
+                                      Icons.diamond,
+                                      size: 10,
+                                      color: Color(0xFFE4C36B),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -12381,8 +12692,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   ) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final labelWidth = math.min(260.0, constraints.maxWidth);
-        final trackWidth = math.max(0.0, constraints.maxWidth - labelWidth);
+        final labelWidth = math.min(228.0, constraints.maxWidth * 0.46);
+        final trackWidth = math.max(1.0, constraints.maxWidth - labelWidth);
+        final contentWidth = trackWidth * _timelineZoom;
+        final scrollOffset =
+            (contentWidth - trackWidth) * _timelineScrollRatio;
         final selectedId = _controller.document.selectedLayerId;
         return Stack(
           clipBehavior: Clip.hardEdge,
@@ -12395,13 +12709,31 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 final tracks = _timelineTracksFor(layer);
                 final expanded = selected ||
                     _expandedTimelineLayers.contains(layer.id);
+                final isAudio = layer.kind == LayerKind.audio;
+                final trackGroup = layers
+                    .where((item) => (item.kind == LayerKind.audio) == isAudio)
+                    .toList(growable: false);
+                final trackNumber =
+                    trackGroup.indexWhere((item) => item.id == layer.id) + 1;
+                final trackLabel = '${isAudio ? 'A' : 'V'}${trackNumber}';
+                final trackColor = isAudio
+                    ? const Color(0xFF168C84)
+                    : const Color(0xFF2878C7);
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Container(
-                      color: selected
-                          ? const Color(0x223C65A8)
-                          : Colors.transparent,
+                      height: 35,
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? const Color(0x223C65A8)
+                            : const Color(0xFF141F2D),
+                        border: Border(
+                          bottom: BorderSide(
+                            color: const Color(0xFF29384B).withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 3),
                       child: Row(
                         children: [
@@ -12415,8 +12747,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                     padding: EdgeInsets.zero,
                                     visualDensity: VisualDensity.compact,
                                     tooltip: expanded
-                                        ? 'Collapse layer properties'
-                                        : 'Expand layer properties',
+                                        ? 'Collapse clip properties'
+                                        : 'Expand clip properties',
                                     onPressed: () => setState(() {
                                       if (_expandedTimelineLayers.contains(layer.id)) {
                                         _expandedTimelineLayers.remove(layer.id);
@@ -12425,10 +12757,26 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                       }
                                     }),
                                     icon: Icon(
-                                      expanded
-                                          ? Icons.expand_more
-                                          : Icons.chevron_right,
+                                      expanded ? Icons.expand_more : Icons.chevron_right,
                                       size: 14,
+                                      color: paletteText(context),
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  width: 29,
+                                  height: 23,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: trackColor,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    trackLabel,
+                                    style: const TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.white,
                                     ),
                                   ),
                                 ),
@@ -12436,18 +12784,22 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                   padding: EdgeInsets.zero,
                                   visualDensity: VisualDensity.compact,
                                   constraints: const BoxConstraints(
-                                    minWidth: 22,
+                                    minWidth: 21,
                                     minHeight: 22,
                                   ),
-                                  tooltip: layer.enabled ? 'Hide layer' : 'Show layer',
+                                  tooltip: isAudio
+                                      ? (layer.enabled ? 'Mute audio track' : 'Unmute audio track')
+                                      : (layer.enabled ? 'Disable video track' : 'Enable video track'),
                                   onPressed: () => _controller.setLayerEnabled(
                                     layer.id,
                                     !layer.enabled,
                                   ),
                                   icon: Icon(
-                                    layer.enabled
-                                        ? Icons.visibility_outlined
-                                        : Icons.visibility_off_outlined,
+                                    isAudio
+                                        ? (layer.enabled ? Icons.volume_up : Icons.volume_off)
+                                        : (layer.enabled
+                                            ? Icons.visibility_outlined
+                                            : Icons.visibility_off_outlined),
                                     size: 13,
                                   ),
                                 ),
@@ -12455,19 +12807,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                   padding: EdgeInsets.zero,
                                   visualDensity: VisualDensity.compact,
                                   constraints: const BoxConstraints(
-                                    minWidth: 22,
+                                    minWidth: 21,
                                     minHeight: 22,
                                   ),
-                                  tooltip: layer.solo ? 'Disable Solo' : 'Solo layer',
+                                  tooltip: layer.solo ? 'Disable Solo' : 'Solo this track',
                                   color: layer.solo ? palette.accent : null,
                                   onPressed: () => _controller.setLayerSolo(
                                     layer.id,
                                     !layer.solo,
                                   ),
                                   icon: Icon(
-                                    layer.solo
-                                        ? Icons.headphones
-                                        : Icons.headphones_outlined,
+                                    isAudio
+                                        ? (layer.solo ? Icons.headphones : Icons.headphones_outlined)
+                                        : (layer.solo ? Icons.radio_button_checked : Icons.radio_button_unchecked),
                                     size: 13,
                                   ),
                                 ),
@@ -12475,46 +12827,40 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                   padding: EdgeInsets.zero,
                                   visualDensity: VisualDensity.compact,
                                   constraints: const BoxConstraints(
-                                    minWidth: 22,
+                                    minWidth: 21,
                                     minHeight: 22,
                                   ),
-                                  tooltip: layer.locked ? 'Unlock layer' : 'Lock layer',
+                                  tooltip: layer.locked ? 'Unlock track' : 'Lock track',
+                                  color: layer.locked ? palette.accent : null,
                                   onPressed: () => _controller.setLayerLocked(
                                     layer.id,
                                     !layer.locked,
                                   ),
                                   icon: Icon(
                                     layer.locked ? Icons.lock : Icons.lock_open,
-                                    size: 13,
+                                    size: 12,
                                   ),
                                 ),
                                 IconButton(
                                   padding: EdgeInsets.zero,
                                   visualDensity: VisualDensity.compact,
                                   constraints: const BoxConstraints(
-                                    minWidth: 22,
+                                    minWidth: 21,
                                     minHeight: 22,
                                   ),
-                                  tooltip: layer.shy ? 'Unmark Shy Layer' : 'Mark Shy Layer',
+                                  tooltip: layer.shy ? 'Unmark Shy Track' : 'Mark Shy Track',
                                   color: layer.shy ? palette.accent : null,
                                   onPressed: () => _controller.setLayerShy(
                                     layer.id,
                                     !layer.shy,
                                   ),
-                                  icon: Icon(
-                                    layer.shy
-                                        ? Icons.visibility_off
-                                        : Icons.visibility_off_outlined,
-                                    size: 13,
-                                  ),
+                                  icon: const Icon(Icons.visibility_off_outlined, size: 12),
                                 ),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 3),
                                 Icon(
                                   _iconFor(layer.kind),
                                   size: 13,
-                                  color: selected
-                                      ? const Color(0xFFEAF0FF)
-                                      : paletteText(context),
+                                  color: selected ? const Color(0xFFEAF0FF) : paletteText(context),
                                 ),
                                 const SizedBox(width: 4),
                                 Expanded(
@@ -12526,9 +12872,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         fontSize: 9,
-                                        fontWeight: selected
-                                            ? FontWeight.w900
-                                            : FontWeight.w500,
+                                        fontWeight: selected ? FontWeight.w900 : FontWeight.w500,
                                         color: selected
                                             ? const Color(0xFFEAF0FF)
                                             : paletteText(context),
@@ -12540,7 +12884,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             ),
                           ),
                           Expanded(
-                            child: _buildTimelineClip(layer, duration),
+                            child: ClipRect(
+                              child: Stack(
+                                clipBehavior: Clip.hardEdge,
+                                children: [
+                                  Positioned(
+                                    left: -scrollOffset,
+                                    width: contentWidth,
+                                    top: 0,
+                                    bottom: 0,
+                                    child: _buildTimelineClip(layer, duration),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -12552,6 +12909,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                           track.track,
                           duration,
                           labelWidth: labelWidth,
+                          trackContentWidth: contentWidth,
+                          scrollOffset: scrollOffset,
                         ),
                   ],
                 );
@@ -12566,19 +12925,34 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                         currentDuration)
                     .clamp(0.0, 1.0)
                     .toDouble();
-                final x = (labelWidth + progress * trackWidth)
+                final x = (labelWidth +
+                        progress * contentWidth -
+                        scrollOffset)
                     .clamp(
-                      0.0,
-                      math.max(0.0, constraints.maxWidth - 1),
+                      labelWidth,
+                      math.max(labelWidth, constraints.maxWidth - 1),
                     )
                     .toDouble();
                 return Positioned(
                   left: x,
                   top: 0,
                   bottom: 0,
-                  width: 1,
+                  width: 2,
                   child: IgnorePointer(
-                    child: Container(color: const Color(0xFFFFC36A)),
+                    child: Container(
+                      color: const Color(0xFF48A7FF),
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF48A7FF),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 );
               },
@@ -12709,9 +13083,22 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                 },
                               ),
                             ),
+                          if (layer.effects.isNotEmpty)
+                            Positioned(
+                              right: 4,
+                              top: 2,
+                              child: Text(
+                                'fx ${layer.effects.length}',
+                                style: const TextStyle(
+                                  fontSize: 7,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFFE8D28B),
+                                ),
+                              ),
+                            ),
                           Positioned(
                             left: 5,
-                            right: 12,
+                            right: 28,
                             top: 4,
                             child: Text(
                               layer.name,
@@ -14075,4 +14462,139 @@ class _BezierCurveGraphPainter extends CustomPainter {
       oldDelegate.curve.y1 != curve.y1 ||
       oldDelegate.curve.x2 != curve.x2 ||
       oldDelegate.curve.y2 != curve.y2;
+}
+
+
+class _PremiereTimelineRulerPainter extends CustomPainter {
+  const _PremiereTimelineRulerPainter({
+    required this.durationMs,
+    required this.playheadMs,
+    required this.frameRate,
+    required this.zoom,
+    required this.scrollRatio,
+    required this.background,
+    required this.lineColor,
+    required this.textColor,
+    required this.playheadColor,
+  });
+
+  final int durationMs;
+  final int playheadMs;
+  final double frameRate;
+  final double zoom;
+  final double scrollRatio;
+  final Color background;
+  final Color lineColor;
+  final Color textColor;
+  final Color playheadColor;
+
+  double _niceStep(double raw) {
+    final safeRaw = math.max(1.0, raw);
+    final power = math.pow(10, (math.log(safeRaw) / math.ln10).floor()).toDouble();
+    final scaled = safeRaw / power;
+    final factor = scaled <= 1
+        ? 1.0
+        : scaled <= 2
+            ? 2.0
+            : scaled <= 5
+                ? 5.0
+                : 10.0;
+    return factor * power;
+  }
+
+  String _label(int ms) {
+    final clamped = ms.clamp(0, math.max(0, durationMs));
+    final seconds = clamped ~/ 1000;
+    final frames =
+        ((clamped % 1000) * frameRate / 1000).floor().clamp(0, 999);
+    return '${(seconds ~/ 60).toString().padLeft(2, '0')}:'
+        '${(seconds % 60).toString().padLeft(2, '0')}:'
+        '${frames.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = background);
+    if (size.width <= 0 || durationMs <= 0) return;
+
+    final visibleContentWidth = size.width * zoom;
+    final scrollOffset =
+        (visibleContentWidth - size.width) * scrollRatio.clamp(0.0, 1.0);
+    final visibleStart =
+        scrollOffset / visibleContentWidth * durationMs;
+    final visibleDuration = durationMs / zoom;
+    final visibleEnd = math.min(durationMs.toDouble(), visibleStart + visibleDuration);
+    final step = _niceStep(visibleDuration * 95 / math.max(1, size.width));
+    final minorStep = step / 5;
+    final firstTick = (visibleStart / minorStep).floor() * minorStep;
+
+    final minorPaint = Paint()
+      ..color = lineColor.withValues(alpha: 0.62)
+      ..strokeWidth = 0.7;
+    final majorPaint = Paint()
+      ..color = lineColor
+      ..strokeWidth = 1;
+    final labelStyle = TextStyle(
+      color: textColor,
+      fontSize: 8,
+      fontWeight: FontWeight.w600,
+      fontFeatures: const [ui.FontFeature.tabularFigures()],
+    );
+
+    for (var value = firstTick; value <= visibleEnd + minorStep; value += minorStep) {
+      if (value < 0 || value > durationMs) continue;
+      final x = value / durationMs * visibleContentWidth - scrollOffset;
+      if (x < -1 || x > size.width + 1) continue;
+      final major = (value / step - (value / step).round()).abs() < 0.0001;
+      canvas.drawLine(
+        Offset(x, major ? 6 : 17),
+        Offset(x, size.height - 1),
+        major ? majorPaint : minorPaint,
+      );
+      if (major) {
+        final painter = TextPainter(
+          text: TextSpan(text: _label(value.round()), style: labelStyle),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final labelX = (x + 4).clamp(0.0, math.max(0.0, size.width - painter.width));
+        painter.paint(canvas, Offset(labelX, 1));
+        painter.dispose();
+      }
+    }
+
+    canvas.drawLine(
+      Offset(0, size.height - 1),
+      Offset(size.width, size.height - 1),
+      majorPaint,
+    );
+
+    final playheadX =
+        playheadMs / durationMs * visibleContentWidth - scrollOffset;
+    if (playheadX >= -1 && playheadX <= size.width + 1) {
+      final playheadPaint = Paint()..color = playheadColor;
+      canvas.drawLine(
+        Offset(playheadX, 0),
+        Offset(playheadX, size.height),
+        playheadPaint..strokeWidth = 1.6,
+      );
+      final head = Path()
+        ..moveTo(playheadX - 5, 0)
+        ..lineTo(playheadX + 5, 0)
+        ..lineTo(playheadX, 7)
+        ..close();
+      canvas.drawPath(head, playheadPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PremiereTimelineRulerPainter oldDelegate) =>
+      oldDelegate.durationMs != durationMs ||
+      oldDelegate.playheadMs != playheadMs ||
+      oldDelegate.frameRate != frameRate ||
+      oldDelegate.zoom != zoom ||
+      oldDelegate.scrollRatio != scrollRatio ||
+      oldDelegate.background != background ||
+      oldDelegate.lineColor != lineColor ||
+      oldDelegate.textColor != textColor ||
+      oldDelegate.playheadColor != playheadColor;
 }
