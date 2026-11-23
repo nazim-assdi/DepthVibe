@@ -1965,4 +1965,28 @@ void main() {
     controller.dispose();
   });
 
+  test('reorders layer stack and can undo the order change', () {
+    final controller = CompositionController(
+      document: const CompositionDocument(
+        layers: [
+          CompositionLayer(id: 'top', name: 'Top', kind: LayerKind.video),
+          CompositionLayer(id: 'middle', name: 'Middle', kind: LayerKind.text),
+          CompositionLayer(id: 'bottom', name: 'Bottom', kind: LayerKind.image),
+        ],
+        selectedLayerId: 'middle',
+      ),
+    );
+
+    controller.reorderLayer('bottom', 0);
+    expect(controller.document.layers.map((layer) => layer.id).toList(),
+        ['bottom', 'top', 'middle']);
+    expect(controller.selectedLayer!.id, 'middle');
+
+    controller.undo();
+    expect(controller.document.layers.map((layer) => layer.id).toList(),
+        ['top', 'middle', 'bottom']);
+    expect(controller.selectedLayer!.id, 'middle');
+    controller.dispose();
+  });
+
 }

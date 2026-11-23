@@ -3030,8 +3030,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ),
         ),
         Expanded(
-          child: ListView.builder(
+          child: ReorderableListView.builder(
+            buildDefaultDragHandles: false,
             itemCount: layers.length,
+            onReorder: (oldIndex, newIndex) {
+              if (newIndex > oldIndex) newIndex--;
+              _controller.reorderLayer(layers[oldIndex].id, newIndex);
+            },
             itemBuilder: (context, index) {
               final layer = layers[index];
               final selected = layer.id == document.selectedLayerId;
@@ -3056,6 +3061,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   'Adjustment ${layer.photoshopAdjustmentKey}',
               ];
               return ListTile(
+                key: ValueKey<String>('project-layer-${layer.id}'),
                 dense: true,
                 contentPadding: EdgeInsets.only(
                   left: 8 + depth * 12,
@@ -3063,12 +3069,26 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 ),
                 selected: selected,
                 selectedTileColor: palette.accentSoft,
-                leading: Icon(
-                  layer.kind == LayerKind.precomposition
-                      ? Icons.folder_open
-                      : _iconFor(layer.kind),
-                  size: 16,
-                  color: selected ? palette.accent : palette.secondaryText,
+                leading: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ReorderableDragStartListener(
+                      index: index,
+                      child: Icon(
+                        Icons.drag_indicator,
+                        size: 14,
+                        color: palette.secondaryText,
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    Icon(
+                      layer.kind == LayerKind.precomposition
+                          ? Icons.folder_open
+                          : _iconFor(layer.kind),
+                      size: 16,
+                      color: selected ? palette.accent : palette.secondaryText,
+                    ),
+                  ],
                 ),
                 title: Text(
                   layer.name,
