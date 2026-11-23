@@ -295,6 +295,7 @@ void main() {
           kind: LayerKind.text,
           textContent: 'DepthVibe',
           is3dText: true,
+          textExtrusionDepth: 24,
           transform: LayerTransform(
             position: Vector3(960, 540, 180),
             rotation: Vector3(18, -24, 0),
@@ -309,6 +310,7 @@ void main() {
     expect(rawLayer['is3dText'], isTrue);
     final restored = CompositionProjectCodec.decodeDocument(encoded);
     expect(restored.layers.single.is3dText, isTrue);
+    expect(restored.layers.single.textExtrusionDepth, 24);
     expect(restored.layers.single.transform.position.z, 180);
     expect(restored.layers.single.transform.rotation.x, 18);
     expect(restored.layers.single.transform.rotation.y, -24);
