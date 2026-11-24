@@ -246,6 +246,90 @@ void main() {
     );
   });
 
+  test('two-node camera aims its optical axis at the point of interest', () {
+    const camera = ResolvedLayerTransform(
+      position: Vector3(960, 540, 0),
+      scale: Vector3(100, 100, 100),
+      rotation: Vector3(0, 0, 30),
+      opacity: 100,
+      enabled: true,
+    );
+    const settings = CameraSettings(
+      cameraMode: 'twoNode',
+      pointOfInterestX: 1160,
+      pointOfInterestY: 440,
+      pointOfInterestZ: 1000,
+    );
+
+    final rotation = resolver.effectiveCameraRotation(camera, settings);
+    final direction = resolver.worldToCameraOffset(
+      const Vector3(200, -100, 1000),
+      rotation,
+    );
+
+    expect(direction.x, closeTo(0, 0.0001));
+    expect(direction.y, closeTo(0, 0.0001));
+    expect(direction.z, greaterThan(1000));
+    expect(rotation.z, 30);
+  });
+
+  test('two-node camera falls back to authored rotation for a coincident target', () {
+    const camera = ResolvedLayerTransform(
+      position: Vector3(960, 540, 0),
+      scale: Vector3(100, 100, 100),
+      rotation: Vector3(12, 25, 30),
+      opacity: 100,
+      enabled: true,
+    );
+    const settings = CameraSettings(
+      cameraMode: 'twoNode',
+      pointOfInterestX: 960,
+      pointOfInterestY: 540,
+      pointOfInterestZ: 0,
+    );
+
+    expect(resolver.effectiveCameraRotation(camera, settings), camera.rotation);
+  });
+
+  test('two-node export expressions contain the saved point of interest', () {
+    const parentResolver = ParentTransformExpressionResolver();
+    const cameraLayer = CompositionLayer(
+      id: 'camera',
+      name: 'Camera',
+      kind: LayerKind.camera,
+      camera: CameraSettings(
+        cameraMode: 'twoNode',
+        pointOfInterestX: 1200,
+        pointOfInterestY: 500,
+        pointOfInterestZ: 800,
+      ),
+    );
+    const objectLayer = CompositionLayer(
+      id: 'object',
+      name: 'Object',
+      kind: LayerKind.image,
+    );
+
+    final camera = parentResolver.resolve(
+      layer: cameraLayer,
+      layers: const [cameraLayer, objectLayer],
+    );
+    final layer = parentResolver.resolve(
+      layer: objectLayer,
+      layers: const [cameraLayer, objectLayer],
+    );
+    final projected = resolver.compile(
+      layer: layer,
+      camera: camera,
+      settings: cameraLayer.camera!,
+    );
+
+    expect(projected.positionX, contains('atan2'));
+    expect(projected.positionY, contains('atan2'));
+    expect(projected.positionX, contains('1200.000000'));
+    expect(projected.positionY, contains('500.000000'));
+  });
+
   test('FFmpeg camera projection includes orientation and near/far culling', () {
     const parentResolver = ParentTransformExpressionResolver();
     const cameraLayer = CompositionLayer(

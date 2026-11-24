@@ -177,6 +177,10 @@ void main() {
           ),
           camera: CameraSettings(
             projection: 'orthographic',
+            cameraMode: 'twoNode',
+            pointOfInterestX: 1820,
+            pointOfInterestY: 940,
+            pointOfInterestZ: 640,
             fieldOfView: 45,
             focalLength: 35,
             focusDistance: 200,
@@ -283,6 +287,10 @@ void main() {
     expect(restored.audioBuses.last.keyframeTracks.single.property, 'gainDb');
     expect(restored.layers.last.shapeStyle!.primitive, ShapePrimitive.star);
     expect(restored.layers.last.camera!.depthOfField, isTrue);
+    expect(restored.layers.last.camera!.cameraMode, 'twoNode');
+    expect(restored.layers.last.camera!.pointOfInterestX, 1820);
+    expect(restored.layers.last.camera!.pointOfInterestY, 940);
+    expect(restored.layers.last.camera!.pointOfInterestZ, 640);
     expect(restored.layers.last.light!.areaSamples, 32);
   });
 

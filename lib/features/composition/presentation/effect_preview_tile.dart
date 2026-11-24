@@ -3,7 +3,11 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../../app/depthvibe_settings.dart';
+
 import '../data/effect_catalog.dart';
+import '../domain/composition_models.dart';
+import '../engine/live_effect_preview.dart';
 
 /// Animated, generated visual thumbnail for an effect. It demonstrates the
 /// character of an effect; the final image is still rendered by the native
@@ -15,12 +19,16 @@ class EffectPreviewTile extends StatefulWidget {
     required this.onApply,
     this.titleOverride,
     this.subtitleOverride,
+    this.grid = false,
+    this.previewEffects,
   });
 
   final EffectDefinition effect;
   final VoidCallback? onApply;
   final String? titleOverride;
   final String? subtitleOverride;
+  final bool grid;
+  final List<EffectInstance>? previewEffects;
 
   @override
   State<EffectPreviewTile> createState() => _EffectPreviewTileState();
@@ -63,93 +71,200 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
   @override
   Widget build(BuildContext context) {
     final effect = widget.effect;
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return MouseRegion(
       onEnter: (_) => _startPreview(),
       onExit: (_) => _stopPreview(),
       child: AnimatedBuilder(
         animation: _animation,
         builder: (context, child) => Container(
-          margin: const EdgeInsets.only(bottom: 6),
+          margin: EdgeInsets.only(bottom: widget.grid ? 0 : 6),
           padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-            color: const Color(0xFF172234),
-            borderRadius: BorderRadius.circular(9),
+            color: palette.panelRaised,
+            borderRadius: BorderRadius.circular(11),
             border: Border.all(
-              color: _hovered
-                  ? const Color(0xFF927BFF)
-                  : const Color(0xFF34445D),
-              width: _hovered ? 1.4 : 0.8,
+              color: _hovered ? palette.accent : palette.border,
+              width: _hovered ? 1.2 : 0.8,
             ),
+            boxShadow: _hovered
+                ? [
+                    BoxShadow(
+                      color: palette.accent.withValues(alpha: 0.12),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : const [],
           ),
-          child: Row(
+          child: widget.grid
+              ? _buildGridCard(effect)
+              : _buildListCard(effect),
+        ),
+      ),
+    );
+  }
+
+  List<EffectInstance> _sampleEffects(EffectDefinition effect) {
+    final supplied = widget.previewEffects;
+    if (supplied != null) return supplied;
+    return [
+      EffectInstance(
+        id: 'sample-${effect.id}',
+        effectId: effect.id,
+        name: effect.name,
+        parameters: {
+          for (final parameter in effect.parameters)
+            parameter.id: parameter.defaultValue,
+        },
+      ),
+    ];
+  }
+
+  Widget _sampleFootage({required bool grid, required EffectDefinition effect}) {
+    final previewTime = (_animation.value * 1600).round();
+    final source = CustomPaint(
+      painter: _EffectSamplePainter(
+        effectId: 'source_scene',
+        progress: _animation.value,
+      ),
+      child: grid ? const SizedBox.expand() : const SizedBox(width: 104, height: 60),
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: LiveEffectPreview.apply(
+        child: source,
+        effects: _sampleEffects(effect),
+        timeMs: previewTime,
+        canvasSize: grid ? const Size(220, 150) : const Size(104, 60),
+      ),
+    );
+  }
+
+  Widget _buildListCard(EffectDefinition effect) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return Row(
+      children: [
+        GestureDetector(
+          onTap: _hovered ? _stopPreview : _startPreview,
+          child: SizedBox(
+            width: 104,
+            height: 60,
+            child: _sampleFootage(grid: false, effect: effect),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              GestureDetector(
-                onTap: _hovered ? _stopPreview : _startPreview,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: CustomPaint(
-                    size: const Size(104, 60),
-                    painter: _EffectSamplePainter(
-                      effectId: effect.id,
-                      progress: _animation.value,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
+              Text(widget.titleOverride ?? effect.name, maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: palette.primaryText,fontSize: 10,fontWeight: FontWeight.w800)),
+              const SizedBox(height: 3),
+              Text(widget.subtitleOverride ?? (effect.category + ' · ' + effect.id),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: palette.secondaryText,fontSize: 8)),
+              const SizedBox(height: 3),
+              Text(_hovered ? 'LIVE PREVIEW' : 'HOVER TO PREVIEW',
+                style: TextStyle(color: _hovered?palette.accent:palette.secondaryText,
+                  fontSize: 7,fontWeight: FontWeight.w900,letterSpacing: 0.55)),
+            ],
+          ),
+        ),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          tooltip: 'Add ' + (widget.titleOverride ?? effect.name),
+          onPressed: widget.onApply,
+          icon: Icon(Icons.add_circle_outline,color: palette.accent,size: 19),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGridCard(EffectDefinition effect) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return Tooltip(
+      message: effect.description,
+      waitDuration: const Duration(milliseconds: 450),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: _hovered ? _stopPreview : _startPreview,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    Text(
-                      widget.titleOverride ?? effect.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFFE9EFFA),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
+                    Positioned.fill(
+                      child: _sampleFootage(grid: true, effect: effect),
+                    ),
+                    Positioned(
+                      left: 5,
+                      top: 5,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: palette.toolbar.withValues(alpha: 0.90),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: palette.border),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 5,vertical: 3),
+                          child: Text(effect.category.toUpperCase(),
+                            maxLines: 1,overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Color(0xFFD6E2F4),fontSize: 6.5,
+                              fontWeight: FontWeight.w900,letterSpacing: 0.45)),
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      widget.subtitleOverride ?? (effect.category + ' · ' + effect.ffmpegFilter),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF93A5C0),
-                        fontSize: 8,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      _hovered ? 'LIVE EFFECT PREVIEW' : 'HOVER TO PREVIEW',
-                      style: TextStyle(
-                        color: _hovered
-                            ? const Color(0xFFBBAEFF)
-                            : const Color(0xFF7185A3),
-                        fontSize: 7,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.55,
+                    Positioned(
+                      right: 5,
+                      top: 5,
+                      child: Icon(
+                        _hovered ? Icons.play_circle_fill : Icons.play_circle_outline,
+                        size: 17,
+                        color: palette.accent,
                       ),
                     ),
                   ],
                 ),
               ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                tooltip: 'Add ' + (widget.titleOverride ?? effect.name),
-                onPressed: widget.onApply,
-                icon: const Icon(
-                  Icons.add_circle_outline,
-                  color: Color(0xFFBBAEFF),
-                  size: 19,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(widget.titleOverride ?? effect.name,
+            maxLines: 1,overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: palette.primaryText,fontSize: 9.5,fontWeight: FontWeight.w800)),
+          const SizedBox(height: 2),
+          Text(widget.subtitleOverride ?? effect.id,
+            maxLines: 1,overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: palette.secondaryText,fontSize: 7.5)),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: Text(_hovered ? 'PLAYING SAMPLE' : 'LIVE SAMPLE',
+                  maxLines: 1,
+                  style: TextStyle(color: _hovered?palette.accent:palette.secondaryText,
+                    fontSize: 6.8,fontWeight: FontWeight.w900,letterSpacing: 0.35)),
+              ),
+              InkWell(
+                onTap: widget.onApply,
+                borderRadius: BorderRadius.circular(14),
+                child: Tooltip(
+                  message: 'Add ' + (widget.titleOverride ?? effect.name),
+                  child: const Padding(
+                    padding: EdgeInsets.all(2),
+                    child: Icon(Icons.add_circle,color: Color(0xFFBBAEFF),size: 18),
+                  ),
                 ),
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }

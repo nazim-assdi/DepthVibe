@@ -37,6 +37,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  shaders:
+    - shaders/live_effect_preview.frag
+    - shaders/lut_preview.frag
 
 hooks:
   user_defines:

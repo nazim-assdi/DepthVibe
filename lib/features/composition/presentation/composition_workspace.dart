@@ -54,6 +54,7 @@ import '../engine/software_3d_renderer.dart';
 import '../engine/gpu_3d_mesh_view.dart';
 import '../engine/audio_waveform_service.dart';
 import '../engine/color_grade_preview.dart';
+import '../engine/live_effect_preview.dart';
 import '../engine/cube_lut_validator.dart';
 import '../engine/motion_tracking_service.dart';
 import '../engine/transition_frame_validator.dart';
@@ -65,6 +66,12 @@ import 'color_curve_editor.dart';
 import 'color_scopes_view.dart';
 import 'transition_preview_tile.dart';
 import 'effect_preview_tile.dart';
+import 'creative_preset_preview_tile.dart';
+import 'transition_live_preview.dart';
+
+enum _CameraPreviewLayout { single, dual, quad }
+
+enum _CameraPreviewView { front, back, left, right, top, bottom }
 
 class CompositionWorkspace extends StatefulWidget {
   const CompositionWorkspace({
@@ -123,6 +130,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   List<MotionBroPresetPack> _motionBroPacks = [];
   bool _motionBroBusy = false;
   String _motionBroSearch = '';
+  _CameraPreviewLayout _cameraPreviewLayout = _CameraPreviewLayout.single;
+  _CameraPreviewView _cameraPreviewView = _CameraPreviewView.top;
 
   Future<File?> _waveformFor(String path) =>
       _waveformJobs.putIfAbsent(path, () => _waveformService.generate(path));
@@ -824,6 +833,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   Size _previewPenLayerSize = Size.zero;
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
+  double _timelineHeight = 260;
+  bool _studioShowMediaDock = true;
+  bool _studioShowInspectorDock = true;
+  bool _studioMediaGridView = false;
+  String _studioMediaSearch = '';
+  String _studioMediaKind = 'All';
   final Set<String> _expandedTimelineLayers = {};
   String _effectCategory = 'All';
   String _effectSearch = '';
@@ -2141,24 +2156,36 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        SizedBox(
-                          width: _leftPanelWidth,
-                          child: _buildLayerPanel(doc.layers),
-                        ),
-                        _buildWorkspaceSplitter(left: true),
+                        if (_workspacePreset != 'Studio Edit' || _studioShowMediaDock) ...[
+                          SizedBox(
+                            width: _leftPanelWidth,
+                            child: _buildLayerPanel(doc.layers),
+                          ),
+                          _buildWorkspaceSplitter(left: true),
+                        ],
                         Expanded(
                           child: _buildPlayheadAwareCanvas(),
                         ),
-                        _buildWorkspaceSplitter(left: false),
-                        SizedBox(
-                          width: _rightPanelWidth,
-                          child: _buildActivePanel(layer),
-                        ),
+                        if (_workspacePreset != 'Studio Edit' || _studioShowInspectorDock) ...[
+                          _buildWorkspaceSplitter(left: false),
+                          SizedBox(
+                            width: _rightPanelWidth,
+                            child: _workspacePreset == 'Studio Edit'
+                                ? Column(
+                                    children: [
+                                      Expanded(child: _buildActivePanel(layer)),
+                                      _buildStudioMixerDock(layer),
+                                    ],
+                                  )
+                                : _buildActivePanel(layer),
+                          ),
+                        ],
                       ],
                     );
                   },
                 ),
               ),
+              _buildTimelineSplitter(),
               _buildPlayheadAwareTimeline(),
               if (_rendering || _projectBusy)
                 Padding(
@@ -2221,13 +2248,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       tooltip: label,
       onSelected: onSelected,
       itemBuilder: (_) => items,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: palette.panelRaised.withValues(alpha: 0.44),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: palette.border.withValues(alpha: 0.72)),
+        ),
         child: Text(
           label.toUpperCase(),
           style: TextStyle(
-            fontSize: 9,
-            letterSpacing: 0.85,
+            fontSize: 8,
+            letterSpacing: 0.75,
             fontWeight: FontWeight.w800,
             color: palette.primaryText,
           ),
@@ -2246,6 +2279,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           _graphEditorVisible = false;
           _leftPanelWidth = 270;
           _rightPanelWidth = 340;
+          _timelineHeight = 260;
           _rightPanelOrder
             ..clear()
             ..addAll([
@@ -2264,6 +2298,33 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               'Audio',
               'Bus Mixer',
               'Transitions',
+              'Library',
+            ]);
+        case 'Studio Edit':
+          _leftPanel = 'Project';
+          _panel = 'Effects';
+          _graphEditorVisible = false;
+          _leftPanelWidth = 292;
+          _rightPanelWidth = 326;
+          _timelineHeight = 330;
+          _rightPanelOrder
+            ..clear()
+            ..addAll([
+              'Transform',
+              'Effects',
+              'Audio',
+              'Bus Mixer',
+              'Color',
+              'Transitions',
+              'Animation',
+              'Layers',
+              'Timing',
+              'Typography',
+              'Shape',
+              'Masks',
+              'Tracking',
+              'Parent',
+              '3D',
               'Library',
             ]);
         case 'Standard':
@@ -2308,6 +2369,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       ),
       child: Row(
         children: [
+          const SizedBox(width: 10),
+          const DepthVibeBrandMark(size: 22, showWordmark: false),
+          const SizedBox(width: 8),
+          Text(
+            'DEPTHVIBE',
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: 9,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.25,
+            ),
+          ),
+          const SizedBox(width: 8),
+          VerticalDivider(width: 1, indent: 7, endIndent: 7),
+          const SizedBox(width: 4),
           _workspaceMenuButton(
             'File',
             const [
@@ -2470,6 +2546,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             'Workspace',
             const [
               PopupMenuItem(value: 'After Effects', child: Text('After Effects · Default')),
+              PopupMenuItem(value: 'Studio Edit', child: Text('Studio Edit · Dual Viewer')),
               PopupMenuItem(value: 'Standard', child: Text('Standard')),
               PopupMenuItem(value: 'Editing', child: Text('Editing')),
               PopupMenuItem(value: 'Animation', child: Text('Animation')),
@@ -2481,14 +2558,49 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             _applyWorkspacePreset,
           ),
           const Spacer(),
+          if (_workspacePreset == 'Studio Edit') ...[
+            Tooltip(
+              message: _studioShowMediaDock ? 'Hide Media Pool' : 'Show Media Pool',
+              child: IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: () => setState(() => _studioShowMediaDock = !_studioShowMediaDock),
+                icon: Icon(
+                  _studioShowMediaDock ? Icons.view_sidebar : Icons.view_sidebar_outlined,
+                  size: 16,
+                  color: _studioShowMediaDock ? palette.accent : palette.secondaryText,
+                ),
+              ),
+            ),
+            Tooltip(
+              message: _studioShowInspectorDock ? 'Hide Inspector' : 'Show Inspector',
+              child: IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: () => setState(() => _studioShowInspectorDock = !_studioShowInspectorDock),
+                icon: Icon(
+                  Icons.tune,
+                  size: 16,
+                  color: _studioShowInspectorDock ? palette.accent : palette.secondaryText,
+                ),
+              ),
+            ),
+          ],
           Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Text(
-              '${_workspacePreset.toUpperCase()} WORKSPACE  •  ${_controller.document.layers.length} LAYERS',
-              style: TextStyle(
-                fontSize: 8,
-                letterSpacing: 0.8,
-                color: palette.secondaryText,
+            padding: const EdgeInsets.only(left: 8, right: 12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+              decoration: BoxDecoration(
+                color: palette.accentSoft,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: palette.accent.withValues(alpha: 0.28)),
+              ),
+              child: Text(
+                '${_workspacePreset.toUpperCase()}  ·  ${_controller.document.layers.length} LAYERS',
+                style: TextStyle(
+                  fontSize: 7,
+                  letterSpacing: 0.75,
+                  fontWeight: FontWeight.w900,
+                  color: palette.accent,
+                ),
               ),
             ),
           ),
@@ -2523,7 +2635,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                         minHeight: 30,
                       ),
                       onPressed: _rendering ? null : () => _addLayer(entry.$1),
-                      icon: Icon(entry.$3, size: 16),
+                      style: IconButton.styleFrom(
+                        backgroundColor: palette.panelRaised,
+                        hoverColor: palette.accentSoft,
+                        side: BorderSide(color: palette.border),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                      ),
+                      icon: Icon(entry.$3, size: 15),
                     ),
                   ),
               ],
@@ -2562,7 +2682,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           const SizedBox(width: 7),
           Expanded(
             child: Text(
-              'Composition: ${document.name}',
+              _workspacePreset == 'Studio Edit'
+                  ? 'PROGRAM  ·  ${document.name}'
+                  : 'Composition: ${document.name}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -2572,14 +2694,87 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ),
             ),
           ),
-          Text(
-            hasCamera ? 'ACTIVE CAMERA' : 'ACTIVE VIEW',
-            style: TextStyle(
-              fontSize: 8,
-              letterSpacing: 0.55,
-              color: palette.secondaryText,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: palette.panelRaised,
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: palette.border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: hasCamera ? const Color(0xFF62D6C0) : palette.accent,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: (hasCamera ? const Color(0xFF62D6C0) : palette.accent)
+                            .withValues(alpha: 0.35),
+                        blurRadius: 5,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  hasCamera
+                      ? 'ACTIVE CAMERA'
+                      : _workspacePreset == 'Studio Edit'
+                          ? 'DUAL MONITOR'
+                          : 'ACTIVE VIEW',
+                  style: TextStyle(
+                    fontSize: 7,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.65,
+                    color: palette.primaryText,
+                  ),
+                ),
+              ],
             ),
           ),
+          if (hasCamera) ...[
+            PopupMenuButton<_CameraPreviewLayout>(
+              tooltip: 'Camera multi-view layout',
+              padding: EdgeInsets.zero,
+              onSelected: (value) => setState(() => _cameraPreviewLayout = value),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: _CameraPreviewLayout.single, child: Text('1 View · Active Camera')),
+                PopupMenuItem(value: _CameraPreviewLayout.dual, child: Text('2 Views · Active + Reference')),
+                PopupMenuItem(value: _CameraPreviewLayout.quad, child: Text('4 Views · Active + Front / Top / Right')),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+                child: Text(
+                  switch (_cameraPreviewLayout) {
+                    _CameraPreviewLayout.single => '1 VIEW',
+                    _CameraPreviewLayout.dual => '2 VIEW',
+                    _CameraPreviewLayout.quad => '4 VIEW',
+                  },
+                  style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: palette.accent),
+                ),
+              ),
+            ),
+            if (_cameraPreviewLayout == _CameraPreviewLayout.dual)
+              PopupMenuButton<_CameraPreviewView>(
+                tooltip: 'Reference camera angle',
+                padding: EdgeInsets.zero,
+                onSelected: (value) => setState(() => _cameraPreviewView = value),
+                itemBuilder: (_) => _CameraPreviewView.values.map((view) =>
+                  PopupMenuItem(value: view, child: Text(view.name.toUpperCase()))
+                ).toList(),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  child: Text(
+                    _cameraPreviewView.name.toUpperCase(),
+                    style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: palette.secondaryText),
+                  ),
+                ),
+              ),
+          ],
           const SizedBox(width: 10),
           Text(
             '${document.width} × ${document.height}',
@@ -2726,7 +2921,315 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  Widget _buildStudioLibraryDock(List<CompositionLayer> layers) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final document = _controller.document;
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.panel,
+        border: Border(right: BorderSide(color: palette.border)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: palette.toolbar,
+              border: Border(bottom: BorderSide(color: palette.border)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.video_library_outlined, size: 15, color: palette.accent),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text('MEDIA POOL  ·  ${layers.length}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      letterSpacing: 0.9,
+                      fontWeight: FontWeight.w900,
+                      color: palette.primaryText,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: _studioMediaGridView ? 'Show media list' : 'Show media thumbnails',
+                  onPressed: () => setState(() => _studioMediaGridView = !_studioMediaGridView),
+                  icon: Icon(
+                    _studioMediaGridView ? Icons.view_list : Icons.grid_view,
+                    size: 15,
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Import video',
+                  onPressed: () => _addLayer(LayerKind.video),
+                  icon: const Icon(Icons.add, size: 17),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Choose media or effects browser',
+                  onSelected: (value) => setState(() => _leftPanel = value),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'Project', child: Text('Media / Layers')),
+                    PopupMenuItem(value: 'Effects & Presets', child: Text('Effects & Presets')),
+                    PopupMenuItem(value: 'Info', child: Text('Composition Info')),
+                  ],
+                  child: const Padding(
+                    padding: EdgeInsets.all(5),
+                    child: Icon(Icons.more_vert, size: 17),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 34,
+                    child: TextField(
+                      onChanged: (value) => setState(() => _studioMediaSearch = value),
+                      style: TextStyle(color: palette.primaryText, fontSize: 10),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        prefixIcon: const Icon(Icons.search, size: 15),
+                        hintText: 'Find media or layer…',
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(7),
+                          borderSide: BorderSide(color: palette.border),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                SizedBox(
+                  width: 82,
+                  height: 34,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _studioMediaKind,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(7),
+                        borderSide: BorderSide(color: palette.border),
+                      ),
+                    ),
+                    items: const ['All', 'Video', 'Audio', 'Image', 'Text', 'Shape']
+                        .map((kind) => DropdownMenuItem(
+                          value: kind,
+                          child: Text(kind, style: const TextStyle(fontSize: 9)),
+                        ))
+                        .toList(),
+                    onChanged: (value) => setState(() => _studioMediaKind = value ?? 'All'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 6,
+            child: _buildProjectPanel(
+              layers.where((layer) {
+                final query = _studioMediaSearch.trim().toLowerCase();
+                final matchesText = query.isEmpty ||
+                    (layer.name + ' ' + layer.kind.name).toLowerCase().contains(query);
+                final type = switch (layer.kind) {
+                  LayerKind.video => 'Video',
+                  LayerKind.audio => 'Audio',
+                  LayerKind.image || LayerKind.photoshopLayer => 'Image',
+                  LayerKind.text => 'Text',
+                  LayerKind.shape => 'Shape',
+                  _ => 'Other',
+                };
+                final matchesType = _studioMediaKind == 'All' ||
+                    type == _studioMediaKind;
+                return matchesText && matchesType;
+              }).toList(),
+              document,
+            ),
+          ),
+          Container(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: palette.toolbar,
+              border: Border(
+                top: BorderSide(color: palette.border),
+                bottom: BorderSide(color: palette.border),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.auto_awesome, size: 14, color: palette.accent),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text('EFFECTS & PRESETS',
+                    style: TextStyle(
+                      fontSize: 9,
+                      letterSpacing: 0.8,
+                      fontWeight: FontWeight.w900,
+                      color: palette.primaryText,
+                    ),
+                  ),
+                ),
+                Text('${EffectCatalog.all.length} LIVE',
+                  style: TextStyle(fontSize: 7, fontWeight: FontWeight.w900, color: palette.accent),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 5,
+            child: _buildLeftEffectsPanel(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStudioMixerDock(CompositionLayer? layer) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final buses = _controller.document.audioBuses;
+    return Container(
+      height: 184,
+      decoration: BoxDecoration(
+        color: palette.panel,
+        border: Border(
+          top: BorderSide(color: palette.border),
+          left: BorderSide(color: palette.border),
+        ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: palette.toolbar,
+              border: Border(bottom: BorderSide(color: palette.border)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.graphic_eq, size: 14, color: palette.accent),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text('AUDIO MIXER',
+                    style: TextStyle(
+                      color: palette.primaryText,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+                Text('${buses.length} BUSES',
+                  style: TextStyle(color: palette.secondaryText, fontSize: 7, fontWeight: FontWeight.w800),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Open full Audio Bus Mixer',
+                  onPressed: () => setState(() => _panel = 'Bus Mixer'),
+                  icon: const Icon(Icons.open_in_full, size: 13),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: buses.isEmpty
+                ? Center(
+                    child: Text('No audio buses',
+                      style: TextStyle(color: palette.secondaryText, fontSize: 9)),
+                  )
+                : ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+                    children: [
+                      for (final bus in buses)
+                        Container(
+                          width: 102,
+                          margin: const EdgeInsets.only(right: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: palette.panelRaised,
+                            borderRadius: BorderRadius.circular(7),
+                            border: Border.all(color: palette.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(bus.isMaster ? 'MASTER' : bus.name.toUpperCase(),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: bus.isMaster ? const Color(0xFF7EDBCB) : palette.primaryText,
+                                        fontSize: 7,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ),
+                                  Tooltip(
+                                    message: bus.muted ? 'Unmute bus' : 'Mute bus',
+                                    child: InkWell(
+                                      onTap: () => _controller.updateAudioBus(bus.copyWith(muted: !bus.muted)),
+                                      child: Icon(
+                                        bus.muted ? Icons.volume_off : Icons.volume_up,
+                                        size: 12,
+                                        color: bus.muted ? const Color(0xFFE39C9C) : palette.secondaryText,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Expanded(
+                                child: Center(
+                                  child: Slider(
+                                    value: bus.gainDb.clamp(-24.0, 12.0).toDouble(),
+                                    min: -24,
+                                    max: 12,
+                                    onChanged: (value) => _controller.updateAudioBus(bus.copyWith(gainDb: value)),
+                                  ),
+                                ),
+                              ),
+                              Text('${bus.gainDb.toStringAsFixed(1)} dB',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: palette.secondaryText, fontSize: 7, fontFeatures: const [ui.FontFeature.tabularFigures()]),
+                              ),
+                              Slider(
+                                value: bus.pan.clamp(-1.0, 1.0).toDouble(),
+                                min: -1,
+                                max: 1,
+                                onChanged: (value) => _controller.updateAudioBus(bus.copyWith(pan: value)),
+                              ),
+                              Text('PAN  ${bus.pan.abs() < 0.01 ? 'C' : bus.pan < 0 ? 'L' : 'R'}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: palette.secondaryText, fontSize: 6, fontWeight: FontWeight.w800),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLayerPanel(List<CompositionLayer> layers) {
+    if (_workspacePreset == 'Studio Edit') {
+      return _buildStudioLibraryDock(layers);
+    }
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     final document = _controller.document;
     return Container(
@@ -2839,6 +3342,172 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  Widget _buildMediaPoolLeading(
+    CompositionLayer layer,
+    CompositionDocument document,
+    bool selected, {
+    bool fill = false,
+  }) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    Widget content;
+    final cachedVideo = _lastVideoFrames[layer.id];
+    if (layer.sourceUri != null &&
+        (layer.kind == LayerKind.image || layer.kind == LayerKind.photoshopLayer)) {
+      content = Image.file(
+        File(layer.sourceUri!),
+        fit: BoxFit.cover,
+        cacheWidth: 112,
+        errorBuilder: (_, __, ___) => Icon(Icons.broken_image_outlined, color: palette.secondaryText, size: 17),
+      );
+    } else if (layer.kind == LayerKind.video && cachedVideo != null) {
+      content = Image.file(
+        cachedVideo,
+        fit: BoxFit.cover,
+        cacheWidth: 112,
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => Icon(Icons.movie_outlined, color: palette.secondaryText, size: 17),
+      );
+    } else {
+      final icon = layer.kind == LayerKind.precomposition
+          ? Icons.folder_open
+          : _iconFor(layer.kind);
+      content = Container(
+        color: layer.kind == LayerKind.audio
+            ? const Color(0x222CCDB8)
+            : palette.panelRaised,
+        alignment: Alignment.center,
+        child: Icon(
+          icon,
+          size: 17,
+          color: selected ? palette.accent : palette.secondaryText,
+        ),
+      );
+    }
+    return Container(
+      width: fill ? double.infinity : 48,
+      height: fill ? double.infinity : 34,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: palette.panelRaised,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: selected ? palette.accent.withValues(alpha: 0.72) : palette.border,
+        ),
+      ),
+      child: content,
+    );
+  }
+
+  Widget _buildMediaPoolGridCard(
+    CompositionLayer layer,
+    CompositionDocument document,
+    bool selected,
+  ) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return InkWell(
+      onTap: () => _controller.selectLayer(layer.id),
+      borderRadius: BorderRadius.circular(9),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: selected ? palette.accentSoft : palette.panelRaised,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(
+            color: selected ? palette.accent : palette.border,
+            width: selected ? 1.25 : 0.8,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _buildMediaPoolLeading(layer, document, selected, fill: true),
+                  Positioned(
+                    left: 5,
+                    top: 5,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: palette.toolbar.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        layer.kind.name.toUpperCase(),
+                        style: TextStyle(
+                          color: palette.primaryText,
+                          fontSize: 6.5,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.45,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 5,
+                    top: 5,
+                    child: Icon(
+                      selected ? Icons.check_circle : Icons.circle_outlined,
+                      size: 15,
+                      color: selected ? palette.accent : Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(7, 6, 6, 5),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          layer.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: palette.primaryText,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          layer.enabled ? 'READY' : 'HIDDEN',
+                          style: TextStyle(
+                            color: layer.enabled ? palette.secondaryText : const Color(0xFFE39C9C),
+                            fontSize: 6.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 23, height: 23),
+                    tooltip: layer.enabled ? 'Hide layer' : 'Show layer',
+                    onPressed: () => _controller.setLayerEnabled(layer.id, !layer.enabled),
+                    icon: Icon(
+                      layer.enabled ? Icons.visibility : Icons.visibility_off,
+                      size: 12,
+                      color: palette.secondaryText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildProjectPanel(
     List<CompositionLayer> layers,
     CompositionDocument document,
@@ -2894,7 +3563,23 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ),
         ),
         Expanded(
-          child: ListView.builder(
+          child: _studioMediaGridView
+              ? GridView.builder(
+                  padding: const EdgeInsets.all(8),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: 1.06,
+                  ),
+                  itemCount: layers.length,
+                  itemBuilder: (context, index) {
+                    final layer = layers[index];
+                    final selected = layer.id == document.selectedLayerId;
+                    return _buildMediaPoolGridCard(layer, document, selected);
+                  },
+                )
+              : ListView.builder(
             itemCount: layers.length,
             itemBuilder: (context, index) {
               final layer = layers[index];
@@ -2927,18 +3612,22 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 ),
                 selected: selected,
                 selectedTileColor: palette.accentSoft,
-                leading: Icon(
-                  layer.kind == LayerKind.precomposition
-                      ? Icons.folder_open
-                      : _iconFor(layer.kind),
-                  size: 16,
-                  color: selected ? palette.accent : palette.secondaryText,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(7),
+                  side: BorderSide(
+                    color: selected ? palette.accent.withValues(alpha: 0.28) : Colors.transparent,
+                  ),
                 ),
+                leading: _buildMediaPoolLeading(layer, document, selected),
                 title: Text(
                   layer.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    color: palette.primaryText,
+                  ),
                 ),
                 subtitle: Text(
                   metadata.join(' · '),
@@ -4767,6 +5456,126 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     });
   }
 
+  Widget _buildSourceMonitor(
+    CompositionDocument doc,
+    CompositionLayer layer,
+  ) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final sourceTime = layer.kind == LayerKind.video
+        ? doc.playheadMs.clamp(layer.startMs, math.max(layer.startMs, layer.endMs - 1)).toInt()
+        : doc.playheadMs;
+    final Widget sourceVisual;
+    if (layer.kind == LayerKind.video) {
+      sourceVisual = FutureBuilder<File?>(
+        future: _videoFrameFor(layer, sourceTime, doc.frameRate),
+        initialData: _lastVideoFrames[layer.id],
+        builder: (context, snapshot) {
+          final frame = snapshot.data ?? _lastVideoFrames[layer.id];
+          if (frame != null) {
+            return Image.file(
+              frame,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.medium,
+              errorBuilder: (_, __, ___) => const Center(
+                child: Icon(Icons.broken_image_outlined, color: Color(0xFFE29A9A), size: 30),
+              ),
+            );
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Source preview failed\n${snapshot.error}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Color(0xFFE29A9A), fontSize: 9)),
+            );
+          }
+          return const Center(
+            child: CircularProgressIndicator(strokeWidth: 2),
+          );
+        },
+      );
+    } else if (layer.sourceUri != null &&
+        (layer.kind == LayerKind.image || layer.kind == LayerKind.photoshopLayer)) {
+      sourceVisual = Image.file(
+        File(layer.sourceUri!),
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const Center(
+          child: Icon(Icons.broken_image_outlined, color: Color(0xFFE29A9A), size: 30),
+        ),
+      );
+    } else {
+      sourceVisual = const Center(
+        child: Icon(Icons.movie_outlined, color: Color(0xFF8FA4C3), size: 34),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1420),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: palette.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          Container(
+            height: 31,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: palette.toolbar,
+              border: Border(bottom: BorderSide(color: palette.border)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.input, size: 13, color: Color(0xFF78CABB)),
+                const SizedBox(width: 6),
+                const Text('SOURCE',
+                  style: TextStyle(fontSize: 8, letterSpacing: 1, fontWeight: FontWeight.w900)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(layer.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 8, color: palette.secondaryText)),
+                ),
+                Text(_time(sourceTime),
+                  style: TextStyle(fontSize: 8, color: palette.secondaryText,
+                    fontFeatures: const [ui.FontFeature.tabularFigures()])),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: doc.width / doc.height,
+                child: ColoredBox(
+                  color: const Color(0xFF05080E),
+                  child: sourceVisual,
+                ),
+              ),
+            ),
+          ),
+          Container(
+            height: 25,
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            color: palette.toolbar,
+            child: Row(
+              children: [
+                Icon(Icons.circle, size: 6, color: const Color(0xFF78CABB)),
+                const SizedBox(width: 5),
+                Text('ORIGINAL MEDIA',
+                  style: TextStyle(fontSize: 7, letterSpacing: 0.7, color: palette.secondaryText)),
+                const Spacer(),
+                Text('NO EFFECTS',
+                  style: TextStyle(fontSize: 7, letterSpacing: 0.6, color: palette.secondaryText)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCanvas(CompositionDocument doc, CompositionLayer? selected) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     final resolvedTransforms = const ParentTransformResolver().resolveAll(
@@ -4779,17 +5588,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final cameraTransform = cameraLayer == null
         ? null
         : resolvedTransforms[cameraLayer.id];
-    return Container(
-      color: palette.appBackground,
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        children: [
-          _buildCompositionViewerBar(
-            doc,
-            cameraLayer != null,
-          ),
-          Expanded(
-            child: Center(
+    Widget buildProgramViewer() => Center(
               child: AspectRatio(
                 aspectRatio: doc.width / doc.height,
                 child: LayoutBuilder(
@@ -4954,8 +5753,50 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   },
                 ),
               ),
-            ),
+            );
+    return Container(
+      color: palette.appBackground,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        children: [
+          _buildCompositionViewerBar(
+            doc,
+            cameraLayer != null,
           ),
+          Flexible(
+            flex: 4,
+            child: _workspacePreset == 'Studio Edit' &&
+                    selected != null &&
+                    {
+                      LayerKind.video,
+                      LayerKind.image,
+                      LayerKind.photoshopLayer,
+                    }.contains(selected.kind)
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _buildSourceMonitor(doc, selected),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: buildProgramViewer()),
+                    ],
+                  )
+                : buildProgramViewer(),
+          ),
+          if (cameraLayer != null &&
+              _cameraPreviewLayout != _CameraPreviewLayout.single) ...[
+            const SizedBox(height: 7),
+            SizedBox(
+              height: _cameraPreviewLayout == _CameraPreviewLayout.quad ? 118 : 138,
+              child: _buildCameraMultiViewStrip(
+                doc,
+                resolvedTransforms,
+                cameraLayer,
+                cameraTransform,
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -5128,6 +5969,141 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ),
         ],
       ),
+    );
+  }
+
+  ResolvedLayerTransform? _cameraTransformForView(
+    ResolvedLayerTransform? active,
+    _CameraPreviewView view,
+  ) {
+    if (active == null) return null;
+    final rotation = switch (view) {
+      _CameraPreviewView.front => const Vector3(0, 0, 0),
+      _CameraPreviewView.back => const Vector3(0, 180, 0),
+      _CameraPreviewView.left => const Vector3(0, 90, 0),
+      _CameraPreviewView.right => const Vector3(0, -90, 0),
+      _CameraPreviewView.top => const Vector3(90, 0, 0),
+      _CameraPreviewView.bottom => const Vector3(-90, 0, 0),
+    };
+    return ResolvedLayerTransform(
+      position: active.position,
+      scale: active.scale,
+      rotation: rotation,
+      opacity: active.opacity,
+      enabled: active.enabled,
+    );
+  }
+
+  Widget _buildCameraMultiViewStrip(
+    CompositionDocument doc,
+    Map<String, ResolvedLayerTransform> resolvedTransforms,
+    CompositionLayer cameraLayer,
+    ResolvedLayerTransform? cameraTransform,
+  ) {
+    final views = _cameraPreviewLayout == _CameraPreviewLayout.dual
+        ? <_CameraPreviewView>[_cameraPreviewView]
+        : const <_CameraPreviewView>[
+            _CameraPreviewView.front,
+            _CameraPreviewView.top,
+            _CameraPreviewView.right,
+          ];
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final view in views)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: _buildCameraReferenceViewport(
+                doc,
+                resolvedTransforms,
+                cameraLayer,
+                cameraTransform,
+                view,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCameraReferenceViewport(
+    CompositionDocument doc,
+    Map<String, ResolvedLayerTransform> resolvedTransforms,
+    CompositionLayer cameraLayer,
+    ResolvedLayerTransform? cameraTransform,
+    _CameraPreviewView view,
+  ) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final referenceCamera = cameraLayer.copyWith(
+      camera: (cameraLayer.camera ?? const CameraSettings()).copyWith(
+        projection: 'orthographic',
+        cameraMode: 'oneNode',
+      ),
+    );
+    final referenceTransform = _cameraTransformForView(cameraTransform, view);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(
+          constraints.maxWidth.isFinite ? constraints.maxWidth : 320,
+          constraints.maxHeight.isFinite ? constraints.maxHeight : 110,
+        );
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xFF101722),
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(color: palette.border),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(7),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (_showCanvasGrid)
+                  const CustomPaint(painter: _CanvasGridPainter()),
+                IgnorePointer(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      for (final layer in doc.layers.reversed.where((item) => item.enabled))
+                        _buildLayerVisual(
+                          layer,
+                          doc,
+                          size,
+                          resolvedTransforms: resolvedTransforms,
+                          cameraLayer: referenceCamera,
+                          cameraTransform: referenceTransform,
+                        ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  left: 7,
+                  top: 5,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: const Color(0xCC09111D),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      child: Text(
+                        view.name.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 8,
+                          letterSpacing: 0.7,
+                          fontWeight: FontWeight.w900,
+                          color: palette.accent,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -5523,6 +6499,29 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final gradedVisual = gradeFilter == null
         ? maskedVisual
         : ColorFiltered(colorFilter: gradeFilter, child: maskedVisual);
+    Widget previewVisual = LiveEffectPreview.apply(
+      child: gradedVisual,
+      // Primary Color Grade already has its dedicated cached matrix preview.
+      // All other effect types flow through the shared 68-effect GPU registry.
+      effects: layer.effects.where((effect) => effect.effectId != 'color_grade').toList(),
+      timeMs: timeMs,
+      canvasSize: canvasSize,
+    );
+
+    for (final transition in doc.transitions.where((item) =>
+        item.fromLayerId == layer.id || item.toLayerId == layer.id)) {
+      if (transition.durationMs <= 0) continue;
+      final rawProgress = (timeMs - transition.startMs) / transition.durationMs;
+      if (rawProgress < 0 || rawProgress > 1) continue;
+      final incoming = transition.toLayerId == layer.id;
+      previewVisual = TransitionLivePreview.apply(
+        child: previewVisual,
+        kind: transition.kind,
+        progress: rawProgress,
+        incoming: incoming,
+        size: canvasSize,
+      );
+    }
 
     final isSelected = doc.selectedLayerId == layer.id;
     final visualWidth = width.clamp(1, canvasSize.width * 4).toDouble();
@@ -5600,7 +6599,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                           _endPreviewPenPointGesture();
                         },
                   child: RepaintBoundary(
-                    child: Opacity(opacity: opacity, child: gradedVisual),
+                    child: Opacity(opacity: opacity, child: previewVisual),
                   ),
                 ),
               ),
@@ -6435,59 +7434,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     OverlayStickerDefinition asset, {
     required VoidCallback? onApply,
   }) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Row(
-          children: [
-            Container(
-              width: 72,
-              height: 62,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF3B4369), Color(0xFF20283D)],
-                ),
-              ),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  asset.textContent,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w900,
-                    color: _libraryColor(asset.textColor),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(asset.name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
-                  Text(asset.category.toUpperCase(),
-                    style: const TextStyle(fontSize: 8, color: Color(0xFF9FAFC9), fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 3),
-                  Text(asset.description, maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 9, color: Color(0xFFB5C1D4))),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: 'Add ${asset.name} sticker',
-              onPressed: onApply,
-              icon: const Icon(Icons.add_circle_outline, color: Color(0xFFBBAEFF)),
-            ),
-          ],
-        ),
-      ),
+    return CreativePresetPreviewTile(
+      title: asset.name,
+      category: asset.category,
+      description: asset.description,
+      kind: CreativePresetPreviewKind.sticker,
+      sampleText: asset.textContent,
+      sampleColor: _libraryColor(asset.textColor),
+      motionPreset: MotionPresetCatalog.find(asset.motionPresetId),
+      metric: asset.fontSize.round().toString() + ' pt',
+      onApply: onApply,
     );
   }
 
@@ -6495,17 +7451,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     TitlePresetDefinition preset, {
     required VoidCallback? onApply,
   }) {
-    return _buildAssetLibraryTile(
+    return CreativePresetPreviewTile(
       title: preset.name,
       category: preset.category,
       description: preset.description,
-      countLabel: preset.motionPresetId,
-      icon: Icons.title,
-      colors: const [Color(0xFF574B83), Color(0xFF27314D)],
-      actionLabel: 'ADD',
-      onApply: onApply,
+      kind: CreativePresetPreviewKind.title,
       sampleText: preset.sampleText,
       sampleColor: _libraryColor(preset.textColor),
+      motionPreset: MotionPresetCatalog.find(preset.motionPresetId),
+      metric: preset.motionPresetId,
+      onApply: onApply,
     );
   }
 
@@ -6519,6 +7474,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       'Color Presets',
       'Video Effects & Filters',
       'Transitions',
+      'Asset Packs & Sources',
     ];
     final query = _librarySearch.trim().toLowerCase();
     bool matches(Iterable<String> fields) =>
@@ -6568,6 +7524,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final showColors = showAll || _libraryFilter == 'Color Presets';
     final showEffects = showAll || _libraryFilter == 'Video Effects & Filters';
     final showTransitions = showAll || _libraryFilter == 'Transitions';
+    final showAssetPacks = showAll || _libraryFilter == 'Asset Packs & Sources';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -6612,7 +7569,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             _assetCountChip(Icons.color_lens_outlined, '${ColorPresetCatalog.all.length + EffectPresetCatalog.all.length} color looks'),
             _assetCountChip(Icons.auto_awesome, '${EffectCatalog.all.length} built-in effects'),
             _assetCountChip(Icons.swap_horiz, '${TransitionPresetCatalog.all.length} transition recipes'),
-            _assetCountChip(Icons.library_books_outlined, '399 built-in catalog entries'),
+            _assetCountChip(
+              Icons.library_books_outlined,
+              '${AudioPresetCatalog.all.length + ColorPresetCatalog.all.length + CreativeAssetPackCatalog.all.length + EffectCatalog.all.length + EffectPresetCatalog.all.length + MotionPresetCatalog.all.length + OpenAssetSourceCatalog.all.length + OverlayStickerCatalog.all.length + TitlePresetCatalog.all.length + TransitionPresetCatalog.all.length} catalog entries',
+            ),
             _assetCountChip(Icons.public, '${OpenAssetSourceCatalog.all.length} open asset sources'),
           ],
         ),
@@ -6662,14 +7622,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           const Divider(height: 20),
           _panelHeader('MOTION', Icons.animation),
           for (final preset in motion)
-            _buildAssetLibraryTile(
+            CreativePresetPreviewTile(
               title: preset.name,
               category: preset.category,
               description: preset.description,
-              countLabel: '${preset.tracks.length} tracks · ${preset.durationMs} ms',
-              icon: Icons.motion_photos_on_outlined,
-              colors: const [Color(0xFF3C927E), Color(0xFF174C57)],
-              actionLabel: 'APPLY',
+              kind: CreativePresetPreviewKind.motion,
+              motionPreset: preset,
+              metric: '${preset.tracks.length} tracks · ${preset.durationMs} ms',
               onApply: canApplyLayer ? () {
                 _controller.applyMotionPreset(preset.id);
                 setState(() => _notice = 'Applied ${preset.name} keyframe animation.');
@@ -6682,16 +7641,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           const Divider(height: 20),
           _panelHeader('AUDIO PRESETS', Icons.graphic_eq),
           for (final preset in audio)
-            _buildAssetLibraryTile(
+            CreativePresetPreviewTile(
               title: preset.name,
               category: preset.category,
               description: preset.description,
-              countLabel: 'EQ · gain · fades',
-              icon: Icons.equalizer,
-              colors: const [Color(0xFF287D87), Color(0xFF18384E)],
-              actionLabel: 'APPLY',
+              kind: CreativePresetPreviewKind.audio,
+              audioPreset: preset,
+              metric: 'GAIN ${preset.gainDb.toStringAsFixed(1)} dB',
               onApply: isAudioTarget ? () => _applyAudioPreset(preset, layer) : null,
-              sampleText: 'L  ▂▅▃▆  R',
             ),
           if (!isAudioTarget)
             const Text('Select an audio or video layer before applying an audio preset.', style: TextStyle(fontSize: 9, color: Color(0xFFE2C58E))),
@@ -6718,16 +7675,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           const Divider(height: 20),
           _panelHeader('COLOR PRESETS', Icons.color_lens_outlined),
           for (final preset in colors)
-            _buildAssetLibraryTile(
-              title: preset.name,
-              category: preset.category,
-              description: preset.description,
-              countLabel: 'primary grade',
-              icon: Icons.palette_outlined,
-              colors: const [Color(0xFFB66E4E), Color(0xFF4F557D)],
-              actionLabel: 'APPLY',
+            EffectPreviewTile(
+              effect: EffectCatalog.find('color_grade')!,
+              titleOverride: preset.name,
+              subtitleOverride: '${preset.category} · live primary grade',
+              previewEffects: [
+                EffectInstance(
+                  id: 'preview-color-${preset.id}',
+                  effectId: 'color_grade',
+                  name: preset.name,
+                  parameters: preset.parameters,
+                ),
+              ],
               onApply: isVisualTarget ? () => _applyColorPreset(preset, layer) : null,
-              sampleText: 'Aa',
             ),
           if (colors.isEmpty)
             const Text('No color presets match this search.', style: TextStyle(fontSize: 10)),
@@ -6742,7 +7702,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             EffectPreviewTile(
               effect: EffectCatalog.find(preset.steps.first.effectId)!,
               titleOverride: preset.name,
-              subtitleOverride: '${preset.category} · ${preset.steps.length} effects · first-effect preview',
+              subtitleOverride: '${preset.category} · ${preset.steps.length} live effects',
+              previewEffects: [
+                for (var index = 0; index < preset.steps.length; index++)
+                  EffectInstance(
+                    id: 'preview-${preset.id}-$index',
+                    effectId: preset.steps[index].effectId,
+                    name: EffectCatalog.find(preset.steps[index].effectId)!.name,
+                    parameters: preset.steps[index].parameters,
+                  ),
+              ],
               onApply: canApplyLayer ? () {
                 _controller.applyEffectPreset(preset.id);
                 setState(() => _notice = 'Applied ${preset.name} effect stack.');
@@ -6782,8 +7751,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           if (transitions.isEmpty)
             const Text('No transition recipes match this search.', style: TextStyle(fontSize: 10)),
         ],
-        const Divider(height: 20),
-        _panelHeader('IMPORT & ONLINE LIBRARIES', Icons.cloud_download_outlined),
+        if (showAssetPacks) ...[
+          const Divider(height: 20),
+          _panelHeader('IMPORT & ONLINE LIBRARIES', Icons.cloud_download_outlined),
         Wrap(
           spacing: 8,
           runSpacing: 6,
@@ -6823,6 +7793,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         _buildCreativeAssetPackBrowser(),
         const SizedBox(height: 8),
         _buildMotionBroPackBrowser(),
+        ],
       ],
     );
   }
@@ -7116,11 +8087,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       padding: const EdgeInsets.symmetric(horizontal: 9),
                       decoration: BoxDecoration(
                         color: selected ? palette.accentSoft : Colors.transparent,
-                        border: Border(
-                          bottom: BorderSide(
-                            color: selected ? palette.accent : Colors.transparent,
-                            width: 2,
-                          ),
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(
+                          color: selected
+                              ? palette.accent.withValues(alpha: 0.42)
+                              : Colors.transparent,
                         ),
                       ),
                       child: Row(
@@ -8282,7 +9253,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       final categoryMatches = _effectCategory == 'All' || effect.category == _effectCategory;
       final query = _effectSearch.trim().toLowerCase();
       final searchMatches = query.isEmpty ||
-          (effect.name + ' ' + effect.category + ' ' + effect.description)
+          (effect.name + ' ' + effect.id + ' ' + effect.category + ' ' +
+                  effect.description + ' ' + effect.ffmpegFilter)
               .toLowerCase().contains(query);
       return categoryMatches && searchMatches;
     }).toList();
@@ -8355,19 +9327,82 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ),
         ),
         const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          initialValue: _effectCategory,
-          items: ['All', ...EffectCatalog.categories]
-              .map((category) => DropdownMenuItem(value: category, child: Text(category)))
-              .toList(),
-          onChanged: (value) => setState(() => _effectCategory = value ?? 'All'),
+        Wrap(
+          spacing: 5,
+          runSpacing: 5,
+          children: [
+            for (final category in ['All', ...EffectCatalog.categories])
+              ChoiceChip(
+                label: Text(
+                  category == 'All'
+                      ? 'ALL · ${EffectCatalog.all.length}'
+                      : category.toUpperCase(),
+                  style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w800),
+                ),
+                selected: _effectCategory == category,
+                onSelected: (_) => setState(() => _effectCategory = category),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0),
+              ),
+          ],
         ),
-        const SizedBox(height: 8),
-        for (final effect in filtered)
-          EffectPreviewTile(
-            effect: effect,
-            onApply: () => _controller.addEffect(effect.id),
-          ),
+        const SizedBox(height: 7),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${filtered.length} EFFECTS · ${EffectCatalog.all.length} BUILT-IN',
+                style: const TextStyle(
+                  color: Color(0xFF9AAEC9),
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.55,
+                ),
+              ),
+            ),
+            const Text(
+              'HOVER TO PREVIEW',
+              style: TextStyle(
+                color: Color(0xFF8C9DB7),
+                fontSize: 7,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 560
+                ? 3
+                : constraints.maxWidth >= 230
+                    ? 2
+                    : 1;
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: filtered.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                crossAxisSpacing: 7,
+                mainAxisSpacing: 7,
+                childAspectRatio: columns == 1 ? 2.25 : 0.82,
+              ),
+              itemBuilder: (context, index) {
+                final effect = filtered[index];
+                return EffectPreviewTile(
+                  grid: columns > 1,
+                  effect: effect,
+                  onApply: () {
+                    _controller.addEffect(effect.id);
+                    setState(() => _notice = 'Added ${effect.name} · live preview enabled.');
+                  },
+                );
+              },
+            );
+          },
+        ),
         const Divider(),
         _panelHeader('APPLIED EFFECTS', Icons.tune),
         if (layer.effects.isEmpty)
@@ -10558,10 +11593,33 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         children: [
           _panelHeader('CAMERA CONTROLS', Icons.videocam),
           const Text(
-            'Camera orientation and perspective now drive image cards and imported OBJ geometry. Near/far clipping is shared by preview and FFmpeg camera projection; depth-of-field blur and shadow maps remain pending.',
+            'One-Node cameras use animated Euler rotation. Two-Node cameras aim at a saved world-space point of interest. The active camera and orthographic reference views update with the playhead; depth-of-field remains a separate render capability.',
             style: TextStyle(fontSize: 10, color: Color(0xFF98A7C0)),
           ),
           const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            initialValue: camera.cameraMode,
+            decoration: const InputDecoration(labelText: 'Camera rig'),
+            items: const [
+              DropdownMenuItem(value: 'oneNode', child: Text('One-Node · Free camera')),
+              DropdownMenuItem(value: 'twoNode', child: Text('Two-Node · Look at target')),
+            ],
+            onChanged: (value) => _controller.setCameraSettings(
+              camera.copyWith(cameraMode: value ?? 'oneNode'),
+            ),
+          ),
+          if (camera.cameraMode == 'twoNode') ...[
+            const SizedBox(height: 7),
+            const Text('POINT OF INTEREST · WORLD SPACE', style: TextStyle(
+              fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.7,
+            )),
+            _settingSlider('Target X', camera.pointOfInterestX, -5000, 5000,
+                (value) => _controller.setCameraSettings(camera.copyWith(pointOfInterestX: value))),
+            _settingSlider('Target Y', camera.pointOfInterestY, -5000, 5000,
+                (value) => _controller.setCameraSettings(camera.copyWith(pointOfInterestY: value))),
+            _settingSlider('Target Z', camera.pointOfInterestZ, -5000, 5000,
+                (value) => _controller.setCameraSettings(camera.copyWith(pointOfInterestZ: value))),
+          ],
           DropdownButtonFormField<String>(
             initialValue: camera.projection,
             decoration: const InputDecoration(labelText: 'Projection'),
@@ -10595,8 +11653,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             'CAMERA ORIENTATION',
             style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
           ),
-          _animatedPropertyRow(layer, 'Orbit X', 'rotation.x', -180, 180),
-          _animatedPropertyRow(layer, 'Orbit Y', 'rotation.y', -180, 180),
+          if (camera.cameraMode == 'oneNode') ...[
+            _animatedPropertyRow(layer, 'Orbit X', 'rotation.x', -180, 180),
+            _animatedPropertyRow(layer, 'Orbit Y', 'rotation.y', -180, 180),
+          ],
           _animatedPropertyRow(layer, 'Roll Z', 'rotation.z', -180, 180),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
@@ -11122,6 +12182,36 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  Widget _buildTimelineSplitter() {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeRow,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragUpdate: (details) {
+          setState(() {
+            _timelineHeight = (_timelineHeight - details.delta.dy)
+                .clamp(180.0, 520.0)
+                .toDouble();
+          });
+        },
+        child: Container(
+          height: 7,
+          color: palette.toolbar,
+          alignment: Alignment.center,
+          child: Container(
+            width: 58,
+            height: 2,
+            decoration: BoxDecoration(
+              color: palette.secondaryText.withOpacity(0.55),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPlayheadAwareTimeline() {
     final doc = _controller.document;
     return AnimatedBuilder(
@@ -11145,11 +12235,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
-      height: 260,
-      padding: const EdgeInsets.all(10),
+      height: _timelineHeight,
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
       decoration: BoxDecoration(
         color: palette.toolbar,
         border: Border(top: BorderSide(color: palette.border)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 14,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -11166,7 +12263,24 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 ),
               ),
               const Spacer(),
-              Text(_time(playhead), style: const TextStyle(fontSize: 10, color: Color(0xFFB7C4DC))),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: palette.panelRaised,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: palette.border),
+                ),
+                child: Text(
+                  _time(playhead),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                    color: palette.primaryText,
+                    fontFeatures: const [ui.FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
               Builder(
                 builder: (context) {
                   final stats = _previewFrameService.stats;
@@ -11184,9 +12298,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     '${stats.effectivePreviewFrameRate} FPS · '
                     '$decodeText · $queueText · $uiText · '
                     '${stats.droppedRequests} skipped',
-                    style: const TextStyle(
-                      fontSize: 8,
-                      color: Color(0xFF8D9CB3),
+                    style: TextStyle(
+                      fontSize: 7,
+                      letterSpacing: 0.1,
+                      color: palette.secondaryText,
                     ),
                   );
                 },
@@ -11394,7 +12509,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   ) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final labelWidth = math.min(130.0, constraints.maxWidth);
+        final palette = Theme.of(context).extension<DepthVibePalette>()!;
+        final labelWidth = math.min(164.0, constraints.maxWidth * 0.34);
         final trackWidth = math.max(0.0, constraints.maxWidth - labelWidth);
         final selectedId = _controller.document.selectedLayerId;
         return Stack(
@@ -11419,7 +12535,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       child: Row(
                         children: [
                           SizedBox(
-                            width: 130,
+                            width: labelWidth,
                             child: Row(
                               children: [
                                 SizedBox(
@@ -11445,6 +12561,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                     ),
                                   ),
                                 ),
+                                Container(
+                                  width: 18,
+                                  height: 18,
+                                  margin: const EdgeInsets.only(right: 4),
+                                  decoration: BoxDecoration(
+                                    color: selected ? palette.accentSoft : palette.panelRaised,
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Icon(
+                                    _iconFor(layer.kind),
+                                    size: 10,
+                                    color: selected ? palette.accent : palette.secondaryText,
+                                  ),
+                                ),
                                 Expanded(
                                   child: InkWell(
                                     onTap: () => _controller.selectLayer(layer.id),
@@ -11461,6 +12592,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                             ? const Color(0xFFEAF0FF)
                                             : paletteText(context),
                                       ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 22,
+                                  child: IconButton(
+                                    padding: EdgeInsets.zero,
+                                    visualDensity: VisualDensity.compact,
+                                    tooltip: layer.enabled ? 'Hide layer' : 'Show layer',
+                                    onPressed: () => _controller.setLayerEnabled(layer.id, !layer.enabled),
+                                    icon: Icon(
+                                      layer.enabled ? Icons.visibility : Icons.visibility_off,
+                                      size: 11,
+                                      color: layer.enabled ? palette.secondaryText : const Color(0xFFE39C9C),
                                     ),
                                   ),
                                 ),
@@ -11700,12 +12845,49 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   Widget _panelHeader(String label, IconData icon) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
+      padding: const EdgeInsets.only(bottom: 13, top: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(icon, size: 15, color: palette.accent),
-          const SizedBox(width: 7),
-          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.1, color: palette.secondaryText)),
+          Row(
+            children: [
+              Container(
+                width: 27,
+                height: 27,
+                decoration: BoxDecoration(
+                  color: palette.accentSoft,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: palette.accent.withValues(alpha: 0.24)),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 14, color: palette.accent),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.15,
+                    color: palette.primaryText,
+                  ),
+                ),
+              ),
+              Container(
+                width: 24,
+                height: 2,
+                decoration: BoxDecoration(
+                  color: palette.accent.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          Divider(height: 1, thickness: 0.7, color: palette.border),
         ],
       ),
     );

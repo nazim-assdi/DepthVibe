@@ -62,7 +62,7 @@ class CameraProjectionResolver {
         layer.position.y - camera.position.y,
         layer.position.z - camera.position.z,
       ),
-      camera.rotation,
+      effectiveCameraRotation(camera, settings),
     );
 
     final distance = settings.focusDistance - local.z;
@@ -96,13 +96,37 @@ class CameraProjectionResolver {
     required ResolvedTransformExpressions camera,
     required CameraSettings settings,
   }) {
-    final rotationX = '((' + camera.rotationX + ')*PI/180)';
-    final rotationY = '((' + camera.rotationY + ')*PI/180)';
-    final rotationZ = '((' + camera.rotationZ + ')*PI/180)';
-
     final dx = '(' + layer.positionX + '-(' + camera.positionX + '))';
     final dy = '(' + layer.positionY + '-(' + camera.positionY + '))';
     final dz = '(' + layer.positionZ + '-(' + camera.positionZ + '))';
+    final rotationZ = '((' + camera.rotationZ + ')*PI/180)';
+    // Match _worldToCamera's roll -> yaw -> pitch order so a non-zero
+    // camera roll does not pull the Two-Node target away from frame centre.
+    final targetX = '((' + _n(settings.pointOfInterestX) + '-(' +
+        camera.positionX + '))*cos(' + rotationZ + ')+(' +
+        _n(settings.pointOfInterestY) + '-(' + camera.positionY +
+        '))*sin(' + rotationZ + '))';
+    final targetY = '(-(' + _n(settings.pointOfInterestX) + '-(' +
+        camera.positionX + '))*sin(' + rotationZ + ')+(' +
+        _n(settings.pointOfInterestY) + '-(' + camera.positionY +
+        '))*cos(' + rotationZ + '))';
+    final targetZ = '(' + _n(settings.pointOfInterestZ) + '-(' +
+        camera.positionZ + '))';
+
+    final targetLength =
+        'sqrt(pow((' + targetX + '),2)+pow((' + targetY +
+        '),2)+pow((' + targetZ + '),2))';
+    final rotationX = settings.cameraMode == 'twoNode'
+        ? 'if(gt(' + targetLength + ',0.000001),atan2(-(' +
+            targetY + '),sqrt(pow((' + targetX +
+            '),2)+pow((' + targetZ + '),2))),((' +
+            camera.rotationX + ')*PI/180))'
+        : '((' + camera.rotationX + ')*PI/180)';
+    final rotationY = settings.cameraMode == 'twoNode'
+        ? 'if(gt(' + targetLength + ',0.000001),atan2((' +
+            targetX + '),(' + targetZ + ')),((' +
+            camera.rotationY + ')*PI/180))'
+        : '((' + camera.rotationY + ')*PI/180)';
 
     // Inverse camera rotation: Rz(-z), then Ry(-y), then Rx(-x).
     final xAfterRoll = '((' + dx + ')*cos(' + rotationZ + ')+(' +
@@ -148,6 +172,29 @@ class CameraProjectionResolver {
       rotationY: layer.rotationY,
       rotationZ: '(' + layer.rotationZ + '-(' + camera.rotationZ + '))',
       opacity: '((' + layer.opacity + ')*(' + visibility + '))',
+    );
+  }
+
+  /// Resolved one-node Euler rotation or a two-node look-at rotation.
+  /// A coincident point of interest safely falls back to the authored rotation.
+  Vector3 effectiveCameraRotation(
+    ResolvedLayerTransform camera,
+    CameraSettings settings,
+  ) {
+    if (settings.cameraMode != 'twoNode') return camera.rotation;
+    final dx = settings.pointOfInterestX - camera.position.x;
+    final dy = settings.pointOfInterestY - camera.position.y;
+    final dz = settings.pointOfInterestZ - camera.position.z;
+    final roll = _radians(camera.rotation.z);
+    // Match _worldToCamera's Rz -> Ry -> Rx inverse-rotation order.
+    final targetX = dx * math.cos(roll) + dy * math.sin(roll);
+    final targetY = -dx * math.sin(roll) + dy * math.cos(roll);
+    final horizontal = math.sqrt(targetX * targetX + dz * dz);
+    if (horizontal + targetY.abs() < 0.000001) return camera.rotation;
+    return Vector3(
+      math.atan2(-targetY, horizontal) * 180 / math.pi,
+      math.atan2(targetX, dz) * 180 / math.pi,
+      camera.rotation.z,
     );
   }
 

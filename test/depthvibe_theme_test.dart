@@ -12,8 +12,8 @@ void main() {
       final palette = DepthVibeTheme.paletteFor(DepthVibeAppearance.dark);
 
       expect(theme.brightness, Brightness.dark);
-      expect(palette.appBackground, const Color(0xFF0B0E15));
-      expect(palette.primaryText, const Color(0xFFF0F3FA));
+      expect(palette.appBackground, const Color(0xFF090D14));
+      expect(palette.primaryText, const Color(0xFFF0F4FB));
     });
 
     test('White preset uses a bright neutral workspace palette', () {
