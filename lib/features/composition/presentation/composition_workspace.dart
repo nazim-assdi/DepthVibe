@@ -2924,7 +2924,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   void _raiseFloatingWorkspacePanel(String id) {
     if (!_floatingWorkspacePanels.contains(id) ||
-        _floatingWorkspacePanelOrder.lastOrNull == id) {
+        (_floatingWorkspacePanelOrder.isNotEmpty &&
+            _floatingWorkspacePanelOrder.last == id)) {
       return;
     }
     setState(() {
