@@ -67,6 +67,7 @@ import 'color_scopes_view.dart';
 import 'transition_preview_tile.dart';
 import 'effect_preview_tile.dart';
 import 'creative_preset_preview_tile.dart';
+import 'transition_live_preview.dart';
 
 enum _CameraPreviewLayout { single, dual, quad }
 
@@ -5734,40 +5735,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       final rawProgress = (timeMs - transition.startMs) / transition.durationMs;
       if (rawProgress < 0 || rawProgress > 1) continue;
       final incoming = transition.toLayerId == layer.id;
-      final progress = (incoming ? rawProgress : 1 - rawProgress)
-          .clamp(0.0, 1.0).toDouble();
-      final kind = transition.kind.name.toLowerCase();
-      if (kind.contains('wipe')) {
-        final vertical = kind.contains('up') || kind.contains('down');
-        final alignment = kind.contains('right') || kind.contains('down')
-            ? (vertical ? Alignment.bottomCenter : Alignment.centerRight)
-            : (vertical ? Alignment.topCenter : Alignment.centerLeft);
-        previewVisual = ClipRect(
-          child: Align(
-            alignment: alignment,
-            widthFactor: vertical ? 1 : progress,
-            heightFactor: vertical ? progress : 1,
-            child: previewVisual,
-          ),
-        );
-      } else if (kind.contains('slide') || kind.contains('cover') || kind.contains('reveal')) {
-        final reverse = kind.contains('right') || kind.contains('down');
-        final vertical = kind.contains('up') || kind.contains('down');
-        final distance = (1 - progress) * (vertical ? canvasSize.height : canvasSize.width);
-        previewVisual = Transform.translate(
-          offset: vertical
-              ? Offset(0, reverse ? distance : -distance)
-              : Offset(reverse ? distance : -distance, 0),
-          child: previewVisual,
-        );
-      } else if (kind.contains('zoom')) {
-        previewVisual = Transform.scale(
-          scale: kind.contains('out') ? 1 + (1 - progress) * 0.25 : 0.75 + 0.25 * progress,
-          child: previewVisual,
-        );
-      } else {
-        previewVisual = Opacity(opacity: progress, child: previewVisual);
-      }
+      previewVisual = TransitionLivePreview.apply(
+        child: previewVisual,
+        kind: transition.kind,
+        progress: rawProgress,
+        incoming: incoming,
+        size: canvasSize,
+      );
     }
 
     final isSelected = doc.selectedLayerId == layer.id;
