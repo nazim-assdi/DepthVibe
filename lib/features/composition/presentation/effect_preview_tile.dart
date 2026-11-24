@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../data/effect_catalog.dart';
+import '../domain/composition_models.dart';
+import '../engine/live_effect_preview.dart';
 
 /// Animated, generated visual thumbnail for an effect. It demonstrates the
 /// character of an effect; the final image is still rendered by the native
@@ -16,6 +18,7 @@ class EffectPreviewTile extends StatefulWidget {
     this.titleOverride,
     this.subtitleOverride,
     this.grid = false,
+    this.previewEffects,
   });
 
   final EffectDefinition effect;
@@ -23,6 +26,7 @@ class EffectPreviewTile extends StatefulWidget {
   final String? titleOverride;
   final String? subtitleOverride;
   final bool grid;
+  final List<EffectInstance>? previewEffects;
 
   @override
   State<EffectPreviewTile> createState() => _EffectPreviewTileState();
@@ -89,17 +93,51 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
     );
   }
 
+  List<EffectInstance> _sampleEffects(EffectDefinition effect) {
+    final supplied = widget.previewEffects;
+    if (supplied != null) return supplied;
+    return [
+      EffectInstance(
+        id: 'sample-${effect.id}',
+        effectId: effect.id,
+        name: effect.name,
+        parameters: {
+          for (final parameter in effect.parameters)
+            parameter.id: parameter.defaultValue,
+        },
+      ),
+    ];
+  }
+
+  Widget _sampleFootage({required bool grid, required EffectDefinition effect}) {
+    final previewTime = (_animation.value * 1600).round();
+    final source = CustomPaint(
+      painter: _EffectSamplePainter(
+        effectId: 'source_scene',
+        progress: _animation.value,
+      ),
+      child: grid ? const SizedBox.expand() : const SizedBox(width: 104, height: 60),
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: LiveEffectPreview.apply(
+        child: source,
+        effects: _sampleEffects(effect),
+        timeMs: previewTime,
+        canvasSize: grid ? const Size(220, 150) : const Size(104, 60),
+      ),
+    );
+  }
+
   Widget _buildListCard(EffectDefinition effect) {
     return Row(
       children: [
         GestureDetector(
           onTap: _hovered ? _stopPreview : _startPreview,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: CustomPaint(
-              size: const Size(104, 60),
-              painter: _EffectSamplePainter(effectId: effect.id, progress: _animation.value),
-            ),
+          child: SizedBox(
+            width: 104,
+            height: 60,
+            child: _sampleFootage(grid: false, effect: effect),
           ),
         ),
         const SizedBox(width: 8),
