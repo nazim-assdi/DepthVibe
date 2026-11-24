@@ -2602,7 +2602,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                         minHeight: 30,
                       ),
                       onPressed: _rendering ? null : () => _addLayer(entry.$1),
-                      icon: Icon(entry.$3, size: 16),
+                      style: IconButton.styleFrom(
+                        backgroundColor: palette.panelRaised,
+                        hoverColor: palette.accentSoft,
+                        side: BorderSide(color: palette.border),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                      ),
+                      icon: Icon(entry.$3, size: 15),
                     ),
                   ),
               ],
@@ -2653,16 +2661,46 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ),
             ),
           ),
-          Text(
-            hasCamera
-                ? 'ACTIVE CAMERA'
-                : _workspacePreset == 'Studio Edit'
-                    ? 'DUAL MONITOR'
-                    : 'ACTIVE VIEW',
-            style: TextStyle(
-              fontSize: 8,
-              letterSpacing: 0.55,
-              color: palette.secondaryText,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: palette.panelRaised,
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: palette.border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: hasCamera ? const Color(0xFF62D6C0) : palette.accent,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: (hasCamera ? const Color(0xFF62D6C0) : palette.accent)
+                            .withValues(alpha: 0.35),
+                        blurRadius: 5,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  hasCamera
+                      ? 'ACTIVE CAMERA'
+                      : _workspacePreset == 'Studio Edit'
+                          ? 'DUAL MONITOR'
+                          : 'ACTIVE VIEW',
+                  style: TextStyle(
+                    fontSize: 7,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.65,
+                    color: palette.primaryText,
+                  ),
+                ),
+              ],
             ),
           ),
           if (hasCamera) ...[
@@ -12019,10 +12057,17 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
       height: _timelineHeight,
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
       decoration: BoxDecoration(
         color: palette.toolbar,
         border: Border(top: BorderSide(color: palette.border)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 14,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -12591,12 +12636,49 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   Widget _panelHeader(String label, IconData icon) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
+      padding: const EdgeInsets.only(bottom: 13, top: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(icon, size: 15, color: palette.accent),
-          const SizedBox(width: 7),
-          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.1, color: palette.secondaryText)),
+          Row(
+            children: [
+              Container(
+                width: 27,
+                height: 27,
+                decoration: BoxDecoration(
+                  color: palette.accentSoft,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: palette.accent.withValues(alpha: 0.24)),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 14, color: palette.accent),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.15,
+                    color: palette.primaryText,
+                  ),
+                ),
+              ),
+              Container(
+                width: 24,
+                height: 2,
+                decoration: BoxDecoration(
+                  color: palette.accent.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          Divider(height: 1, thickness: 0.7, color: palette.border),
         ],
       ),
     );
