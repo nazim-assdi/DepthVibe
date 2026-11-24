@@ -2755,6 +2755,423 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
 
+
+  bool _isPanelInSideDockGroup(String id) =>
+      _leftDockPanelOrder.contains(id) ||
+      _topDockPanelOrder.contains(id) ||
+      _bottomDockPanelOrder.contains(id);
+
+  List<String> get _rightDockedPanelIds => _rightPanelOrder
+      .where((panel) =>
+          !_floatingWorkspacePanels.contains('Inspector:$panel') &&
+          !_isPanelInSideDockGroup('Inspector:$panel'))
+      .toList();
+
+  String? get _fallbackRightPanel {
+    final available = _rightDockedPanelIds;
+    return available.isEmpty ? null : available.first;
+  }
+
+  void _removeWorkspacePanelFromDockGroups(String id) {
+    _leftDockPanelOrder.remove(id);
+    _topDockPanelOrder.remove(id);
+    _bottomDockPanelOrder.remove(id);
+    if (_activeLeftDockPanel == id) {
+      _activeLeftDockPanel =
+          _leftDockPanelOrder.isEmpty ? '' : _leftDockPanelOrder.first;
+    }
+    if (_activeTopDockPanel == id) {
+      _activeTopDockPanel =
+          _topDockPanelOrder.isEmpty ? null : _topDockPanelOrder.first;
+    }
+    if (_activeBottomDockPanel == id) {
+      _activeBottomDockPanel =
+          _bottomDockPanelOrder.isEmpty ? '' : _bottomDockPanelOrder.first;
+    }
+    if (id.startsWith('Inspector:') &&
+        _panel == id.substring('Inspector:'.length)) {
+      _panel = _fallbackRightPanel ?? '';
+    }
+  }
+
+  void _onWorkspacePanelDragStarted(String id) {
+    setState(() {
+      _draggingWorkspacePanelId = id;
+      _highlightedWorkspaceDockZone = null;
+      _workspacePanelDropAccepted = false;
+    });
+  }
+
+  void _onWorkspacePanelDragEnded(String id, DraggableDetails details) {
+    final accepted = _workspacePanelDropAccepted;
+    if (!accepted) {
+      _beginWorkspacePanelDrag(id);
+      final current = _floatingWorkspacePanelRects[id];
+      if (current != null) {
+        final viewport = _workspaceViewportSize;
+        final left = (details.offset.dx - 14)
+            .clamp(0.0, math.max(0.0, viewport.width - 110))
+            .toDouble();
+        final top = (details.offset.dy - 58 - 14)
+            .clamp(0.0, math.max(0.0, viewport.height - 42))
+            .toDouble();
+        setState(() {
+          _floatingWorkspacePanelRects[id] = current.shift(
+            Offset(left - current.left, top - current.top),
+          );
+        });
+      }
+    }
+    setState(() {
+      _draggingWorkspacePanelId = null;
+      _highlightedWorkspaceDockZone = null;
+      _workspacePanelDropAccepted = false;
+    });
+    _scheduleWorkspaceLayoutSave();
+  }
+
+  void _dockWorkspacePanelToZone(String id, String zone) {
+    var targetZone = zone;
+    if (targetZone == 'center') {
+      targetZone = id.startsWith('Inspector:')
+          ? 'right'
+          : id == 'Project' ? 'left' : 'bottom';
+    }
+    if (targetZone == 'right' && !id.startsWith('Inspector:')) {
+      targetZone = id == 'Project' ? 'left' : 'bottom';
+    }
+    setState(() {
+      _floatingWorkspacePanels.remove(id);
+      _floatingWorkspacePanelOrder.remove(id);
+      _floatingWorkspacePanelRects.remove(id);
+      _removeWorkspacePanelFromDockGroups(id);
+      switch (targetZone) {
+        case 'left':
+          _leftDockPanelOrder.add(id);
+          _activeLeftDockPanel = id;
+          break;
+        case 'right':
+          if (id.startsWith('Inspector:')) {
+            _panel = id.substring('Inspector:'.length);
+          }
+          break;
+        case 'top':
+          _topDockPanelOrder.add(id);
+          _activeTopDockPanel = id;
+          break;
+        case 'bottom':
+          _bottomDockPanelOrder.add(id);
+          _activeBottomDockPanel = id;
+          break;
+      }
+      _workspacePanelDropAccepted = true;
+    });
+    _scheduleWorkspaceLayoutSave();
+  }
+
+  Widget _buildWorkspaceDockContent(
+    String id,
+    CompositionDocument document,
+    CompositionLayer? layer, {
+    double height = 220,
+  }) {
+    if (id == 'Project') return _buildLayerPanel(document.layers);
+    if (id == 'Timeline') {
+      return _buildPlayheadAwareTimeline(
+        height: math.max(180.0, height - 34).toDouble(),
+      );
+    }
+    if (id.startsWith('Inspector:')) {
+      return _buildActivePanel(
+        layer,
+        panelOverride: id.substring('Inspector:'.length),
+        showTabs: false,
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  String _workspacePanelDisplayName(String id) {
+    if (id == 'Project') return 'PROJECT';
+    if (id == 'Timeline') return 'TIMELINE';
+    return id.substring('Inspector:'.length).toUpperCase();
+  }
+
+  Widget _buildWorkspaceDockTab(
+    String id,
+    bool selected,
+    VoidCallback onTap,
+  ) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final title = _workspacePanelDisplayName(id);
+    return Draggable<String>(
+      data: id,
+      onDragStarted: () => _onWorkspacePanelDragStarted(id),
+      onDragEnd: (details) => _onWorkspacePanelDragEnded(id, details),
+      feedback: Material(
+        color: Colors.transparent,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: palette.panelRaised,
+            border: Border.all(color: palette.accent, width: 1.5),
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Text(title, style: TextStyle(
+              color: palette.primaryText,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+            )),
+          ),
+        ),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.25,
+        child: _workspaceDockTabBody(id, selected, onTap, palette),
+      ),
+      child: _workspaceDockTabBody(id, selected, onTap, palette),
+    );
+  }
+
+  Widget _workspaceDockTabBody(
+    String id,
+    bool selected,
+    VoidCallback onTap,
+    DepthVibePalette palette,
+  ) {
+    final title = _workspacePanelDisplayName(id);
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? palette.accentSoft : Colors.transparent,
+          border: Border(
+            bottom: BorderSide(
+              color: selected ? palette.accent : Colors.transparent,
+              width: 2,
+            ),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              id == 'Project'
+                  ? Icons.folder_open_outlined
+                  : id == 'Timeline'
+                      ? Icons.timeline
+                      : Icons.tune,
+              size: 13,
+              color: selected ? palette.accent : palette.secondaryText,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              title,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 8,
+                fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
+                color: selected ? palette.primaryText : palette.secondaryText,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWorkspaceDockGroup(
+    String zone,
+    List<String> panelIds,
+    String activeId,
+    CompositionDocument document,
+    CompositionLayer? layer, {
+    double? height,
+  }) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    if (panelIds.isEmpty) return const SizedBox.shrink();
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: palette.panel,
+        border: Border.all(color: palette.border),
+      ),
+      child: Column(
+        children: [
+          Container(
+            height: 34,
+            decoration: BoxDecoration(
+              color: palette.toolbar,
+              border: Border(bottom: BorderSide(color: palette.border)),
+            ),
+            child: Row(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    zone.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 7,
+                      letterSpacing: 0.8,
+                      fontWeight: FontWeight.w900,
+                      color: palette.secondaryText,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final id in panelIds)
+                          _buildWorkspaceDockTab(
+                            id,
+                            id == activeId,
+                            () {
+                              setState(() {
+                                switch (zone) {
+                                  case 'left':
+                                    _activeLeftDockPanel = id;
+                                    break;
+                                  case 'top':
+                                    _activeTopDockPanel = id;
+                                    break;
+                                  case 'bottom':
+                                    _activeBottomDockPanel = id;
+                                    break;
+                                }
+                              });
+                              _scheduleWorkspaceLayoutSave();
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ClipRect(
+              child: _buildWorkspaceDockContent(
+                activeId,
+                document,
+                layer,
+                height: height ?? 260,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildWorkspaceDockDropZones() {
+    if (_draggingWorkspacePanelId == null) return const [];
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final width = _workspaceViewportSize.width;
+    final height = _workspaceViewportSize.height;
+    Widget zone(String id, String label, IconData icon) {
+      return DragTarget<String>(
+        onWillAccept: (data) => data != null,
+        onMove: (_) {
+          if (_highlightedWorkspaceDockZone != id) {
+            setState(() => _highlightedWorkspaceDockZone = id);
+          }
+        },
+        onLeave: (_) {
+          if (_highlightedWorkspaceDockZone == id) {
+            setState(() => _highlightedWorkspaceDockZone = null);
+          }
+        },
+        onAccept: (panelId) => _dockWorkspacePanelToZone(panelId, id),
+        builder: (context, candidates, rejected) {
+          final active = candidates.isNotEmpty ||
+              _highlightedWorkspaceDockZone == id;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 90),
+            decoration: BoxDecoration(
+              color: active
+                  ? palette.accent.withValues(alpha: 0.28)
+                  : palette.panel.withValues(alpha: 0.88),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: active ? palette.accent : palette.border,
+                width: active ? 2.5 : 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  blurRadius: 14,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 19, color: active ? palette.accent : palette.secondaryText),
+                  const SizedBox(height: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.45,
+                      color: active ? palette.primaryText : palette.secondaryText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    return [
+      Positioned(
+        left: 8,
+        top: 140,
+        width: 118,
+        height: 72,
+        child: zone('left', 'DOCK LEFT', Icons.keyboard_double_arrow_left),
+      ),
+      Positioned(
+        right: 8,
+        top: 140,
+        width: 118,
+        height: 72,
+        child: zone('right', 'DOCK RIGHT', Icons.keyboard_double_arrow_right),
+      ),
+      Positioned(
+        left: math.max(8.0, (width - 150) / 2),
+        top: 78,
+        width: 150,
+        height: 72,
+        child: zone('top', 'DOCK TOP', Icons.keyboard_double_arrow_up),
+      ),
+      Positioned(
+        left: math.max(8.0, (width - 150) / 2),
+        top: math.max(78.0, height - 88),
+        width: 150,
+        height: 72,
+        child: zone('bottom', 'DOCK BOTTOM', Icons.keyboard_double_arrow_down),
+      ),
+      Positioned(
+        left: math.max(8.0, (width - 150) / 2),
+        top: math.max(170.0, (height - 72) / 2),
+        width: 150,
+        height: 72,
+        child: zone('center', 'GROUP WITH TAB', Icons.tab),
+      ),
+    ];
+  }
+
   Future<File> _workspaceLayoutFile() async {
     final support = await getApplicationSupportDirectory();
     final directory = Directory(
@@ -2787,6 +3204,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           const {'Project', 'Effects & Presets', 'Info'}.contains(leftPanel)) {
         _leftPanel = leftPanel;
       }
+      final validPanels = <String>{
+        'Project',
+        'Timeline',
+        for (final panel in _rightPanelOrder) 'Inspector:$panel',
+      };
       final leftDockOrder = decoded['leftDockOrder'];
       final topDockOrder = decoded['topDockOrder'];
       final bottomDockOrder = decoded['bottomDockOrder'];
@@ -2845,11 +3267,6 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ..addAll(validOrder);
         }
       }
-      final validPanels = <String>{
-        'Project',
-        'Timeline',
-        for (final panel in _rightPanelOrder) 'Inspector:$panel',
-      };
       if (floating is List) {
         for (final item in floating) {
           if (item is String && validPanels.contains(item)) {
