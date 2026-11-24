@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../../app/depthvibe_settings.dart';
+
 import '../data/effect_catalog.dart';
 import '../domain/composition_models.dart';
 import '../engine/live_effect_preview.dart';
@@ -69,6 +71,7 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
   @override
   Widget build(BuildContext context) {
     final effect = widget.effect;
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return MouseRegion(
       onEnter: (_) => _startPreview(),
       onExit: (_) => _stopPreview(),
@@ -78,12 +81,21 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
           margin: EdgeInsets.only(bottom: widget.grid ? 0 : 6),
           padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-            color: const Color(0xFF172234),
-            borderRadius: BorderRadius.circular(9),
+            color: palette.panelRaised,
+            borderRadius: BorderRadius.circular(11),
             border: Border.all(
-              color: _hovered ? const Color(0xFF927BFF) : const Color(0xFF34445D),
-              width: _hovered ? 1.4 : 0.8,
+              color: _hovered ? palette.accent : palette.border,
+              width: _hovered ? 1.2 : 0.8,
             ),
+            boxShadow: _hovered
+                ? [
+                    BoxShadow(
+                      color: palette.accent.withValues(alpha: 0.12),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : const [],
           ),
           child: widget.grid
               ? _buildGridCard(effect)
@@ -155,7 +167,7 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
                 style: const TextStyle(color: Color(0xFF93A5C0),fontSize: 8)),
               const SizedBox(height: 3),
               Text(_hovered ? 'LIVE PREVIEW' : 'HOVER TO PREVIEW',
-                style: TextStyle(color: _hovered?const Color(0xFFBBAEFF):const Color(0xFF7185A3),
+                style: TextStyle(color: _hovered?palette.accent:const Color(0xFF7185A3),
                   fontSize: 7,fontWeight: FontWeight.w900,letterSpacing: 0.55)),
             ],
           ),
@@ -185,8 +197,8 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    CustomPaint(
-                      painter: _EffectSamplePainter(effectId: effect.id, progress: _animation.value),
+                    Positioned.fill(
+                      child: _sampleFootage(grid: true, effect: effect),
                     ),
                     Positioned(
                       left: 5,
@@ -234,7 +246,7 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
               Expanded(
                 child: Text(_hovered ? 'PLAYING SAMPLE' : 'LIVE SAMPLE',
                   maxLines: 1,
-                  style: TextStyle(color: _hovered?const Color(0xFFBBAEFF):const Color(0xFF7E91AD),
+                  style: TextStyle(color: _hovered?palette.accent:palette.secondaryText,
                     fontSize: 6.8,fontWeight: FontWeight.w900,letterSpacing: 0.35)),
               ),
               InkWell(
