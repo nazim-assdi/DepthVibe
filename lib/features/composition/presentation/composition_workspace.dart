@@ -839,6 +839,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   String? _activeTopDockPanel;
   final List<String> _bottomDockPanelOrder = ['Timeline'];
   String _activeBottomDockPanel = 'Timeline';
+  final Map<String, List<String>> _workspaceSplitPanelOrders = {};
+  final Map<String, String> _workspaceSplitActivePanels = {};
+  final Map<String, bool> _workspaceSplitHorizontal = {};
+  final Map<String, double> _workspaceSplitRatios = {};
+  final Map<String, Map<String, dynamic>> _customWorkspacePresets = {};
   String? _draggingWorkspacePanelId;
   String? _highlightedWorkspaceDockZone;
   bool _workspacePanelDropAccepted = false;
@@ -2153,17 +2158,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     children: [
                       _buildWorkspaceMenuBar(),
               _buildLayerToolbar(),
-              if (_topDockPanelOrder.isNotEmpty &&
+              if ((_topDockPanelOrder.isNotEmpty ||
+                      _workspaceSplitPanelOrders.containsKey('top')) &&
                   !_floatingWorkspacePanels.contains(_activeTopDockPanel))
-                _buildWorkspaceDockGroup(
+                _buildWorkspaceDockArea(
                   'top',
                   _topDockPanelOrder,
-                  _activeTopDockPanel!,
+                  _activeTopDockPanel ?? '',
                   doc,
                   layer,
                   height: _topDockHeight,
                 ),
-              if (_topDockPanelOrder.isNotEmpty)
+              if (_topDockPanelOrder.isNotEmpty ||
+                  _workspaceSplitPanelOrders.containsKey('top'))
                 _buildWorkspaceVerticalSplitter(top: true),
               Expanded(
                 child: LayoutBuilder(
@@ -2176,10 +2183,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                           Expanded(child: _buildPlayheadAwareCanvas()),
                           if (rightPanels.isNotEmpty)
                             SizedBox(height: 245, child: _buildActivePanel(layer)),
-                          if (_leftDockPanelOrder.isNotEmpty)
+                          if (_leftDockPanelOrder.isNotEmpty ||
+                              _workspaceSplitPanelOrders.containsKey('left'))
                             SizedBox(
                               height: 220,
-                              child: _buildWorkspaceDockGroup(
+                              child: _buildWorkspaceDockArea(
                                 'left',
                                 _leftDockPanelOrder,
                                 _activeLeftDockPanel,
@@ -2193,13 +2201,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (_leftDockPanelOrder.isNotEmpty) ...[
+                        if (_leftDockPanelOrder.isNotEmpty ||
+                            _workspaceSplitPanelOrders.containsKey('left')) ...[
                           SizedBox(
                             width: _leftPanelWidth,
                             child: _leftDockPanelOrder.length == 1 &&
-                                    _leftDockPanelOrder.first == 'Project'
+                                    _leftDockPanelOrder.first == 'Project' &&
+                                    !_workspaceSplitPanelOrders.containsKey('left')
                                 ? _buildLayerPanel(doc.layers)
-                                : _buildWorkspaceDockGroup(
+                                : _buildWorkspaceDockArea(
                                     'left',
                                     _leftDockPanelOrder,
                                     _activeLeftDockPanel,
@@ -2212,11 +2222,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                         Expanded(
                           child: _buildPlayheadAwareCanvas(),
                         ),
-                        if (rightPanels.isNotEmpty) ...[
+                        if (rightPanels.isNotEmpty ||
+                            _workspaceSplitPanelOrders.containsKey('right')) ...[
                           _buildWorkspaceSplitter(left: false),
                           SizedBox(
                             width: _rightPanelWidth,
-                            child: _buildActivePanel(layer),
+                            child: _buildWorkspaceDockArea(
+                              'right',
+                              rightPanels.map((id) => 'Inspector:$id').toList(),
+                              rightPanels.contains(_panel)
+                                  ? 'Inspector:$_panel'
+                                  : (rightPanels.isEmpty ? '' : 'Inspector:${rightPanels.first}'),
+                              doc,
+                              layer,
+                            ),
                           ),
                         ],
                       ],
@@ -2224,13 +2243,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   },
                 ),
               ),
-              if (_bottomDockPanelOrder.isNotEmpty &&
+              if ((_bottomDockPanelOrder.isNotEmpty ||
+                      _workspaceSplitPanelOrders.containsKey('bottom')) &&
                   !_floatingWorkspacePanels.contains(_activeBottomDockPanel))
                 if (_bottomDockPanelOrder.length == 1 &&
-                    _activeBottomDockPanel == 'Timeline')
+                    _activeBottomDockPanel == 'Timeline' &&
+                    !_workspaceSplitPanelOrders.containsKey('bottom'))
                   _buildPlayheadAwareTimeline(height: _bottomDockHeight)
                 else
-                  _buildWorkspaceDockGroup(
+                  _buildWorkspaceDockArea(
                     'bottom',
                     _bottomDockPanelOrder,
                     _activeBottomDockPanel,
@@ -2238,7 +2259,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     layer,
                     height: _bottomDockHeight,
                   ),
-              if (_bottomDockPanelOrder.isNotEmpty)
+              if (_bottomDockPanelOrder.isNotEmpty ||
+                  _workspaceSplitPanelOrders.containsKey('bottom'))
                 _buildWorkspaceVerticalSplitter(top: false),
               if (_rendering || _projectBusy)
                 Padding(
@@ -2341,6 +2363,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ..clear()
         ..add('Timeline');
       _activeBottomDockPanel = 'Timeline';
+      _workspaceSplitPanelOrders.clear();
+      _workspaceSplitActivePanels.clear();
+      _workspaceSplitHorizontal.clear();
+      _workspaceSplitRatios.clear();
       _workspacePreset = preset;
       switch (preset) {
         case 'After Effects':
@@ -2400,6 +2426,218 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       }
     });
     _scheduleWorkspaceLayoutSave();
+  }
+
+  Future<void> _saveCustomWorkspacePreset() async {
+    final nameController = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Save Workspace Preset'),
+        content: TextField(
+          controller: nameController,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Preset name',
+            hintText: 'e.g. Vertical Editing',
+          ),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(nameController.text),
+            icon: const Icon(Icons.save_outlined),
+            label: const Text('Save Preset'),
+          ),
+        ],
+      ),
+    );
+    nameController.dispose();
+    final cleanedName = name?.trim() ?? '';
+    if (cleanedName.isEmpty || !mounted) return;
+    setState(() {
+      _customWorkspacePresets[cleanedName] = _captureWorkspaceLayoutState();
+      _workspacePreset = cleanedName;
+    });
+    _scheduleWorkspaceLayoutSave();
+  }
+
+  void _applyCustomWorkspacePreset(String name) {
+    final stored = _customWorkspacePresets[name];
+    if (stored == null) return;
+    final snapshot = Map<String, dynamic>.from(
+      jsonDecode(jsonEncode(stored)) as Map,
+    );
+    const validZones = {'left', 'right', 'top', 'bottom'};
+    final validPanels = <String>{
+      'Project',
+      'Timeline',
+      for (final panel in _rightPanelOrder) 'Inspector:$panel',
+    };
+    List<String> readOrder(Object? value, List<String> fallback) {
+      if (value is! List) return List<String>.from(fallback);
+      final result = <String>[];
+      for (final item in value.whereType<String>()) {
+        if (validPanels.contains(item) && !result.contains(item)) {
+          result.add(item);
+        }
+      }
+      return result;
+    }
+
+    setState(() {
+      _floatingWorkspacePanels
+        ..clear()
+        ..addAll((snapshot['floating'] as List? ?? const [])
+            .whereType<String>()
+            .where(validPanels.contains));
+      _floatingWorkspacePanelOrder
+        ..clear()
+        ..addAll(_floatingWorkspacePanels);
+      _leftDockPanelOrder
+        ..clear()
+        ..addAll(readOrder(snapshot['leftDockOrder'], const ['Project']));
+      _topDockPanelOrder
+        ..clear()
+        ..addAll(readOrder(snapshot['topDockOrder'], const []));
+      _bottomDockPanelOrder
+        ..clear()
+        ..addAll(readOrder(snapshot['bottomDockOrder'], const ['Timeline']));
+      _rightPanelOrder
+        ..clear()
+        ..addAll((snapshot['panelOrder'] as List? ?? const [])
+            .whereType<String>()
+            .where((id) => _rightPanelOrder.contains(id)));
+      if (_rightPanelOrder.isEmpty) {
+        _rightPanelOrder.addAll(validPanels
+            .where((id) => id.startsWith('Inspector:'))
+            .map((id) => id.substring('Inspector:'.length)));
+      }
+      _activeLeftDockPanel = _leftDockPanelOrder.contains(
+              snapshot['activeLeftDockPanel'])
+          ? snapshot['activeLeftDockPanel'] as String
+          : (_leftDockPanelOrder.isEmpty ? '' : _leftDockPanelOrder.first);
+      _activeTopDockPanel = _topDockPanelOrder.contains(
+              snapshot['activeTopDockPanel'])
+          ? snapshot['activeTopDockPanel'] as String
+          : (_topDockPanelOrder.isEmpty ? null : _topDockPanelOrder.first);
+      _activeBottomDockPanel = _bottomDockPanelOrder.contains(
+              snapshot['activeBottomDockPanel'])
+          ? snapshot['activeBottomDockPanel'] as String
+          : (_bottomDockPanelOrder.isEmpty ? '' : _bottomDockPanelOrder.first);
+      final activePanel = snapshot['activePanel'];
+      if (activePanel is String && _rightPanelOrder.contains(activePanel)) {
+        _panel = activePanel;
+      }
+      final leftPanel = snapshot['leftPanel'];
+      if (leftPanel is String) _leftPanel = leftPanel;
+      _workspaceSplitPanelOrders.clear();
+      _workspaceSplitActivePanels.clear();
+      _workspaceSplitHorizontal.clear();
+      _workspaceSplitRatios.clear();
+      final splitPanels = snapshot['splitPanels'];
+      if (splitPanels is Map) {
+        for (final entry in splitPanels.entries) {
+          if (validZones.contains(entry.key) && entry.value is List) {
+            final accepted = (entry.value as List)
+                .whereType<String>()
+                .where(validPanels.contains)
+                .toSet()
+                .toList();
+            _workspaceSplitPanelOrders[entry.key as String] = accepted;
+          }
+        }
+      }
+      final splitActives = snapshot['splitActives'];
+      if (splitActives is Map) {
+        for (final entry in splitActives.entries) {
+          final panels = _workspaceSplitPanelOrders[entry.key];
+          if (panels != null) {
+            _workspaceSplitActivePanels[entry.key as String] =
+                panels.contains(entry.value) ? entry.value as String : '';
+          }
+        }
+      }
+      final splitHorizontal = snapshot['splitHorizontal'];
+      if (splitHorizontal is Map) {
+        for (final entry in splitHorizontal.entries) {
+          if (validZones.contains(entry.key) && entry.value is bool) {
+            _workspaceSplitHorizontal[entry.key as String] = entry.value as bool;
+          }
+        }
+      }
+      final splitRatios = snapshot['splitRatios'];
+      if (splitRatios is Map) {
+        for (final entry in splitRatios.entries) {
+          if (validZones.contains(entry.key) && entry.value is num) {
+            _workspaceSplitRatios[entry.key as String] =
+                (entry.value as num).toDouble().clamp(0.2, 0.8).toDouble();
+          }
+        }
+      }
+      final leftWidth = snapshot['leftWidth'];
+      final rightWidth = snapshot['rightWidth'];
+      final topHeight = snapshot['topHeight'];
+      final bottomHeight = snapshot['bottomHeight'];
+      if (leftWidth is num) _leftPanelWidth = leftWidth.toDouble();
+      if (rightWidth is num) _rightPanelWidth = rightWidth.toDouble();
+      if (topHeight is num) _topDockHeight = topHeight.toDouble();
+      if (bottomHeight is num) _bottomDockHeight = bottomHeight.toDouble();
+      _workspacePreset = name;
+    });
+    _scheduleWorkspaceLayoutSave();
+  }
+
+  Future<void> _showCustomWorkspacePresetManager() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, updateDialog) => AlertDialog(
+          title: const Text('Custom Workspaces'),
+          content: SizedBox(
+            width: 420,
+            height: 340,
+            child: _customWorkspacePresets.isEmpty
+                ? const Center(child: Text('No custom workspace presets saved yet.'))
+                : ListView(
+                    children: [
+                      for (final name in _customWorkspacePresets.keys.toList()..sort())
+                        ListTile(
+                          leading: const Icon(Icons.dashboard_customize_outlined),
+                          title: Text(name),
+                          subtitle: const Text('Load this saved panel layout'),
+                          onTap: () {
+                            Navigator.of(dialogContext).pop();
+                            _applyCustomWorkspacePreset(name);
+                          },
+                          trailing: IconButton(
+                            tooltip: 'Delete preset',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () {
+                              setState(() => _customWorkspacePresets.remove(name));
+                              updateDialog(() {});
+                              _scheduleWorkspaceLayoutSave();
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildWorkspaceMenuBar() {
@@ -2607,8 +2845,24 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               PopupMenuItem(value: 'Color', child: Text('Color')),
               PopupMenuItem(value: 'Audio', child: Text('Audio')),
               PopupMenuItem(value: '3D', child: Text('3D')),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'save-custom', child: Text('Save Current Workspace As...')),
+              const PopupMenuItem(value: 'manage-custom', child: Text('Manage Custom Workspaces...')),
+              if (_customWorkspacePresets.isNotEmpty) const PopupMenuDivider(),
+              for (final name in _customWorkspacePresets.keys)
+                PopupMenuItem(value: name, child: Text(name)),
             ],
-            _applyWorkspacePreset,
+            (preset) {
+              if (preset == 'save-custom') {
+                unawaited(_saveCustomWorkspacePreset());
+              } else if (preset == 'manage-custom') {
+                unawaited(_showCustomWorkspacePresetManager());
+              } else if (_customWorkspacePresets.containsKey(preset)) {
+                _applyCustomWorkspacePreset(preset);
+              } else {
+                _applyWorkspacePreset(preset);
+              }
+            },
           ),
           const Spacer(),
           Padding(
@@ -2823,7 +3077,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   bool _isPanelInSideDockGroup(String id) =>
       _leftDockPanelOrder.contains(id) ||
       _topDockPanelOrder.contains(id) ||
-      _bottomDockPanelOrder.contains(id);
+      _bottomDockPanelOrder.contains(id) ||
+      _workspaceSplitPanelOrders.values.any((panels) => panels.contains(id));
 
   List<String> get _rightDockedPanelIds => _rightPanelOrder
       .where((panel) =>
@@ -2836,10 +3091,79 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     return available.isEmpty ? null : available.first;
   }
 
+  List<String> _baseWorkspaceDockOrder(String zone) {
+    switch (zone) {
+      case 'left':
+        return _leftDockPanelOrder;
+      case 'top':
+        return _topDockPanelOrder;
+      case 'bottom':
+        return _bottomDockPanelOrder;
+      default:
+        return <String>[];
+    }
+  }
+
+  String _baseWorkspaceDockActive(String zone) {
+    switch (zone) {
+      case 'left':
+        return _activeLeftDockPanel;
+      case 'top':
+        return _activeTopDockPanel ?? '';
+      case 'bottom':
+        return _activeBottomDockPanel;
+      case 'right':
+        return 'Inspector:$_panel';
+      default:
+        return '';
+    }
+  }
+
+  void _setBaseWorkspaceDockActive(String zone, String id) {
+    switch (zone) {
+      case 'left':
+        _activeLeftDockPanel = id;
+        break;
+      case 'top':
+        _activeTopDockPanel = id.isEmpty ? null : id;
+        break;
+      case 'bottom':
+        _activeBottomDockPanel = id;
+        break;
+      case 'right':
+        if (id.startsWith('Inspector:')) {
+          _panel = id.substring('Inspector:'.length);
+        }
+        break;
+    }
+  }
+
+  String? _fallbackRightPanelExcluding(String excludedId) {
+    final excluded = excludedId.startsWith('Inspector:')
+        ? excludedId.substring('Inspector:'.length)
+        : excludedId;
+    for (final panel in _rightPanelOrder) {
+      final id = 'Inspector:$panel';
+      if (panel != excluded &&
+          !_floatingWorkspacePanels.contains(id) &&
+          !_isPanelInSideDockGroup(id)) {
+        return panel;
+      }
+    }
+    return null;
+  }
+
   void _removeWorkspacePanelFromDockGroups(String id) {
     _leftDockPanelOrder.remove(id);
     _topDockPanelOrder.remove(id);
     _bottomDockPanelOrder.remove(id);
+    for (final entry in _workspaceSplitPanelOrders.entries) {
+      entry.value.remove(id);
+      if (_workspaceSplitActivePanels[entry.key] == id) {
+        _workspaceSplitActivePanels[entry.key] =
+            entry.value.isEmpty ? '' : entry.value.first;
+      }
+    }
     if (_activeLeftDockPanel == id) {
       _activeLeftDockPanel =
           _leftDockPanelOrder.isEmpty ? '' : _leftDockPanelOrder.first;
@@ -2854,8 +3178,101 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     }
     if (id.startsWith('Inspector:') &&
         _panel == id.substring('Inspector:'.length)) {
-      _panel = _fallbackRightPanel ?? '';
+      _panel = _fallbackRightPanelExcluding(id) ?? '';
     }
+  }
+
+  void _splitWorkspaceDockGroup(String zone, {required bool horizontal}) {
+    if (!const {'left', 'right', 'top', 'bottom'}.contains(zone)) return;
+    setState(() {
+      _workspaceSplitPanelOrders.putIfAbsent(zone, () => <String>[]);
+      _workspaceSplitActivePanels.putIfAbsent(zone, () => '');
+      _workspaceSplitHorizontal[zone] = horizontal;
+      _workspaceSplitRatios.putIfAbsent(zone, () => 0.5);
+    });
+    _scheduleWorkspaceLayoutSave();
+  }
+
+  void _mergeWorkspaceDockGroups(String zone) {
+    final split = _workspaceSplitPanelOrders[zone];
+    if (split == null) return;
+    setState(() {
+      if (zone == 'right') {
+        final active = _workspaceSplitActivePanels[zone] ?? '';
+        if (active.startsWith('Inspector:')) {
+          _panel = active.substring('Inspector:'.length);
+        }
+      } else {
+        final target = _baseWorkspaceDockOrder(zone);
+        for (final id in split) {
+          if (!target.contains(id)) target.add(id);
+        }
+        if (split.isNotEmpty) {
+          _setBaseWorkspaceDockActive(zone, split.first);
+        }
+      }
+      _workspaceSplitPanelOrders.remove(zone);
+      _workspaceSplitActivePanels.remove(zone);
+      _workspaceSplitHorizontal.remove(zone);
+      _workspaceSplitRatios.remove(zone);
+    });
+    _scheduleWorkspaceLayoutSave();
+  }
+
+  void _dockWorkspacePanelIntoGroup(
+    String id,
+    String zone,
+    int groupIndex, {
+    String? beforeId,
+  }) {
+    if (zone == 'right' && !id.startsWith('Inspector:')) return;
+    if (groupIndex == 1 && !_workspaceSplitPanelOrders.containsKey(zone)) {
+      _splitWorkspaceDockGroup(zone, horizontal: true);
+    }
+    if (zone == 'right' && !id.startsWith('Inspector:')) return;
+    setState(() {
+      final wasActiveInspector =
+          id.startsWith('Inspector:') &&
+          _panel == id.substring('Inspector:'.length);
+      _floatingWorkspacePanels.remove(id);
+      _floatingWorkspacePanelOrder.remove(id);
+      _floatingWorkspacePanelRects.remove(id);
+      _removeWorkspacePanelFromDockGroups(id);
+
+      if (zone == 'right') {
+        if (groupIndex == 1) {
+          final target = _workspaceSplitPanelOrders.putIfAbsent(
+            zone,
+            () => <String>[],
+          );
+          if (!target.contains(id)) target.add(id);
+          _workspaceSplitActivePanels[zone] = id;
+        } else {
+          _panel = id.substring('Inspector:'.length);
+        }
+      } else {
+        final target = groupIndex == 1
+            ? _workspaceSplitPanelOrders.putIfAbsent(zone, () => <String>[])
+            : _baseWorkspaceDockOrder(zone);
+        final existing = target.indexOf(id);
+        if (existing >= 0) target.removeAt(existing);
+        final targetIndex = beforeId == null
+            ? target.length
+            : target.indexOf(beforeId).clamp(0, target.length);
+        target.insert(targetIndex, id);
+        if (groupIndex == 1) {
+          _workspaceSplitActivePanels[zone] = id;
+        } else {
+          _setBaseWorkspaceDockActive(zone, id);
+        }
+      }
+
+      if (wasActiveInspector && zone != 'right') {
+        _panel = _fallbackRightPanelExcluding(id) ?? '';
+      }
+      _workspacePanelDropAccepted = true;
+    });
+    _scheduleWorkspaceLayoutSave();
   }
 
   void _onWorkspacePanelDragStarted(String id) {
@@ -2904,38 +3321,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     if (targetZone == 'right' && !id.startsWith('Inspector:')) {
       targetZone = id == 'Project' ? 'left' : 'bottom';
     }
-    setState(() {
-      _floatingWorkspacePanels.remove(id);
-      _floatingWorkspacePanelOrder.remove(id);
-      _floatingWorkspacePanelRects.remove(id);
-      _removeWorkspacePanelFromDockGroups(id);
-      switch (targetZone) {
-        case 'left':
-          _leftDockPanelOrder.add(id);
-          _activeLeftDockPanel = id;
-          break;
-        case 'right':
-          if (id.startsWith('Inspector:')) {
-            _panel = id.substring('Inspector:'.length);
-          }
-          break;
-        case 'top':
-          _topDockPanelOrder.add(id);
-          _activeTopDockPanel = id;
-          break;
-        case 'bottom':
-          _bottomDockPanelOrder.add(id);
-          _activeBottomDockPanel = id;
-          break;
-      }
-      if (id.startsWith('Inspector:') &&
-          targetZone != 'right' &&
-          _panel == id.substring('Inspector:'.length)) {
-        _panel = _fallbackRightPanel ?? '';
-      }
-      _workspacePanelDropAccepted = true;
-    });
-    _scheduleWorkspaceLayoutSave();
+    _dockWorkspacePanelIntoGroup(id, targetZone, 0);
   }
 
   Widget _buildWorkspaceDockContent(
@@ -2969,37 +3355,69 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   Widget _buildWorkspaceDockTab(
     String id,
     bool selected,
-    VoidCallback onTap,
-  ) {
+    VoidCallback onTap, {
+    required String zone,
+    required int groupIndex,
+  }) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     final title = _workspacePanelDisplayName(id);
-    return Draggable<String>(
-      data: id,
-      onDragStarted: () => _onWorkspacePanelDragStarted(id),
-      onDragEnd: (details) => _onWorkspacePanelDragEnded(id, details),
-      feedback: Material(
-        color: Colors.transparent,
-        child: DecoratedBox(
+    return DragTarget<String>(
+      onWillAccept: (dragged) =>
+          dragged != null &&
+          dragged != id &&
+          (zone != 'right' || dragged.startsWith('Inspector:')),
+      onAccept: (dragged) => _dockWorkspacePanelIntoGroup(
+        dragged,
+        zone,
+        groupIndex,
+        beforeId: id,
+      ),
+      builder: (context, candidates, rejected) {
+        final highlighted = candidates.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
           decoration: BoxDecoration(
-            color: palette.panelRaised,
-            border: Border.all(color: palette.accent, width: 1.5),
-            borderRadius: BorderRadius.circular(7),
+            color: highlighted
+                ? palette.accent.withValues(alpha: 0.2)
+                : Colors.transparent,
+            border: highlighted
+                ? Border.all(color: palette.accent, width: 1.2)
+                : null,
+            borderRadius: BorderRadius.circular(4),
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Text(title, style: TextStyle(
-              color: palette.primaryText,
-              fontSize: 10,
-              fontWeight: FontWeight.w900,
-            )),
+          child: Draggable<String>(
+            data: id,
+            onDragStarted: () => _onWorkspacePanelDragStarted(id),
+            onDragEnd: (details) => _onWorkspacePanelDragEnded(id, details),
+            feedback: Material(
+              color: Colors.transparent,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: palette.panelRaised,
+                  border: Border.all(color: palette.accent, width: 1.5),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      color: palette.primaryText,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            childWhenDragging: Opacity(
+              opacity: 0.25,
+              child: _workspaceDockTabBody(id, selected, onTap, palette),
+            ),
+            child: _workspaceDockTabBody(id, selected, onTap, palette),
           ),
-        ),
-      ),
-      childWhenDragging: Opacity(
-        opacity: 0.25,
-        child: _workspaceDockTabBody(id, selected, onTap, palette),
-      ),
-      child: _workspaceDockTabBody(id, selected, onTap, palette),
+        );
+      },
     );
   }
 
@@ -3058,10 +3476,47 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     CompositionDocument document,
     CompositionLayer? layer, {
     double? height,
+    int groupIndex = 0,
   }) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
-    if (panelIds.isEmpty) return const SizedBox.shrink();
-    return Container(
+    final isSplit = _workspaceSplitPanelOrders.containsKey(zone);
+    final groupName = groupIndex == 1 ? 'SPLIT GROUP' : zone.toUpperCase();
+    final body = activeId.isNotEmpty && panelIds.contains(activeId)
+        ? _buildWorkspaceDockContent(
+            activeId,
+            document,
+            layer,
+            height: height ?? 260,
+          )
+        : Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.move_to_inbox_outlined,
+                    size: 26, color: palette.secondaryText),
+                const SizedBox(height: 8),
+                Text(
+                  'DROP A PANEL HERE',
+                  style: TextStyle(
+                    color: palette.secondaryText,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.75,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Drag a tab into this group',
+                  style: TextStyle(
+                    color: palette.secondaryText.withValues(alpha: 0.75),
+                    fontSize: 8,
+                  ),
+                ),
+              ],
+            ),
+          );
+
+    final group = Container(
       height: height,
       decoration: BoxDecoration(
         color: palette.panel,
@@ -3080,7 +3535,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text(
-                    zone.toUpperCase(),
+                    groupName,
                     style: TextStyle(
                       fontSize: 7,
                       letterSpacing: 0.8,
@@ -3100,41 +3555,208 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             id == activeId,
                             () {
                               setState(() {
-                                switch (zone) {
-                                  case 'left':
-                                    _activeLeftDockPanel = id;
-                                    break;
-                                  case 'top':
-                                    _activeTopDockPanel = id;
-                                    break;
-                                  case 'bottom':
-                                    _activeBottomDockPanel = id;
-                                    break;
+                                if (zone == 'right') {
+                                  _panel = id.substring('Inspector:'.length);
+                                } else if (groupIndex == 1) {
+                                  _workspaceSplitActivePanels[zone] = id;
+                                } else {
+                                  _setBaseWorkspaceDockActive(zone, id);
                                 }
                               });
                               _scheduleWorkspaceLayoutSave();
                             },
+                            zone: zone,
+                            groupIndex: groupIndex,
                           ),
                       ],
                     ),
                   ),
                 ),
+                PopupMenuButton<String>(
+                  tooltip: 'Split or merge this panel group',
+                  padding: EdgeInsets.zero,
+                  iconSize: 16,
+                  onSelected: (action) {
+                    switch (action) {
+                      case 'split-horizontal':
+                        _splitWorkspaceDockGroup(zone, horizontal: true);
+                        break;
+                      case 'split-vertical':
+                        _splitWorkspaceDockGroup(zone, horizontal: false);
+                        break;
+                      case 'merge':
+                        _mergeWorkspaceDockGroups(zone);
+                        break;
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'split-horizontal',
+                      child: Text('Split Left / Right'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'split-vertical',
+                      child: Text('Split Top / Bottom'),
+                    ),
+                    if (isSplit)
+                      const PopupMenuItem(
+                        value: 'merge',
+                        child: Text('Merge Split Groups'),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
           Expanded(
-            child: ClipRect(
-              child: _buildWorkspaceDockContent(
-                activeId,
-                document,
-                layer,
-                height: height ?? 260,
-              ),
-            ),
+            child: ClipRect(child: body),
           ),
         ],
       ),
     );
+
+    return DragTarget<String>(
+      onWillAccept: (data) =>
+          data != null &&
+          (zone != 'right' || data.startsWith('Inspector:')),
+      onAccept: (id) =>
+          _dockWorkspacePanelIntoGroup(id, zone, groupIndex),
+      builder: (context, candidates, rejected) {
+        final highlighted = candidates.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: highlighted ? palette.accent : Colors.transparent,
+              width: highlighted ? 2 : 0,
+            ),
+          ),
+          child: group,
+        );
+      },
+    );
+  }
+
+  Widget _buildWorkspaceDockSplitHandle(String zone, bool horizontal) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return MouseRegion(
+      cursor: horizontal
+          ? SystemMouseCursors.resizeColumn
+          : SystemMouseCursors.resizeRow,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragUpdate: horizontal
+            ? (details) {
+                setState(() {
+                  _workspaceSplitRatios[zone] =
+                      ((_workspaceSplitRatios[zone] ?? 0.5) +
+                              details.delta.dx / math.max(1, _workspaceViewportSize.width))
+                          .clamp(0.2, 0.8)
+                          .toDouble();
+                });
+                _scheduleWorkspaceLayoutSave();
+              }
+            : null,
+        onVerticalDragUpdate: !horizontal
+            ? (details) {
+                setState(() {
+                  _workspaceSplitRatios[zone] =
+                      ((_workspaceSplitRatios[zone] ?? 0.5) +
+                              details.delta.dy / math.max(1, _workspaceViewportSize.height))
+                          .clamp(0.2, 0.8)
+                          .toDouble();
+                });
+                _scheduleWorkspaceLayoutSave();
+              }
+            : null,
+        child: SizedBox(
+          width: horizontal ? 6 : double.infinity,
+          height: horizontal ? double.infinity : 6,
+          child: Center(
+            child: Container(
+              width: horizontal ? 2 : 30,
+              height: horizontal ? 30 : 2,
+              decoration: BoxDecoration(
+                color: palette.border,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWorkspaceDockArea(
+    String zone,
+    List<String> panelIds,
+    String activeId,
+    CompositionDocument document,
+    CompositionLayer? layer, {
+    double? height,
+  }) {
+    final splitPanels = _workspaceSplitPanelOrders[zone];
+    if (splitPanels == null) {
+      return _buildWorkspaceDockGroup(
+        zone,
+        panelIds,
+        activeId,
+        document,
+        layer,
+        height: height,
+      );
+    }
+    final horizontal = _workspaceSplitHorizontal[zone] ?? true;
+    final ratio = (_workspaceSplitRatios[zone] ?? 0.5).clamp(0.2, 0.8);
+    final firstFlex = (ratio * 1000).round().clamp(200, 800);
+    final secondFlex = 1000 - firstFlex;
+    final activeSplit = _workspaceSplitActivePanels[zone] ?? '';
+    final firstHeight =
+        !horizontal && height != null ? height * ratio : height;
+    final secondHeight =
+        !horizontal && height != null ? height * (1 - ratio) : height;
+    final first = Expanded(
+      flex: firstFlex,
+      child: _buildWorkspaceDockGroup(
+        zone,
+        panelIds,
+        activeId,
+        document,
+        layer,
+        height: firstHeight,
+        groupIndex: 0,
+      ),
+    );
+    final second = Expanded(
+      flex: secondFlex,
+      child: _buildWorkspaceDockGroup(
+        zone,
+        splitPanels,
+        activeSplit,
+        document,
+        layer,
+        height: secondHeight,
+        groupIndex: 1,
+      ),
+    );
+    final layout = horizontal
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              first,
+              _buildWorkspaceDockSplitHandle(zone, true),
+              second,
+            ],
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              first,
+              _buildWorkspaceDockSplitHandle(zone, false),
+              second,
+            ],
+          );
+    return SizedBox(height: height, child: layout);
   }
 
   List<Widget> _buildWorkspaceDockDropZones() {
@@ -3325,6 +3947,76 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ? activeBottom as String
             : _bottomDockPanelOrder.first;
       }
+      final splitPanels = decoded['splitPanels'];
+      if (splitPanels is Map) {
+        for (final entry in splitPanels.entries) {
+          final zone = entry.key;
+          if (!const {'left', 'right', 'top', 'bottom'}.contains(zone) ||
+              entry.value is! List) {
+            continue;
+          }
+          final accepted = <String>[];
+          for (final item in (entry.value as List).whereType<String>()) {
+            if (validPanels.contains(item) &&
+                !accepted.contains(item) &&
+                !_leftDockPanelOrder.contains(item) &&
+                !_topDockPanelOrder.contains(item) &&
+                !_bottomDockPanelOrder.contains(item)) {
+              accepted.add(item);
+            }
+          }
+          _workspaceSplitPanelOrders[zone as String] = accepted;
+        }
+      }
+      final splitActives = decoded['splitActives'];
+      if (splitActives is Map) {
+        for (final entry in splitActives.entries) {
+          final zone = entry.key;
+          final active = entry.value;
+          final panels = _workspaceSplitPanelOrders[zone];
+          if (panels != null) {
+            _workspaceSplitActivePanels[zone as String] =
+                panels.contains(active) ? active as String : '';
+          }
+        }
+      }
+      final splitHorizontal = decoded['splitHorizontal'];
+      if (splitHorizontal is Map) {
+        for (final entry in splitHorizontal.entries) {
+          if (_workspaceSplitPanelOrders.containsKey(entry.key) &&
+              entry.value is bool) {
+            _workspaceSplitHorizontal[entry.key as String] = entry.value as bool;
+          }
+        }
+      }
+      final splitRatios = decoded['splitRatios'];
+      if (splitRatios is Map) {
+        for (final entry in splitRatios.entries) {
+          if (_workspaceSplitPanelOrders.containsKey(entry.key) &&
+              entry.value is num &&
+              (entry.value as num).isFinite) {
+            _workspaceSplitRatios[entry.key as String] =
+                (entry.value as num).toDouble().clamp(0.2, 0.8).toDouble();
+          }
+        }
+      }
+      for (final zone in _workspaceSplitPanelOrders.keys) {
+        _workspaceSplitActivePanels.putIfAbsent(zone, () {
+          final panels = _workspaceSplitPanelOrders[zone]!;
+          return panels.isEmpty ? '' : panels.first;
+        });
+        _workspaceSplitHorizontal.putIfAbsent(zone, () => true);
+        _workspaceSplitRatios.putIfAbsent(zone, () => 0.5);
+      }
+      final customPresets = decoded['customPresets'];
+      if (customPresets is Map) {
+        for (final entry in customPresets.entries) {
+          if (entry.key is String && entry.value is Map) {
+            _customWorkspacePresets[entry.key as String] =
+                Map<String, dynamic>.from(entry.value as Map);
+          }
+        }
+      }
       final panelOrder = decoded['panelOrder'];
       if (panelOrder is List) {
         final validOrder = panelOrder
@@ -3419,37 +4111,49 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  Map<String, dynamic> _captureWorkspaceLayoutState() {
+    return <String, dynamic>{
+      'floating': _floatingWorkspacePanelOrder
+          .where(_floatingWorkspacePanels.contains)
+          .toList(),
+      'panelOrder': List<String>.from(_rightPanelOrder),
+      'leftDockOrder': List<String>.from(_leftDockPanelOrder),
+      'topDockOrder': List<String>.from(_topDockPanelOrder),
+      'bottomDockOrder': List<String>.from(_bottomDockPanelOrder),
+      'activeLeftDockPanel': _activeLeftDockPanel,
+      'activeTopDockPanel': _activeTopDockPanel,
+      'activeBottomDockPanel': _activeBottomDockPanel,
+      'activePanel': _panel,
+      'leftPanel': _leftPanel,
+      'rects': {
+        for (final entry in _floatingWorkspacePanelRects.entries)
+          entry.key: [
+            entry.value.left,
+            entry.value.top,
+            entry.value.width,
+            entry.value.height,
+          ],
+      },
+      'leftWidth': _leftPanelWidth,
+      'rightWidth': _rightPanelWidth,
+      'topHeight': _topDockHeight,
+      'bottomHeight': _bottomDockHeight,
+      'splitPanels': {
+        for (final entry in _workspaceSplitPanelOrders.entries)
+          entry.key: List<String>.from(entry.value),
+      },
+      'splitActives': Map<String, String>.from(_workspaceSplitActivePanels),
+      'splitHorizontal': Map<String, bool>.from(_workspaceSplitHorizontal),
+      'splitRatios': Map<String, double>.from(_workspaceSplitRatios),
+    };
+  }
+
   Future<void> _saveWorkspaceLayout() async {
     if (!_workspaceLayoutLoaded) return;
     try {
       final file = await _workspaceLayoutFile();
-      final data = <String, Object>{
-        'floating': _floatingWorkspacePanelOrder
-            .where(_floatingWorkspacePanels.contains)
-            .toList(),
-        'panelOrder': _rightPanelOrder,
-        'leftDockOrder': _leftDockPanelOrder,
-        'topDockOrder': _topDockPanelOrder,
-        'bottomDockOrder': _bottomDockPanelOrder,
-        'activeLeftDockPanel': _activeLeftDockPanel,
-        'activeTopDockPanel': _activeTopDockPanel,
-        'activeBottomDockPanel': _activeBottomDockPanel,
-        'activePanel': _panel,
-        'leftPanel': _leftPanel,
-        'rects': {
-          for (final entry in _floatingWorkspacePanelRects.entries)
-            entry.key: [
-              entry.value.left,
-              entry.value.top,
-              entry.value.width,
-              entry.value.height,
-            ],
-        },
-        'leftWidth': _leftPanelWidth,
-        'rightWidth': _rightPanelWidth,
-        'topHeight': _topDockHeight,
-        'bottomHeight': _bottomDockHeight,
-      };
+      final data = _captureWorkspaceLayoutState()
+        ..['customPresets'] = _customWorkspacePresets;
       await file.writeAsString(jsonEncode(data), flush: true);
     } catch (error) {
       debugPrint('DepthVibe workspace layout could not be saved: $error');
