@@ -2445,7 +2445,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             const [
               PopupMenuItem(value: 'open', child: Text('Open Effect Library')),
             ],
-            (_) => setState(() => _panel = 'Effects'),
+            (_) {
+              setState(() => _panel = 'Effects');
+              _scheduleWorkspaceLayoutSave();
+            },
           ),
           _workspaceMenuButton(
             'Animation',
@@ -2456,6 +2459,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             (action) {
               if (action == 'add') _addKeyframe('position.x');
               setState(() => _panel = 'Animation');
+              _scheduleWorkspaceLayoutSave();
             },
           ),
           _workspaceMenuButton(
@@ -2515,6 +2519,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 _dockAllWorkspacePanels();
               } else {
                 setState(() => _panel = panel);
+                _scheduleWorkspaceLayoutSave();
               }
             },
           ),
@@ -3223,7 +3228,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 ),
                 PopupMenuButton<String>(
                   tooltip: 'Choose left panel',
-                  onSelected: (value) => setState(() => _leftPanel = value),
+                  onSelected: (value) {
+                    setState(() => _leftPanel = value);
+                    _scheduleWorkspaceLayoutSave();
+                  },
                   itemBuilder: (_) => const [
                     PopupMenuItem(value: 'Project', child: Text('Project')),
                     PopupMenuItem(value: 'Effects & Presets', child: Text('Effects & Presets')),
@@ -3248,7 +3256,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 for (final tab in const ['Project', 'Effects & Presets', 'Info'])
                   Expanded(
                     child: InkWell(
-                      onTap: () => setState(() => _leftPanel = tab),
+                      onTap: () {
+                        setState(() => _leftPanel = tab);
+                        _scheduleWorkspaceLayoutSave();
+                      },
                       child: Container(
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
@@ -7587,7 +7598,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   key: ValueKey<String>('dock-${item.$1}'),
                   message: 'Drag to reorder · ${item.$2}',
                   child: InkWell(
-                    onTap: () => setState(() => _panel = item.$1),
+                    onTap: () {
+                      setState(() => _panel = item.$1);
+                      _scheduleWorkspaceLayoutSave();
+                    },
                     child: Container(
                       constraints: const BoxConstraints(minWidth: 76),
                       padding: const EdgeInsets.symmetric(horizontal: 9),
