@@ -26,8 +26,8 @@ void main() {
     expect(LiveEffectPreview.supports('brightness'), isTrue);
     expect(LiveEffectPreview.supports('gaussian_blur'), isTrue);
     expect(LiveEffectPreview.supports('letterbox'), isTrue);
-    expect(LiveEffectPreview.supports('displacement'), isFalse);
-    expect(LiveEffectPreview.supports('color_lut'), isFalse);
+    expect(LiveEffectPreview.supports('displacement'), isTrue);
+    expect(LiveEffectPreview.supports('color_lut'), isTrue);
   });
 
   test('samples keyframed brightness values at the playhead', () {
