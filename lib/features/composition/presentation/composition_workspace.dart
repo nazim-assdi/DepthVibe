@@ -3345,8 +3345,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   Widget _buildMediaPoolLeading(
     CompositionLayer layer,
     CompositionDocument document,
-    bool selected,
-  ) {
+    bool selected, {
+    bool fill = false,
+  }) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     Widget content;
     final cachedVideo = _lastVideoFrames[layer.id];
@@ -3383,8 +3384,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       );
     }
     return Container(
-      width: 48,
-      height: 34,
+      width: fill ? double.infinity : 48,
+      height: fill ? double.infinity : 34,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: palette.panelRaised,
@@ -3423,7 +3424,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  _buildMediaPoolLeading(layer, document, selected),
+                  _buildMediaPoolLeading(layer, document, selected, fill: true),
                   Positioned(
                     left: 5,
                     top: 5,
@@ -12508,7 +12509,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   ) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final labelWidth = math.min(130.0, constraints.maxWidth);
+        final labelWidth = math.min(164.0, constraints.maxWidth * 0.34);
         final trackWidth = math.max(0.0, constraints.maxWidth - labelWidth);
         final selectedId = _controller.document.selectedLayerId;
         return Stack(
@@ -12533,7 +12534,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       child: Row(
                         children: [
                           SizedBox(
-                            width: 130,
+                            width: labelWidth,
                             child: Row(
                               children: [
                                 SizedBox(
@@ -12559,6 +12560,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                     ),
                                   ),
                                 ),
+                                Container(
+                                  width: 18,
+                                  height: 18,
+                                  margin: const EdgeInsets.only(right: 4),
+                                  decoration: BoxDecoration(
+                                    color: selected ? palette.accentSoft : palette.panelRaised,
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Icon(
+                                    _iconFor(layer.kind),
+                                    size: 10,
+                                    color: selected ? palette.accent : palette.secondaryText,
+                                  ),
+                                ),
                                 Expanded(
                                   child: InkWell(
                                     onTap: () => _controller.selectLayer(layer.id),
@@ -12575,6 +12591,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                             ? const Color(0xFFEAF0FF)
                                             : paletteText(context),
                                       ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 22,
+                                  child: IconButton(
+                                    padding: EdgeInsets.zero,
+                                    visualDensity: VisualDensity.compact,
+                                    tooltip: layer.enabled ? 'Hide layer' : 'Show layer',
+                                    onPressed: () => _controller.setLayerEnabled(layer.id, !layer.enabled),
+                                    icon: Icon(
+                                      layer.enabled ? Icons.visibility : Icons.visibility_off,
+                                      size: 11,
+                                      color: layer.enabled ? palette.secondaryText : const Color(0xFFE39C9C),
                                     ),
                                   ),
                                 ),
