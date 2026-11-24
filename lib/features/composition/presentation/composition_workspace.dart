@@ -831,6 +831,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   Size _workspaceViewportSize = const Size(1280, 720);
   Timer? _workspaceLayoutSaveTimer;
   bool _workspaceLayoutLoaded = false;
+  final List<String> _leftDockPanelOrder = ['Project'];
+  String _activeLeftDockPanel = 'Project';
+  final List<String> _topDockPanelOrder = [];
+  String? _activeTopDockPanel;
+  final List<String> _bottomDockPanelOrder = ['Timeline'];
+  String _activeBottomDockPanel = 'Timeline';
+  String? _draggingWorkspacePanelId;
+  String? _highlightedWorkspaceDockZone;
+  bool _workspacePanelDropAccepted = false;
   final Set<String> _expandedTimelineLayers = {};
   String _effectCategory = 'All';
   String _effectSearch = '';
@@ -2778,6 +2787,52 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           const {'Project', 'Effects & Presets', 'Info'}.contains(leftPanel)) {
         _leftPanel = leftPanel;
       }
+      final leftDockOrder = decoded['leftDockOrder'];
+      final topDockOrder = decoded['topDockOrder'];
+      final bottomDockOrder = decoded['bottomDockOrder'];
+      List<String> validDockOrder(Object? value, List<String> fallback) {
+        if (value is! List) return fallback;
+        final accepted = <String>[];
+        for (final item in value.whereType<String>()) {
+          if (validPanels.contains(item) && !accepted.contains(item)) {
+            accepted.add(item);
+          }
+        }
+        return accepted;
+      }
+      _leftDockPanelOrder
+        ..clear()
+        ..addAll(validDockOrder(leftDockOrder, _leftDockPanelOrder));
+      _topDockPanelOrder
+        ..clear()
+        ..addAll(validDockOrder(topDockOrder, _topDockPanelOrder));
+      _bottomDockPanelOrder
+        ..clear()
+        ..addAll(validDockOrder(bottomDockOrder, _bottomDockPanelOrder));
+      if (_leftDockPanelOrder.isEmpty) {
+        _activeLeftDockPanel = '';
+      } else {
+        final activeLeft = decoded['activeLeftDockPanel'];
+        _activeLeftDockPanel = _leftDockPanelOrder.contains(activeLeft)
+            ? activeLeft as String
+            : _leftDockPanelOrder.first;
+      }
+      if (_topDockPanelOrder.isEmpty) {
+        _activeTopDockPanel = null;
+      } else {
+        final activeTop = decoded['activeTopDockPanel'];
+        _activeTopDockPanel = _topDockPanelOrder.contains(activeTop)
+            ? activeTop as String
+            : _topDockPanelOrder.first;
+      }
+      if (_bottomDockPanelOrder.isEmpty) {
+        _activeBottomDockPanel = '';
+      } else {
+        final activeBottom = decoded['activeBottomDockPanel'];
+        _activeBottomDockPanel = _bottomDockPanelOrder.contains(activeBottom)
+            ? activeBottom as String
+            : _bottomDockPanelOrder.first;
+      }
       final panelOrder = decoded['panelOrder'];
       if (panelOrder is List) {
         final validOrder = panelOrder
@@ -2802,6 +2857,23 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             _floatingWorkspacePanelOrder.add(item);
           }
         }
+      }
+      for (final id in _floatingWorkspacePanels) {
+        _leftDockPanelOrder.remove(id);
+        _topDockPanelOrder.remove(id);
+        _bottomDockPanelOrder.remove(id);
+      }
+      if (!_leftDockPanelOrder.contains(_activeLeftDockPanel)) {
+        _activeLeftDockPanel =
+            _leftDockPanelOrder.isEmpty ? '' : _leftDockPanelOrder.first;
+      }
+      if (!_topDockPanelOrder.contains(_activeTopDockPanel)) {
+        _activeTopDockPanel =
+            _topDockPanelOrder.isEmpty ? null : _topDockPanelOrder.first;
+      }
+      if (!_bottomDockPanelOrder.contains(_activeBottomDockPanel)) {
+        _activeBottomDockPanel =
+            _bottomDockPanelOrder.isEmpty ? '' : _bottomDockPanelOrder.first;
       }
       if (rects is Map) {
         for (final entry in rects.entries) {
@@ -2831,9 +2903,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       if (rightWidth is num && rightWidth.isFinite) {
         _rightPanelWidth = rightWidth.toDouble().clamp(300.0, 560.0).toDouble();
       }
-      final remaining = _rightPanelOrder.where(
-        (panel) => !_floatingWorkspacePanels.contains('Inspector:$panel'),
-      );
+      final remaining = _rightDockedPanelIds;
       if (_floatingWorkspacePanels.contains('Inspector:$_panel') &&
           remaining.isNotEmpty) {
         _panel = remaining.first;
@@ -2864,6 +2934,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             .where(_floatingWorkspacePanels.contains)
             .toList(),
         'panelOrder': _rightPanelOrder,
+        'leftDockOrder': _leftDockPanelOrder,
+        'topDockOrder': _topDockPanelOrder,
+        'bottomDockOrder': _bottomDockPanelOrder,
+        'activeLeftDockPanel': _activeLeftDockPanel,
+        'activeTopDockPanel': _activeTopDockPanel,
+        'activeBottomDockPanel': _activeBottomDockPanel,
         'activePanel': _panel,
         'leftPanel': _leftPanel,
         'rects': {
