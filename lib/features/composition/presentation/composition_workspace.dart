@@ -2581,8 +2581,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               } else if (panel == 'dock-all') {
                 _dockAllWorkspacePanels();
               } else {
-                setState(() => _panel = panel);
-                _scheduleWorkspaceLayoutSave();
+                if (_rightPanelOrder.contains(panel)) {
+                  _dockWorkspacePanelToZone('Inspector:$panel', 'right');
+                } else {
+                  setState(() => _panel = panel);
+                  _scheduleWorkspaceLayoutSave();
+                }
               }
             },
           ),
@@ -2917,6 +2921,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           _bottomDockPanelOrder.add(id);
           _activeBottomDockPanel = id;
           break;
+      }
+      if (id.startsWith('Inspector:') &&
+          targetZone != 'right' &&
+          _panel == id.substring('Inspector:'.length)) {
+        _panel = _fallbackRightPanel ?? '';
       }
       _workspacePanelDropAccepted = true;
     });
@@ -3375,8 +3384,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         _rightPanelWidth = rightWidth.toDouble().clamp(300.0, 560.0).toDouble();
       }
       final remaining = _rightDockedPanelIds;
-      if (_floatingWorkspacePanels.contains('Inspector:$_panel') &&
-          remaining.isNotEmpty) {
+      if (!_rightDockedPanelIds.contains(_panel) && remaining.isNotEmpty) {
         _panel = remaining.first;
       }
       _workspaceLayoutLoaded = true;
@@ -3567,15 +3575,22 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
     if (floating) {
       return Tooltip(
-        message: 'Drag to move this floating panel',
+        message: 'Drag to move or dock this floating panel',
         child: MouseRegion(
           cursor: SystemMouseCursors.move,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _raiseFloatingWorkspacePanel(id),
-            onPanStart: (_) => _raiseFloatingWorkspacePanel(id),
-            onPanUpdate: (details) => _moveWorkspacePanel(id, details.delta),
-            onPanEnd: (_) => _scheduleWorkspaceLayoutSave(),
+          child: Draggable<String>(
+            data: id,
+            onDragStarted: () {
+              _raiseFloatingWorkspacePanel(id);
+              _onWorkspacePanelDragStarted(id);
+            },
+            dragAnchorStrategy: pointerDragAnchorStrategy,
+            feedback: Material(
+              color: Colors.transparent,
+              child: Icon(Icons.open_with, size: 25, color: palette.accent),
+            ),
+            childWhenDragging: Opacity(opacity: 0.35, child: handle),
+            onDragEnd: (details) => _onWorkspacePanelDragEnded(id, details),
             child: handle,
           ),
         ),
@@ -8147,6 +8162,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          _workspacePanelDragHandle('Inspector:${item.$1}'),
                           Icon(
                             item.$3,
                             size: 13,
