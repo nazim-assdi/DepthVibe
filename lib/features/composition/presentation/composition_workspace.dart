@@ -5267,7 +5267,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           }
           if (snapshot.hasError) {
             return Center(
-              child: Text('Source preview failed\\n${snapshot.error}',
+              child: Text('Source preview failed\n${snapshot.error}',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Color(0xFFE29A9A), fontSize: 9)),
             );
