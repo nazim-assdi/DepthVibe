@@ -3255,7 +3255,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           if (!target.contains(id)) target.add(id);
           _workspaceSplitActivePanels[zone] = id;
         } else {
-          _panel = id.substring('Inspector:'.length);
+          final panelName = id.substring('Inspector:'.length);
+          if (beforeId != null && beforeId.startsWith('Inspector:')) {
+            _rightPanelOrder.remove(panelName);
+            final beforeName = beforeId.substring('Inspector:'.length);
+            final beforeIndex = _rightPanelOrder.indexOf(beforeName);
+            if (beforeIndex >= 0) {
+              _rightPanelOrder.insert(beforeIndex, panelName);
+            } else {
+              _rightPanelOrder.add(panelName);
+            }
+          }
+          _panel = panelName;
         }
       } else {
         final target = groupIndex == 1
@@ -3564,6 +3575,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                               setState(() {
                                 if (zone == 'right') {
                                   _panel = id.substring('Inspector:'.length);
+                                  if (groupIndex == 1) {
+                                    _workspaceSplitActivePanels[zone] = id;
+                                  }
                                 } else if (groupIndex == 1) {
                                   _workspaceSplitActivePanels[zone] = id;
                                 } else {
@@ -3677,8 +3691,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               }
             : null,
         child: SizedBox(
-          width: horizontal ? 6 : double.infinity,
-          height: horizontal ? double.infinity : 6,
+          width: horizontal ? 6 : null,
+          height: horizontal ? null : 6,
           child: Center(
             child: Container(
               width: horizontal ? 2 : 30,
