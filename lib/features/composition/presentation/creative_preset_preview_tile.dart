@@ -132,7 +132,7 @@ class _CreativePresetPreviewTileState extends State<CreativePresetPreviewTile>
                       widget.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: palette.primaryText,
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
@@ -144,7 +144,7 @@ class _CreativePresetPreviewTileState extends State<CreativePresetPreviewTile>
                           (widget.metric.isEmpty ? '' : ' · ${widget.metric}'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: palette.secondaryText,
                         fontSize: 8,
                       ),
