@@ -2764,6 +2764,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       }
       final floating = decoded['floating'];
       final rects = decoded['rects'];
+      final activePanel = decoded['activePanel'];
+      final leftPanel = decoded['leftPanel'];
+      if (activePanel is String && _rightPanelOrder.contains(activePanel)) {
+        _panel = activePanel;
+      }
+      if (leftPanel is String &&
+          const {'Project', 'Effects & Presets', 'Info'}.contains(leftPanel)) {
+        _leftPanel = leftPanel;
+      }
       final panelOrder = decoded['panelOrder'];
       if (panelOrder is List) {
         final validOrder = panelOrder
@@ -2850,6 +2859,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             .where(_floatingWorkspacePanels.contains)
             .toList(),
         'panelOrder': _rightPanelOrder,
+        'activePanel': _panel,
+        'leftPanel': _leftPanel,
         'rects': {
           for (final entry in _floatingWorkspacePanelRects.entries)
             entry.key: [
