@@ -2997,13 +2997,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                                       ),
                                     ),
                                   ),
-                                  InkWell(
-                                    tooltip: bus.muted ? 'Unmute bus' : 'Mute bus',
-                                    onTap: () => _controller.updateAudioBus(bus.copyWith(muted: !bus.muted)),
-                                    child: Icon(
-                                      bus.muted ? Icons.volume_off : Icons.volume_up,
-                                      size: 12,
-                                      color: bus.muted ? const Color(0xFFE39C9C) : palette.secondaryText,
+                                  Tooltip(
+                                    message: bus.muted ? 'Unmute bus' : 'Mute bus',
+                                    child: InkWell(
+                                      onTap: () => _controller.updateAudioBus(bus.copyWith(muted: !bus.muted)),
+                                      child: Icon(
+                                        bus.muted ? Icons.volume_off : Icons.volume_up,
+                                        size: 12,
+                                        color: bus.muted ? const Color(0xFFE39C9C) : palette.secondaryText,
+                                      ),
                                     ),
                                   ),
                                 ],
