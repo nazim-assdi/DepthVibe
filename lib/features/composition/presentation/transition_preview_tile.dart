@@ -124,7 +124,7 @@ class _TransitionPreviewTileState extends State<TransitionPreviewTile>
                       widget.titleOverride ?? title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: palette.primaryText,
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
@@ -135,7 +135,7 @@ class _TransitionPreviewTileState extends State<TransitionPreviewTile>
                       widget.subtitleOverride ?? ('FFmpeg · ' + nativeName),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: palette.secondaryText,
                         fontSize: 8,
                       ),
