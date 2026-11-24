@@ -66,6 +66,7 @@ import 'color_curve_editor.dart';
 import 'color_scopes_view.dart';
 import 'transition_preview_tile.dart';
 import 'effect_preview_tile.dart';
+import 'creative_preset_preview_tile.dart';
 
 enum _CameraPreviewLayout { single, dual, quad }
 
@@ -6680,59 +6681,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     OverlayStickerDefinition asset, {
     required VoidCallback? onApply,
   }) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Row(
-          children: [
-            Container(
-              width: 72,
-              height: 62,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF3B4369), Color(0xFF20283D)],
-                ),
-              ),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  asset.textContent,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w900,
-                    color: _libraryColor(asset.textColor),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(asset.name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
-                  Text(asset.category.toUpperCase(),
-                    style: const TextStyle(fontSize: 8, color: Color(0xFF9FAFC9), fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 3),
-                  Text(asset.description, maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 9, color: Color(0xFFB5C1D4))),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: 'Add ${asset.name} sticker',
-              onPressed: onApply,
-              icon: const Icon(Icons.add_circle_outline, color: Color(0xFFBBAEFF)),
-            ),
-          ],
-        ),
-      ),
+    return CreativePresetPreviewTile(
+      title: asset.name,
+      category: asset.category,
+      description: asset.description,
+      kind: CreativePresetPreviewKind.sticker,
+      sampleText: asset.textContent,
+      sampleColor: _libraryColor(asset.textColor),
+      motionPreset: MotionPresetCatalog.find(asset.motionPresetId),
+      metric: asset.fontSize.round().toString() + ' pt',
+      onApply: onApply,
     );
   }
 
@@ -6740,17 +6698,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     TitlePresetDefinition preset, {
     required VoidCallback? onApply,
   }) {
-    return _buildAssetLibraryTile(
+    return CreativePresetPreviewTile(
       title: preset.name,
       category: preset.category,
       description: preset.description,
-      countLabel: preset.motionPresetId,
-      icon: Icons.title,
-      colors: const [Color(0xFF574B83), Color(0xFF27314D)],
-      actionLabel: 'ADD',
-      onApply: onApply,
+      kind: CreativePresetPreviewKind.title,
       sampleText: preset.sampleText,
       sampleColor: _libraryColor(preset.textColor),
+      motionPreset: MotionPresetCatalog.find(preset.motionPresetId),
+      metric: preset.motionPresetId,
+      onApply: onApply,
     );
   }
 
@@ -6857,7 +6814,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             _assetCountChip(Icons.color_lens_outlined, '${ColorPresetCatalog.all.length + EffectPresetCatalog.all.length} color looks'),
             _assetCountChip(Icons.auto_awesome, '${EffectCatalog.all.length} built-in effects'),
             _assetCountChip(Icons.swap_horiz, '${TransitionPresetCatalog.all.length} transition recipes'),
-            _assetCountChip(Icons.library_books_outlined, '399 built-in catalog entries'),
+            _assetCountChip(
+              Icons.library_books_outlined,
+              '${AudioPresetCatalog.all.length + ColorPresetCatalog.all.length + CreativeAssetPackCatalog.all.length + EffectCatalog.all.length + EffectPresetCatalog.all.length + MotionPresetCatalog.all.length + OpenAssetSourceCatalog.all.length + OverlayStickerCatalog.all.length + TitlePresetCatalog.all.length + TransitionPresetCatalog.all.length} catalog entries',
+            ),
             _assetCountChip(Icons.public, '${OpenAssetSourceCatalog.all.length} open asset sources'),
           ],
         ),
@@ -6907,14 +6867,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           const Divider(height: 20),
           _panelHeader('MOTION', Icons.animation),
           for (final preset in motion)
-            _buildAssetLibraryTile(
+            CreativePresetPreviewTile(
               title: preset.name,
               category: preset.category,
               description: preset.description,
-              countLabel: '${preset.tracks.length} tracks · ${preset.durationMs} ms',
-              icon: Icons.motion_photos_on_outlined,
-              colors: const [Color(0xFF3C927E), Color(0xFF174C57)],
-              actionLabel: 'APPLY',
+              kind: CreativePresetPreviewKind.motion,
+              motionPreset: preset,
+              metric: '${preset.tracks.length} tracks · ${preset.durationMs} ms',
               onApply: canApplyLayer ? () {
                 _controller.applyMotionPreset(preset.id);
                 setState(() => _notice = 'Applied ${preset.name} keyframe animation.');
@@ -6927,16 +6886,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           const Divider(height: 20),
           _panelHeader('AUDIO PRESETS', Icons.graphic_eq),
           for (final preset in audio)
-            _buildAssetLibraryTile(
+            CreativePresetPreviewTile(
               title: preset.name,
               category: preset.category,
               description: preset.description,
-              countLabel: 'EQ · gain · fades',
-              icon: Icons.equalizer,
-              colors: const [Color(0xFF287D87), Color(0xFF18384E)],
-              actionLabel: 'APPLY',
+              kind: CreativePresetPreviewKind.audio,
+              audioPreset: preset,
+              metric: 'GAIN ${preset.gainDb.toStringAsFixed(1)} dB',
               onApply: isAudioTarget ? () => _applyAudioPreset(preset, layer) : null,
-              sampleText: 'L  ▂▅▃▆  R',
             ),
           if (!isAudioTarget)
             const Text('Select an audio or video layer before applying an audio preset.', style: TextStyle(fontSize: 9, color: Color(0xFFE2C58E))),
@@ -6963,16 +6920,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           const Divider(height: 20),
           _panelHeader('COLOR PRESETS', Icons.color_lens_outlined),
           for (final preset in colors)
-            _buildAssetLibraryTile(
-              title: preset.name,
-              category: preset.category,
-              description: preset.description,
-              countLabel: 'primary grade',
-              icon: Icons.palette_outlined,
-              colors: const [Color(0xFFB66E4E), Color(0xFF4F557D)],
-              actionLabel: 'APPLY',
+            EffectPreviewTile(
+              effect: EffectCatalog.find('color_grade')!,
+              titleOverride: preset.name,
+              subtitleOverride: '${preset.category} · live primary grade',
+              previewEffects: [
+                EffectInstance(
+                  id: 'preview-color-${preset.id}',
+                  effectId: 'color_grade',
+                  name: preset.name,
+                  parameters: preset.parameters,
+                ),
+              ],
               onApply: isVisualTarget ? () => _applyColorPreset(preset, layer) : null,
-              sampleText: 'Aa',
             ),
           if (colors.isEmpty)
             const Text('No color presets match this search.', style: TextStyle(fontSize: 10)),
@@ -6987,7 +6947,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             EffectPreviewTile(
               effect: EffectCatalog.find(preset.steps.first.effectId)!,
               titleOverride: preset.name,
-              subtitleOverride: '${preset.category} · ${preset.steps.length} effects · first-effect preview',
+              subtitleOverride: '${preset.category} · ${preset.steps.length} live effects',
+              previewEffects: [
+                for (var index = 0; index < preset.steps.length; index++)
+                  EffectInstance(
+                    id: 'preview-${preset.id}-$index',
+                    effectId: preset.steps[index].effectId,
+                    name: EffectCatalog.find(preset.steps[index].effectId)!.name,
+                    parameters: preset.steps[index].parameters,
+                  ),
+              ],
               onApply: canApplyLayer ? () {
                 _controller.applyEffectPreset(preset.id);
                 setState(() => _notice = 'Applied ${preset.name} effect stack.');
