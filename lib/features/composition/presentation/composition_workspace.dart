@@ -3465,23 +3465,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
   void _beginWorkspacePanelDrag(String id) {
-    if (!_floatingWorkspacePanels.contains(id)) {
-      _floatingWorkspacePanelRects[id] =
-          _defaultWorkspacePanelRect(id, _workspaceViewportSize);
-      _floatingWorkspacePanels.add(id);
-      if (id.startsWith('Inspector:')) {
-        final panelId = id.substring('Inspector:'.length);
-        if (_panel == panelId) {
-          final remaining = _rightPanelOrder.where(
-            (panel) => !_floatingWorkspacePanels.contains('Inspector:$panel'),
-          );
-          if (remaining.isNotEmpty) _panel = remaining.first;
-        }
+    setState(() {
+      _removeWorkspacePanelFromDockGroups(id);
+      if (!_floatingWorkspacePanels.contains(id)) {
+        _floatingWorkspacePanelRects[id] =
+            _defaultWorkspacePanelRect(id, _workspaceViewportSize);
+        _floatingWorkspacePanels.add(id);
       }
-    }
-    _floatingWorkspacePanelOrder.remove(id);
-    _floatingWorkspacePanelOrder.add(id);
-    setState(() {});
+      _floatingWorkspacePanelOrder.remove(id);
+      _floatingWorkspacePanelOrder.add(id);
+    });
     _scheduleWorkspaceLayoutSave();
   }
 
@@ -3534,15 +3527,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
   void _dockWorkspacePanel(String id) {
-    setState(() {
-      _floatingWorkspacePanels.remove(id);
-      _floatingWorkspacePanelOrder.remove(id);
-      _floatingWorkspacePanelRects.remove(id);
-      if (id.startsWith('Inspector:')) {
-        _panel = id.substring('Inspector:'.length);
-      }
-    });
-    _scheduleWorkspaceLayoutSave();
+    final zone = id.startsWith('Inspector:')
+        ? 'right'
+        : id == 'Project' ? 'left' : 'bottom';
+    _dockWorkspacePanelToZone(id, zone);
   }
 
   void _dockAllWorkspacePanels() {
@@ -3550,6 +3538,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       _floatingWorkspacePanels.clear();
       _floatingWorkspacePanelOrder.clear();
       _floatingWorkspacePanelRects.clear();
+      _leftDockPanelOrder
+        ..clear()
+        ..add('Project');
+      _activeLeftDockPanel = 'Project';
+      _topDockPanelOrder.clear();
+      _activeTopDockPanel = null;
+      _bottomDockPanelOrder
+        ..clear()
+        ..add('Timeline');
+      _activeBottomDockPanel = 'Timeline';
+      _panel = 'Transform';
+      _leftPanel = 'Project';
     });
     _scheduleWorkspaceLayoutSave();
   }
@@ -3587,30 +3587,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         cursor: SystemMouseCursors.grab,
         child: Draggable<String>(
           data: id,
+          onDragStarted: () => _onWorkspacePanelDragStarted(id),
           dragAnchorStrategy: pointerDragAnchorStrategy,
           feedback: Material(
             color: Colors.transparent,
             child: Icon(Icons.open_with, size: 25, color: palette.accent),
           ),
           childWhenDragging: Opacity(opacity: 0.35, child: handle),
-          onDragEnd: (details) {
-            _beginWorkspacePanelDrag(id);
-            final current = _floatingWorkspacePanelRects[id];
-            if (current == null) return;
-            final viewport = _workspaceViewportSize;
-            final left = (details.offset.dx - 14)
-                .clamp(0.0, math.max(0.0, viewport.width - 110))
-                .toDouble();
-            final top = (details.offset.dy - 58 - 14)
-                .clamp(0.0, math.max(0.0, viewport.height - 42))
-                .toDouble();
-            setState(() {
-              _floatingWorkspacePanelRects[id] = current.shift(
-                Offset(left - current.left, top - current.top),
-              );
-            });
-            _scheduleWorkspaceLayoutSave();
-          },
+          onDragEnd: (details) => _onWorkspacePanelDragEnded(id, details),
           child: handle,
         ),
       ),
@@ -8067,19 +8051,17 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   void _reorderRightPanels(int oldIndex, int newIndex) {
     if (newIndex > oldIndex) newIndex--;
     setState(() {
-      final floatingSlots = _rightPanelOrder
-          .map((id) => _floatingWorkspacePanels.contains('Inspector:$id'))
+      final rightSlots = _rightPanelOrder
+          .map((id) => !_rightDockedPanelIds.contains(id))
           .toList();
-      final visiblePanels = _rightPanelOrder
-          .where((id) => !_floatingWorkspacePanels.contains('Inspector:$id'))
-          .toList();
+      final visiblePanels = _rightDockedPanelIds;
       if (oldIndex < 0 || oldIndex >= visiblePanels.length) return;
       final panel = visiblePanels.removeAt(oldIndex);
       final targetIndex = newIndex.clamp(0, visiblePanels.length);
       visiblePanels.insert(targetIndex, panel);
       var visibleIndex = 0;
       for (var index = 0; index < _rightPanelOrder.length; index++) {
-        if (!floatingSlots[index]) {
+        if (!rightSlots[index]) {
           _rightPanelOrder[index] = visiblePanels[visibleIndex++];
         }
       }
@@ -8117,7 +8099,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final orderedPanels = _rightPanelOrder
         .where((id) =>
             panelById.containsKey(id) &&
-            !_floatingWorkspacePanels.contains('Inspector:$id'))
+            !_floatingWorkspacePanels.contains('Inspector:$id') &&
+            !_isPanelInSideDockGroup('Inspector:$id'))
         .map((id) => panelById[id]!)
         .toList();
     final active = panelById[activePanelId] ?? panels.first;
