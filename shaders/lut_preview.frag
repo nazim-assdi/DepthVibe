@@ -2,7 +2,7 @@
 #include <flutter/runtime_effect.glsl>
 
 uniform vec2 u_size;
-uniform float u_lut_size;
+uniform float u_cube_edge;
 uniform vec3 u_domain_min;
 uniform vec3 u_domain_max;
 uniform sampler2D u_texture;
@@ -20,7 +20,7 @@ vec3 lutCell(float red, float green, float blue, float size) {
   return texture(u_lut, vec2(x, y)).rgb;
 }
 vec3 lookupLut(vec3 value) {
-  float n = max(2.0, u_lut_size);
+  float n = max(2.0, u_cube_edge);
   vec3 domain = max(u_domain_max - u_domain_min, vec3(0.000001));
   vec3 coords = clamp((value - u_domain_min) / domain, 0.0, 1.0) * (n - 1.0);
   vec3 lo = floor(coords);
