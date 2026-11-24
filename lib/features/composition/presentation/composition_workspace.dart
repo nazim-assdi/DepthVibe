@@ -2464,7 +2464,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       'After Effects', 'Standard', 'Editing', 'Animation',
       'Effects', 'Color', 'Audio', '3D',
     };
-    if (cleanedName.isEmpty || reservedNames.contains(cleanedName) || !mounted) {
+    if (!mounted || cleanedName.isEmpty) return;
+    if (reservedNames.contains(cleanedName)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose a different name; this is a built-in workspace.')),
+      );
       return;
     }
     setState(() {
@@ -2585,6 +2589,37 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           if (validZones.contains(entry.key) && entry.value is num) {
             _workspaceSplitRatios[entry.key as String] =
                 (entry.value as num).toDouble().clamp(0.2, 0.8).toDouble();
+          }
+        }
+      }
+      for (final zone in _workspaceSplitPanelOrders.keys) {
+        final panels = _workspaceSplitPanelOrders[zone]!;
+        _workspaceSplitActivePanels.putIfAbsent(
+          zone,
+          () => panels.isEmpty ? '' : panels.first,
+        );
+        _workspaceSplitHorizontal.putIfAbsent(zone, () => true);
+        _workspaceSplitRatios.putIfAbsent(zone, () => 0.5);
+      }
+      _floatingWorkspacePanelRects.clear();
+      final rects = snapshot['rects'];
+      if (rects is Map) {
+        for (final entry in rects.entries) {
+          final value = entry.value;
+          if (entry.key is String &&
+              validPanels.contains(entry.key) &&
+              value is List &&
+              value.length == 4 &&
+              value.every((part) => part is num && part.isFinite)) {
+            final rect = Rect.fromLTWH(
+              (value[0] as num).toDouble(),
+              (value[1] as num).toDouble(),
+              (value[2] as num).toDouble(),
+              (value[3] as num).toDouble(),
+            );
+            if (rect.width >= 220 && rect.height >= 180) {
+              _floatingWorkspacePanelRects[entry.key as String] = rect;
+            }
           }
         }
       }
@@ -3660,6 +3695,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   Widget _buildWorkspaceDockSplitHandle(String zone, bool horizontal) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final extent = zone == 'left'
+        ? (horizontal ? _leftPanelWidth : _workspaceViewportSize.height)
+        : zone == 'right'
+            ? (horizontal ? _rightPanelWidth : _workspaceViewportSize.height)
+            : zone == 'top'
+                ? (horizontal ? _workspaceViewportSize.width : _topDockHeight)
+                : (horizontal ? _workspaceViewportSize.width : _bottomDockHeight);
     return MouseRegion(
       cursor: horizontal
           ? SystemMouseCursors.resizeColumn
@@ -3671,7 +3713,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 setState(() {
                   _workspaceSplitRatios[zone] =
                       ((_workspaceSplitRatios[zone] ?? 0.5) +
-                              details.delta.dx / math.max(1, _workspaceViewportSize.width))
+                              details.delta.dx / math.max(1, extent))
                           .clamp(0.2, 0.8)
                           .toDouble();
                 });
@@ -3683,7 +3725,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 setState(() {
                   _workspaceSplitRatios[zone] =
                       ((_workspaceSplitRatios[zone] ?? 0.5) +
-                              details.delta.dy / math.max(1, _workspaceViewportSize.height))
+                              details.delta.dy / math.max(1, extent))
                           .clamp(0.2, 0.8)
                           .toDouble();
                 });
