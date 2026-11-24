@@ -48,7 +48,7 @@ void main() {
   });
 
   testWidgets('title card shows the actual preset sample text', (tester) async {
-    await tester.pumpWidget(const MaterialApp(
+    await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: CreativePresetPreviewTile(
           title: 'Epic Feature Title',
