@@ -232,15 +232,15 @@ class DepthVibeTheme {
     switch (appearance) {
       case DepthVibeAppearance.dark:
         return const DepthVibePalette(
-          appBackground: Color(0xFF0B0E15),
-          toolbar: Color(0xFF111723),
-          panel: Color(0xFF151D2A),
-          panelRaised: Color(0xFF1D2838),
-          border: Color(0xFF303C50),
-          primaryText: Color(0xFFF0F3FA),
-          secondaryText: Color(0xFFA2AEC2),
-          accent: Color(0xFF8795FF),
-          accentSoft: Color(0xFF28345A),
+          appBackground: Color(0xFF090D14),
+          toolbar: Color(0xFF0F1723),
+          panel: Color(0xFF131D2B),
+          panelRaised: Color(0xFF1A2738),
+          border: Color(0xFF2A3A50),
+          primaryText: Color(0xFFF0F4FB),
+          secondaryText: Color(0xFF91A1B8),
+          accent: Color(0xFF8F9EFF),
+          accentSoft: Color(0xFF293657),
         );
       case DepthVibeAppearance.light:
         return const DepthVibePalette(
