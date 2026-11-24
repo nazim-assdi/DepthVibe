@@ -834,6 +834,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
   double _timelineHeight = 260;
+  String _studioMediaSearch = '';
+  String _studioMediaKind = 'All';
   final Set<String> _expandedTimelineLayers = {};
   String _effectCategory = 'All';
   String _effectSearch = '';
@@ -2239,13 +2241,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       tooltip: label,
       onSelected: onSelected,
       itemBuilder: (_) => items,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: palette.panelRaised.withValues(alpha: 0.44),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: palette.border.withValues(alpha: 0.72)),
+        ),
         child: Text(
           label.toUpperCase(),
           style: TextStyle(
-            fontSize: 9,
-            letterSpacing: 0.85,
+            fontSize: 8,
+            letterSpacing: 0.75,
             fontWeight: FontWeight.w800,
             color: palette.primaryText,
           ),
@@ -2354,6 +2362,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       ),
       child: Row(
         children: [
+          const SizedBox(width: 10),
+          const DepthVibeBrandMark(size: 22, showWordmark: false),
+          const SizedBox(width: 8),
+          Text(
+            'DEPTHVIBE',
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: 9,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.25,
+            ),
+          ),
+          const SizedBox(width: 8),
+          VerticalDivider(width: 1, indent: 7, endIndent: 7),
+          const SizedBox(width: 4),
           _workspaceMenuButton(
             'File',
             const [
@@ -2529,13 +2552,22 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ),
           const Spacer(),
           Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Text(
-              '${_workspacePreset.toUpperCase()} WORKSPACE  •  ${_controller.document.layers.length} LAYERS',
-              style: TextStyle(
-                fontSize: 8,
-                letterSpacing: 0.8,
-                color: palette.secondaryText,
+            padding: const EdgeInsets.only(left: 8, right: 12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+              decoration: BoxDecoration(
+                color: palette.accentSoft,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: palette.accent.withValues(alpha: 0.28)),
+              ),
+              child: Text(
+                '${_workspacePreset.toUpperCase()}  ·  ${_controller.document.layers.length} LAYERS',
+                style: TextStyle(
+                  fontSize: 7,
+                  letterSpacing: 0.75,
+                  fontWeight: FontWeight.w900,
+                  color: palette.accent,
+                ),
               ),
             ),
           ),
@@ -2871,9 +2903,77 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 34,
+                    child: TextField(
+                      onChanged: (value) => setState(() => _studioMediaSearch = value),
+                      style: TextStyle(color: palette.primaryText, fontSize: 10),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        prefixIcon: const Icon(Icons.search, size: 15),
+                        hintText: 'Find media or layer…',
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(7),
+                          borderSide: BorderSide(color: palette.border),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                SizedBox(
+                  width: 82,
+                  height: 34,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _studioMediaKind,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(7),
+                        borderSide: BorderSide(color: palette.border),
+                      ),
+                    ),
+                    items: const ['All', 'Video', 'Audio', 'Image', 'Text', 'Shape']
+                        .map((kind) => DropdownMenuItem(
+                          value: kind,
+                          child: Text(kind, style: const TextStyle(fontSize: 9)),
+                        ))
+                        .toList(),
+                    onChanged: (value) => setState(() => _studioMediaKind = value ?? 'All'),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             flex: 6,
-            child: _buildProjectPanel(layers, document),
+            child: _buildProjectPanel(
+              layers.where((layer) {
+                final query = _studioMediaSearch.trim().toLowerCase();
+                final matchesText = query.isEmpty ||
+                    (layer.name + ' ' + layer.kind.name).toLowerCase().contains(query);
+                final type = switch (layer.kind) {
+                  LayerKind.video => 'Video',
+                  LayerKind.audio => 'Audio',
+                  LayerKind.image || LayerKind.photoshopLayer => 'Image',
+                  LayerKind.text => 'Text',
+                  LayerKind.shape => 'Shape',
+                  _ => 'Other',
+                };
+                final matchesType = _studioMediaKind == 'All' ||
+                    type == _studioMediaKind;
+                return matchesText && matchesType;
+              }).toList(),
+              document,
+            ),
           ),
           Container(
             height: 36,
@@ -3162,6 +3262,61 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  Widget _buildMediaPoolLeading(
+    CompositionLayer layer,
+    CompositionDocument document,
+    bool selected,
+  ) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    Widget content;
+    final cachedVideo = _lastVideoFrames[layer.id];
+    if (layer.sourceUri != null &&
+        (layer.kind == LayerKind.image || layer.kind == LayerKind.photoshopLayer)) {
+      content = Image.file(
+        File(layer.sourceUri!),
+        fit: BoxFit.cover,
+        cacheWidth: 112,
+        errorBuilder: (_, __, ___) => Icon(Icons.broken_image_outlined, color: palette.secondaryText, size: 17),
+      );
+    } else if (layer.kind == LayerKind.video && cachedVideo != null) {
+      content = Image.file(
+        cachedVideo,
+        fit: BoxFit.cover,
+        cacheWidth: 112,
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => Icon(Icons.movie_outlined, color: palette.secondaryText, size: 17),
+      );
+    } else {
+      final icon = layer.kind == LayerKind.precomposition
+          ? Icons.folder_open
+          : _iconFor(layer.kind);
+      content = Container(
+        color: layer.kind == LayerKind.audio
+            ? const Color(0x222CCDB8)
+            : palette.panelRaised,
+        alignment: Alignment.center,
+        child: Icon(
+          icon,
+          size: 17,
+          color: selected ? palette.accent : palette.secondaryText,
+        ),
+      );
+    }
+    return Container(
+      width: 48,
+      height: 34,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: palette.panelRaised,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: selected ? palette.accent.withValues(alpha: 0.72) : palette.border,
+        ),
+      ),
+      child: content,
+    );
+  }
+
   Widget _buildProjectPanel(
     List<CompositionLayer> layers,
     CompositionDocument document,
@@ -3250,13 +3405,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 ),
                 selected: selected,
                 selectedTileColor: palette.accentSoft,
-                leading: Icon(
-                  layer.kind == LayerKind.precomposition
-                      ? Icons.folder_open
-                      : _iconFor(layer.kind),
-                  size: 16,
-                  color: selected ? palette.accent : palette.secondaryText,
-                ),
+                leading: _buildMediaPoolLeading(layer, document, selected),
                 title: Text(
                   layer.name,
                   maxLines: 1,
@@ -7721,11 +7870,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       padding: const EdgeInsets.symmetric(horizontal: 9),
                       decoration: BoxDecoration(
                         color: selected ? palette.accentSoft : Colors.transparent,
-                        border: Border(
-                          bottom: BorderSide(
-                            color: selected ? palette.accent : Colors.transparent,
-                            width: 2,
-                          ),
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(
+                          color: selected
+                              ? palette.accent.withValues(alpha: 0.42)
+                              : Colors.transparent,
                         ),
                       ),
                       child: Row(
@@ -11890,7 +12039,24 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 ),
               ),
               const Spacer(),
-              Text(_time(playhead), style: const TextStyle(fontSize: 10, color: Color(0xFFB7C4DC))),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: palette.panelRaised,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: palette.border),
+                ),
+                child: Text(
+                  _time(playhead),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                    color: palette.primaryText,
+                    fontFeatures: const [ui.FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
               Builder(
                 builder: (context) {
                   final stats = _previewFrameService.stats;
@@ -11908,9 +12074,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     '${stats.effectivePreviewFrameRate} FPS · '
                     '$decodeText · $queueText · $uiText · '
                     '${stats.droppedRequests} skipped',
-                    style: const TextStyle(
-                      fontSize: 8,
-                      color: Color(0xFF8D9CB3),
+                    style: TextStyle(
+                      fontSize: 7,
+                      letterSpacing: 0.1,
+                      color: palette.secondaryText,
                     ),
                   );
                 },
