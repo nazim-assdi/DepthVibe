@@ -2162,13 +2162,21 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                         _buildWorkspaceSplitter(left: false),
                         SizedBox(
                           width: _rightPanelWidth,
-                          child: _buildActivePanel(layer),
+                          child: _workspacePreset == 'Studio Edit'
+                              ? Column(
+                                  children: [
+                                    Expanded(child: _buildActivePanel(layer)),
+                                    _buildStudioMixerDock(layer),
+                                  ],
+                                )
+                              : _buildActivePanel(layer),
                         ),
                       ],
                     );
                   },
                 ),
               ),
+              _buildTimelineSplitter(),
               _buildPlayheadAwareTimeline(),
               if (_rendering || _projectBusy)
                 Padding(
@@ -11662,6 +11670,36 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  Widget _buildTimelineSplitter() {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeRow,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragUpdate: (details) {
+          setState(() {
+            _timelineHeight = (_timelineHeight - details.delta.dy)
+                .clamp(180.0, 520.0)
+                .toDouble();
+          });
+        },
+        child: Container(
+          height: 7,
+          color: palette.toolbar,
+          alignment: Alignment.center,
+          child: Container(
+            width: 58,
+            height: 2,
+            decoration: BoxDecoration(
+              color: palette.secondaryText.withOpacity(0.55),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPlayheadAwareTimeline() {
     final doc = _controller.document;
     return AnimatedBuilder(
@@ -11685,7 +11723,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
-      height: 260,
+      height: _timelineHeight,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: palette.toolbar,
