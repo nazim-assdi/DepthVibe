@@ -6695,6 +6695,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       'Color Presets',
       'Video Effects & Filters',
       'Transitions',
+      'Asset Packs & Sources',
     ];
     final query = _librarySearch.trim().toLowerCase();
     bool matches(Iterable<String> fields) =>
@@ -6744,6 +6745,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final showColors = showAll || _libraryFilter == 'Color Presets';
     final showEffects = showAll || _libraryFilter == 'Video Effects & Filters';
     final showTransitions = showAll || _libraryFilter == 'Transitions';
+    final showAssetPacks = showAll || _libraryFilter == 'Asset Packs & Sources';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -6970,8 +6972,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           if (transitions.isEmpty)
             const Text('No transition recipes match this search.', style: TextStyle(fontSize: 10)),
         ],
-        const Divider(height: 20),
-        _panelHeader('IMPORT & ONLINE LIBRARIES', Icons.cloud_download_outlined),
+        if (showAssetPacks) ...[
+          const Divider(height: 20),
+          _panelHeader('IMPORT & ONLINE LIBRARIES', Icons.cloud_download_outlined),
         Wrap(
           spacing: 8,
           runSpacing: 6,
@@ -7011,6 +7014,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         _buildCreativeAssetPackBrowser(),
         const SizedBox(height: 8),
         _buildMotionBroPackBrowser(),
+        ],
       ],
     );
   }
