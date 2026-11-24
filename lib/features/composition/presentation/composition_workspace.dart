@@ -2922,6 +2922,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _scheduleWorkspaceLayoutSave();
   }
 
+  void _raiseFloatingWorkspacePanel(String id) {
+    if (!_floatingWorkspacePanels.contains(id) ||
+        _floatingWorkspacePanelOrder.lastOrNull == id) {
+      return;
+    }
+    setState(() {
+      _floatingWorkspacePanelOrder.remove(id);
+      _floatingWorkspacePanelOrder.add(id);
+    });
+    _scheduleWorkspaceLayoutSave();
+  }
+
   void _moveWorkspacePanel(String id, Offset delta) {
     final current = _floatingWorkspacePanelRects[id];
     if (current == null) return;
@@ -2996,6 +3008,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           cursor: SystemMouseCursors.move,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
+            onTap: () => _raiseFloatingWorkspacePanel(id),
+            onPanStart: (_) => _raiseFloatingWorkspacePanel(id),
             onPanUpdate: (details) => _moveWorkspacePanel(id, details.delta),
             onPanEnd: (_) => _scheduleWorkspaceLayoutSave(),
             child: handle,
@@ -3071,6 +3085,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   showTabs: false,
                 );
       return Positioned.fromRect(
+        key: ValueKey<String>('floating-panel-$id'),
         rect: rect,
         child: Material(
           elevation: 18,
