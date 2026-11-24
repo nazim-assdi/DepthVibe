@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../data/audio_preset_catalog.dart';
 import '../data/motion_preset_catalog.dart';
-import '../domain/composition_models.dart';
 
 enum CreativePresetPreviewKind { motion, audio, title, sticker }
 
@@ -277,19 +276,19 @@ class _CreativePresetPainter extends CustomPainter {
     );
     canvas.drawRRect(
       RRect.fromRectAndRadius(card, const Radius.circular(6)),
-      Paint()..color = const Color.fromRGBO(116, 132, 255, opacity),
+      Paint()..color = Color.fromRGBO(116, 132, 255, opacity),
     );
     canvas.drawRRect(
       RRect.fromRectAndRadius(card.deflate(4), const Radius.circular(4)),
-      Paint()..color = const Color.fromRGBO(231, 238, 255, opacity * 0.92),
+      Paint()..color = Color.fromRGBO(231, 238, 255, opacity * 0.92),
     );
     canvas.drawCircle(
       Offset(0, -size.height * 0.04),
       size.height * 0.075,
-      Paint()..color = const Color.fromRGBO(45, 94, 142, opacity),
+      Paint()..color = Color.fromRGBO(45, 94, 142, opacity),
     );
     final line = Paint()
-      ..color = const Color.fromRGBO(68, 89, 132, opacity)
+      ..color = Color.fromRGBO(68, 89, 132, opacity)
       ..strokeWidth = 2;
     canvas.drawLine(
       Offset(-size.width * 0.12, size.height * 0.10),
