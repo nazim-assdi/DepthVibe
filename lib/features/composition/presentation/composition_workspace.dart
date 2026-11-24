@@ -5400,12 +5400,17 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           Flexible(
             flex: 4,
             child: _workspacePreset == 'Studio Edit' &&
-                    selected?.kind == LayerKind.video
+                    selected != null &&
+                    {
+                      LayerKind.video,
+                      LayerKind.image,
+                      LayerKind.photoshopLayer,
+                    }.contains(selected.kind)
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(
-                        child: _buildSourceMonitor(doc, selected!),
+                        child: _buildSourceMonitor(doc, selected),
                       ),
                       const SizedBox(width: 8),
                       Expanded(child: buildProgramViewer()),
