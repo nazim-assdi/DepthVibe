@@ -3144,7 +3144,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     final height = _workspaceViewportSize.height;
     Widget zone(String id, String label, IconData icon) {
       return DragTarget<String>(
-        onWillAccept: (data) => data != null,
+        onWillAccept: (data) =>
+            data != null && (id != 'right' || data.startsWith('Inspector:')),
         onMove: (_) {
           if (_highlightedWorkspaceDockZone != id) {
             setState(() => _highlightedWorkspaceDockZone = id);
@@ -3282,7 +3283,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       final topDockOrder = decoded['topDockOrder'];
       final bottomDockOrder = decoded['bottomDockOrder'];
       List<String> validDockOrder(Object? value, List<String> fallback) {
-        if (value is! List) return fallback;
+        if (value is! List) return List<String>.from(fallback);
         final accepted = <String>[];
         for (final item in value.whereType<String>()) {
           if (validPanels.contains(item) && !accepted.contains(item)) {
@@ -3617,7 +3618,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       );
     }
     return Tooltip(
-      message: 'Drag this handle away from the dock to detach the panel',
+      message: 'Drag to a highlighted docking zone or away from the workspace to float',
       child: MouseRegion(
         cursor: SystemMouseCursors.grab,
         child: Draggable<String>(
@@ -3677,7 +3678,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           child: Stack(
             fit: StackFit.expand,
             children: [
-              panel,
+              Listener(
+                onPointerDown: (_) => _raiseFloatingWorkspacePanel(id),
+                child: panel,
+              ),
               Positioned(
                 right: 1,
                 bottom: 1,
