@@ -833,6 +833,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   Size _previewPenLayerSize = Size.zero;
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
+  double _timelineHeight = 260;
   final Set<String> _expandedTimelineLayers = {};
   String _effectCategory = 'All';
   String _effectSearch = '';
@@ -2255,6 +2256,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           _graphEditorVisible = false;
           _leftPanelWidth = 270;
           _rightPanelWidth = 340;
+          _timelineHeight = 260;
           _rightPanelOrder
             ..clear()
             ..addAll([
@@ -2273,6 +2275,33 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               'Audio',
               'Bus Mixer',
               'Transitions',
+              'Library',
+            ]);
+        case 'Studio Edit':
+          _leftPanel = 'Project';
+          _panel = 'Effects';
+          _graphEditorVisible = false;
+          _leftPanelWidth = 292;
+          _rightPanelWidth = 326;
+          _timelineHeight = 330;
+          _rightPanelOrder
+            ..clear()
+            ..addAll([
+              'Transform',
+              'Effects',
+              'Audio',
+              'Bus Mixer',
+              'Color',
+              'Transitions',
+              'Animation',
+              'Layers',
+              'Timing',
+              'Typography',
+              'Shape',
+              'Masks',
+              'Tracking',
+              'Parent',
+              '3D',
               'Library',
             ]);
         case 'Standard':
@@ -2479,6 +2508,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             'Workspace',
             const [
               PopupMenuItem(value: 'After Effects', child: Text('After Effects · Default')),
+              PopupMenuItem(value: 'Studio Edit', child: Text('Studio Edit · Dual Viewer')),
               PopupMenuItem(value: 'Standard', child: Text('Standard')),
               PopupMenuItem(value: 'Editing', child: Text('Editing')),
               PopupMenuItem(value: 'Animation', child: Text('Animation')),
