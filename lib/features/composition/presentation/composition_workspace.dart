@@ -2460,7 +2460,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
     nameController.dispose();
     final cleanedName = name?.trim() ?? '';
-    if (cleanedName.isEmpty || !mounted) return;
+    const reservedNames = {
+      'After Effects', 'Standard', 'Editing', 'Animation',
+      'Effects', 'Color', 'Audio', '3D',
+    };
+    if (cleanedName.isEmpty || reservedNames.contains(cleanedName) || !mounted) {
+      return;
+    }
     setState(() {
       _customWorkspacePresets[cleanedName] = _captureWorkspaceLayoutState();
       _workspacePreset = cleanedName;
@@ -2475,10 +2481,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       jsonDecode(jsonEncode(stored)) as Map,
     );
     const validZones = {'left', 'right', 'top', 'bottom'};
+    final validRightPanels = List<String>.from(_rightPanelOrder);
     final validPanels = <String>{
       'Project',
       'Timeline',
-      for (final panel in _rightPanelOrder) 'Inspector:$panel',
+      for (final panel in validRightPanels) 'Inspector:$panel',
     };
     List<String> readOrder(Object? value, List<String> fallback) {
       if (value is! List) return List<String>.from(fallback);
@@ -2513,7 +2520,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ..clear()
         ..addAll((snapshot['panelOrder'] as List? ?? const [])
             .whereType<String>()
-            .where((id) => _rightPanelOrder.contains(id)));
+            .where(validRightPanels.contains));
       if (_rightPanelOrder.isEmpty) {
         _rightPanelOrder.addAll(validPanels
             .where((id) => id.startsWith('Inspector:'))
@@ -3258,7 +3265,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         if (existing >= 0) target.removeAt(existing);
         final targetIndex = beforeId == null
             ? target.length
-            : target.indexOf(beforeId).clamp(0, target.length);
+            : target.indexOf(beforeId).clamp(0, target.length).toInt();
         target.insert(targetIndex, id);
         if (groupIndex == 1) {
           _workspaceSplitActivePanels[zone] = id;
@@ -3708,13 +3715,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     }
     final horizontal = _workspaceSplitHorizontal[zone] ?? true;
     final ratio = (_workspaceSplitRatios[zone] ?? 0.5).clamp(0.2, 0.8);
-    final firstFlex = (ratio * 1000).round().clamp(200, 800);
+    final firstFlex = (ratio * 1000).round().clamp(200, 800).toInt();
     final secondFlex = 1000 - firstFlex;
     final activeSplit = _workspaceSplitActivePanels[zone] ?? '';
-    final firstHeight =
-        !horizontal && height != null ? height * ratio : height;
-    final secondHeight =
-        !horizontal && height != null ? height * (1 - ratio) : height;
+    final availableSplitHeight = height == null ? null : math.max(0, height - 6);
+    final firstHeight = !horizontal && availableSplitHeight != null
+        ? availableSplitHeight * ratio
+        : height;
+    final secondHeight = !horizontal && availableSplitHeight != null
+        ? availableSplitHeight * (1 - ratio)
+        : height;
     final first = Expanded(
       flex: firstFlex,
       child: _buildWorkspaceDockGroup(
@@ -4041,6 +4051,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         _leftDockPanelOrder.remove(id);
         _topDockPanelOrder.remove(id);
         _bottomDockPanelOrder.remove(id);
+        for (final panels in _workspaceSplitPanelOrders.values) {
+          panels.remove(id);
+        }
       }
       if (!_leftDockPanelOrder.contains(_activeLeftDockPanel)) {
         _activeLeftDockPanel =
@@ -4262,6 +4275,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ..clear()
         ..add('Timeline');
       _activeBottomDockPanel = 'Timeline';
+      _workspaceSplitPanelOrders.clear();
+      _workspaceSplitActivePanels.clear();
+      _workspaceSplitHorizontal.clear();
+      _workspaceSplitRatios.clear();
       _panel = 'Transform';
       _leftPanel = 'Project';
     });
