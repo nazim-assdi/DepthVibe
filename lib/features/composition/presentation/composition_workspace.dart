@@ -2764,6 +2764,18 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       }
       final floating = decoded['floating'];
       final rects = decoded['rects'];
+      final panelOrder = decoded['panelOrder'];
+      if (panelOrder is List) {
+        final validOrder = panelOrder
+            .whereType<String>()
+            .where(_rightPanelOrder.contains)
+            .toSet();
+        if (validOrder.length == _rightPanelOrder.length) {
+          _rightPanelOrder
+            ..clear()
+            ..addAll(validOrder);
+        }
+      }
       final validPanels = <String>{
         'Project',
         'Timeline',
@@ -2837,6 +2849,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         'floating': _floatingWorkspacePanelOrder
             .where(_floatingWorkspacePanels.contains)
             .toList(),
+        'panelOrder': _rightPanelOrder,
         'rects': {
           for (final entry in _floatingWorkspacePanelRects.entries)
             entry.key: [
@@ -7469,9 +7482,24 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   void _reorderRightPanels(int oldIndex, int newIndex) {
     if (newIndex > oldIndex) newIndex--;
     setState(() {
-      final panel = _rightPanelOrder.removeAt(oldIndex);
-      _rightPanelOrder.insert(newIndex, panel);
+      final floatingSlots = _rightPanelOrder
+          .map((id) => _floatingWorkspacePanels.contains('Inspector:$id'))
+          .toList();
+      final visiblePanels = _rightPanelOrder
+          .where((id) => !_floatingWorkspacePanels.contains('Inspector:$id'))
+          .toList();
+      if (oldIndex < 0 || oldIndex >= visiblePanels.length) return;
+      final panel = visiblePanels.removeAt(oldIndex);
+      final targetIndex = newIndex.clamp(0, visiblePanels.length);
+      visiblePanels.insert(targetIndex, panel);
+      var visibleIndex = 0;
+      for (var index = 0; index < _rightPanelOrder.length; index++) {
+        if (!floatingSlots[index]) {
+          _rightPanelOrder[index] = visiblePanels[visibleIndex++];
+        }
+      }
     });
+    _scheduleWorkspaceLayoutSave();
   }
 
   Widget _buildActivePanel(
