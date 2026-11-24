@@ -1,6 +1,8 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../app/depthvibe_settings.dart';
+
 import '../data/transition_catalog.dart';
 import '../domain/composition_models.dart';
 import 'transition_live_preview.dart';
@@ -70,6 +72,7 @@ class _TransitionPreviewTileState extends State<TransitionPreviewTile>
   Widget build(BuildContext context) {
     final title = TransitionCatalog.displayName(widget.kind);
     final nativeName = TransitionCatalog.xfadeName(widget.kind);
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
 
     return MouseRegion(
       onEnter: (_) => _startPreview(),
@@ -78,14 +81,21 @@ class _TransitionPreviewTileState extends State<TransitionPreviewTile>
         animation: _preview,
         builder: (context, child) => Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF172234),
-            borderRadius: BorderRadius.circular(9),
+            color: palette.panelRaised,
+            borderRadius: BorderRadius.circular(11),
             border: Border.all(
-              color: _hovered
-                  ? const Color(0xFF927BFF)
-                  : const Color(0xFF34445D),
-              width: _hovered ? 1.4 : 0.8,
+              color: _hovered ? palette.accent : palette.border,
+              width: _hovered ? 1.2 : 0.8,
             ),
+            boxShadow: _hovered
+                ? [
+                    BoxShadow(
+                      color: palette.accent.withValues(alpha: 0.12),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : const [],
           ),
           padding: const EdgeInsets.all(7),
           child: Row(
@@ -115,7 +125,7 @@ class _TransitionPreviewTileState extends State<TransitionPreviewTile>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: Color(0xFFE9EFFA),
+                        color: palette.primaryText,
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
                       ),
@@ -126,7 +136,7 @@ class _TransitionPreviewTileState extends State<TransitionPreviewTile>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: Color(0xFF93A5C0),
+                        color: palette.secondaryText,
                         fontSize: 8,
                       ),
                     ),
@@ -135,8 +145,8 @@ class _TransitionPreviewTileState extends State<TransitionPreviewTile>
                       _hovered ? 'LIVE PREVIEW' : 'HOVER TO PREVIEW',
                       style: TextStyle(
                         color: _hovered
-                            ? const Color(0xFFBBAEFF)
-                            : const Color(0xFF7185A3),
+                            ? palette.accent
+                            : palette.secondaryText,
                         fontSize: 7,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 0.6,
