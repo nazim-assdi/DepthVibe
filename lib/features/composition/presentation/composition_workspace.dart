@@ -825,6 +825,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   Size _previewPenLayerSize = Size.zero;
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
+  double _topDockHeight = 190;
+  double _bottomDockHeight = 260;
   final Set<String> _floatingWorkspacePanels = {};
   final Map<String, Rect> _floatingWorkspacePanelRects = {};
   final List<String> _floatingWorkspacePanelOrder = [];
@@ -2159,8 +2161,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   _activeTopDockPanel!,
                   doc,
                   layer,
-                  height: 190,
+                  height: _topDockHeight,
                 ),
+              if (_topDockPanelOrder.isNotEmpty)
+                _buildWorkspaceVerticalSplitter(top: true),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -2224,7 +2228,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   !_floatingWorkspacePanels.contains(_activeBottomDockPanel))
                 if (_bottomDockPanelOrder.length == 1 &&
                     _activeBottomDockPanel == 'Timeline')
-                  _buildPlayheadAwareTimeline()
+                  _buildPlayheadAwareTimeline(height: _bottomDockHeight)
                 else
                   _buildWorkspaceDockGroup(
                     'bottom',
@@ -2232,8 +2236,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     _activeBottomDockPanel,
                     doc,
                     layer,
-                    height: 260,
+                    height: _bottomDockHeight,
                   ),
+              if (_bottomDockPanelOrder.isNotEmpty)
+                _buildWorkspaceVerticalSplitter(top: false),
               if (_rendering || _projectBusy)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -3377,11 +3383,19 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       }
       final leftWidth = decoded['leftWidth'];
       final rightWidth = decoded['rightWidth'];
+      final topHeight = decoded['topHeight'];
+      final bottomHeight = decoded['bottomHeight'];
       if (leftWidth is num && leftWidth.isFinite) {
         _leftPanelWidth = leftWidth.toDouble().clamp(205.0, 420.0).toDouble();
       }
       if (rightWidth is num && rightWidth.isFinite) {
         _rightPanelWidth = rightWidth.toDouble().clamp(300.0, 560.0).toDouble();
+      }
+      if (topHeight is num && topHeight.isFinite) {
+        _topDockHeight = topHeight.toDouble().clamp(120.0, 360.0).toDouble();
+      }
+      if (bottomHeight is num && bottomHeight.isFinite) {
+        _bottomDockHeight = bottomHeight.toDouble().clamp(180.0, 520.0).toDouble();
       }
       final remaining = _rightDockedPanelIds;
       if (!_rightDockedPanelIds.contains(_panel) && remaining.isNotEmpty) {
@@ -3432,6 +3446,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         },
         'leftWidth': _leftPanelWidth,
         'rightWidth': _rightPanelWidth,
+        'topHeight': _topDockHeight,
+        'bottomHeight': _bottomDockHeight,
       };
       await file.writeAsString(jsonEncode(data), flush: true);
     } catch (error) {
@@ -3482,6 +3498,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       }
       _floatingWorkspacePanelOrder.remove(id);
       _floatingWorkspacePanelOrder.add(id);
+      if (id.startsWith('Inspector:') &&
+          _panel == id.substring('Inspector:'.length)) {
+        _panel = _fallbackRightPanel ?? '';
+      }
     });
     _scheduleWorkspaceLayoutSave();
   }
@@ -3686,6 +3706,40 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         ),
       );
     }).toList();
+  }
+
+
+  Widget _buildWorkspaceVerticalSplitter({required bool top}) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeRow,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onVerticalDragUpdate: (details) {
+          setState(() {
+            if (top) {
+              _topDockHeight = (_topDockHeight + details.delta.dy)
+                  .clamp(120.0, 360.0)
+                  .toDouble();
+            } else {
+              _bottomDockHeight = (_bottomDockHeight - details.delta.dy)
+                  .clamp(180.0, 520.0)
+                  .toDouble();
+            }
+          });
+          _scheduleWorkspaceLayoutSave();
+        },
+        child: SizedBox(
+          height: 6,
+          child: Center(
+            child: Container(
+              height: 1,
+              color: palette.border,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildWorkspaceSplitter({required bool left}) {
