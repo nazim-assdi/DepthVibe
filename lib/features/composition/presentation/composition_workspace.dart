@@ -834,6 +834,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
   double _timelineHeight = 260;
+  bool _studioShowMediaDock = true;
+  bool _studioShowInspectorDock = true;
+  bool _studioMediaGridView = false;
   String _studioMediaSearch = '';
   String _studioMediaKind = 'All';
   final Set<String> _expandedTimelineLayers = {};
@@ -2153,26 +2156,30 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        SizedBox(
-                          width: _leftPanelWidth,
-                          child: _buildLayerPanel(doc.layers),
-                        ),
-                        _buildWorkspaceSplitter(left: true),
+                        if (_workspacePreset != 'Studio Edit' || _studioShowMediaDock) ...[
+                          SizedBox(
+                            width: _leftPanelWidth,
+                            child: _buildLayerPanel(doc.layers),
+                          ),
+                          _buildWorkspaceSplitter(left: true),
+                        ],
                         Expanded(
                           child: _buildPlayheadAwareCanvas(),
                         ),
-                        _buildWorkspaceSplitter(left: false),
-                        SizedBox(
-                          width: _rightPanelWidth,
-                          child: _workspacePreset == 'Studio Edit'
-                              ? Column(
-                                  children: [
-                                    Expanded(child: _buildActivePanel(layer)),
-                                    _buildStudioMixerDock(layer),
-                                  ],
-                                )
-                              : _buildActivePanel(layer),
-                        ),
+                        if (_workspacePreset != 'Studio Edit' || _studioShowInspectorDock) ...[
+                          _buildWorkspaceSplitter(left: false),
+                          SizedBox(
+                            width: _rightPanelWidth,
+                            child: _workspacePreset == 'Studio Edit'
+                                ? Column(
+                                    children: [
+                                      Expanded(child: _buildActivePanel(layer)),
+                                      _buildStudioMixerDock(layer),
+                                    ],
+                                  )
+                                : _buildActivePanel(layer),
+                          ),
+                        ],
                       ],
                     );
                   },
@@ -2551,6 +2558,32 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             _applyWorkspacePreset,
           ),
           const Spacer(),
+          if (_workspacePreset == 'Studio Edit') ...[
+            Tooltip(
+              message: _studioShowMediaDock ? 'Hide Media Pool' : 'Show Media Pool',
+              child: IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: () => setState(() => _studioShowMediaDock = !_studioShowMediaDock),
+                icon: Icon(
+                  _studioShowMediaDock ? Icons.view_sidebar : Icons.view_sidebar_outlined,
+                  size: 16,
+                  color: _studioShowMediaDock ? palette.accent : palette.secondaryText,
+                ),
+              ),
+            ),
+            Tooltip(
+              message: _studioShowInspectorDock ? 'Hide Inspector' : 'Show Inspector',
+              child: IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: () => setState(() => _studioShowInspectorDock = !_studioShowInspectorDock),
+                icon: Icon(
+                  Icons.tune,
+                  size: 16,
+                  color: _studioShowInspectorDock ? palette.accent : palette.secondaryText,
+                ),
+              ),
+            ),
+          ],
           Padding(
             padding: const EdgeInsets.only(left: 8, right: 12),
             child: Container(
@@ -2917,6 +2950,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       fontWeight: FontWeight.w900,
                       color: palette.primaryText,
                     ),
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: _studioMediaGridView ? 'Show media list' : 'Show media thumbnails',
+                  onPressed: () => setState(() => _studioMediaGridView = !_studioMediaGridView),
+                  icon: Icon(
+                    _studioMediaGridView ? Icons.view_list : Icons.grid_view,
+                    size: 15,
                   ),
                 ),
                 IconButton(
@@ -3355,6 +3397,116 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  Widget _buildMediaPoolGridCard(
+    CompositionLayer layer,
+    CompositionDocument document,
+    bool selected,
+  ) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return InkWell(
+      onTap: () => _controller.selectLayer(layer.id),
+      borderRadius: BorderRadius.circular(9),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: selected ? palette.accentSoft : palette.panelRaised,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(
+            color: selected ? palette.accent : palette.border,
+            width: selected ? 1.25 : 0.8,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _buildMediaPoolLeading(layer, document, selected),
+                  Positioned(
+                    left: 5,
+                    top: 5,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: palette.toolbar.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        layer.kind.name.toUpperCase(),
+                        style: TextStyle(
+                          color: palette.primaryText,
+                          fontSize: 6.5,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.45,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 5,
+                    top: 5,
+                    child: Icon(
+                      selected ? Icons.check_circle : Icons.circle_outlined,
+                      size: 15,
+                      color: selected ? palette.accent : Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(7, 6, 6, 5),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          layer.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: palette.primaryText,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          layer.enabled ? 'READY' : 'HIDDEN',
+                          style: TextStyle(
+                            color: layer.enabled ? palette.secondaryText : const Color(0xFFE39C9C),
+                            fontSize: 6.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 23, height: 23),
+                    tooltip: layer.enabled ? 'Hide layer' : 'Show layer',
+                    onPressed: () => _controller.setLayerEnabled(layer.id, !layer.enabled),
+                    icon: Icon(
+                      layer.enabled ? Icons.visibility : Icons.visibility_off,
+                      size: 12,
+                      color: palette.secondaryText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildProjectPanel(
     List<CompositionLayer> layers,
     CompositionDocument document,
@@ -3410,7 +3562,23 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ),
         ),
         Expanded(
-          child: ListView.builder(
+          child: _studioMediaGridView
+              ? GridView.builder(
+                  padding: const EdgeInsets.all(8),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: 1.06,
+                  ),
+                  itemCount: layers.length,
+                  itemBuilder: (context, index) {
+                    final layer = layers[index];
+                    final selected = layer.id == document.selectedLayerId;
+                    return _buildMediaPoolGridCard(layer, document, selected);
+                  },
+                )
+              : ListView.builder(
             itemCount: layers.length,
             itemBuilder: (context, index) {
               final layer = layers[index];
@@ -3443,12 +3611,22 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 ),
                 selected: selected,
                 selectedTileColor: palette.accentSoft,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(7),
+                  side: BorderSide(
+                    color: selected ? palette.accent.withValues(alpha: 0.28) : Colors.transparent,
+                  ),
+                ),
                 leading: _buildMediaPoolLeading(layer, document, selected),
                 title: Text(
                   layer.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    color: palette.primaryText,
+                  ),
                 ),
                 subtitle: Text(
                   metadata.join(' · '),
