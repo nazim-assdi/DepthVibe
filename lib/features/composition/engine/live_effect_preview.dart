@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../data/effect_catalog.dart';
 import '../domain/composition_models.dart';
+import 'color_grade_preview.dart';
 
 /// GPU-backed, playhead-aware preview for every built-in DepthVibe effect.
 ///
@@ -127,6 +128,34 @@ class LiveEffectPreview {
       case 'camera_flash':
         final lift = value('brightness', 0.35).clamp(0.0, 2.0).toDouble() * 90;
         return _matrix(1, 0, 0, 0, lift, 0, 1, 0, 0, lift, 0, 0, 1, 0, lift);
+      case 'exposure':
+        final gain = math.pow(2, value('value', 0).clamp(-3.0, 3.0)).toDouble();
+        return _matrix(gain, 0, 0, 0, 0, 0, gain, 0, 0, 0, 0, 0, gain, 0, 0);
+      case 'hue_rotate':
+        final angle = value('degrees', 0) * math.pi / 180;
+        final cs = math.cos(angle);
+        final sn = math.sin(angle);
+        const lumR = 0.213, lumG = 0.715, lumB = 0.072;
+        return _matrix(
+          lumR + cs * (1-lumR) + sn * (-lumR),
+          lumG + cs * (-lumG) + sn * (-lumG),
+          lumB + cs * (-lumB) + sn * (1-lumB), 0, 0,
+          lumR + cs * (-lumR) + sn * 0.143,
+          lumG + cs * (1-lumG) + sn * 0.140,
+          lumB + cs * (-lumB) + sn * (-0.283), 0, 0,
+          lumR + cs * (-lumR) + sn * (-(1-lumR)),
+          lumG + cs * (-lumG) + sn * lumG,
+          lumB + cs * (1-lumB) + sn * lumB, 0, 0,
+        );
+      case 'vibrance':
+        final amount = value('intensity', 0.5).clamp(0.0, 3.0).toDouble();
+        return _saturation(1 + amount * 0.35);
+      case 'rgb_channel_mixer':
+        return _matrix(
+          value('rr', 1), value('rg', 0), value('rb', 0), 0, 0,
+          value('gr', 0), value('gg', 1), value('gb', 0), 0, 0,
+          value('br', 0), value('bg', 0), value('bb', 1), 0, 0,
+        );
       case 'bleach_bypass':
         final amount = value('saturation', 0.45).clamp(0.0, 1.0).toDouble();
         final contrast = value('contrast', 1.35).clamp(0.5, 2.5).toDouble();
@@ -287,6 +316,23 @@ class _LiveEffectStackState extends State<_LiveEffectStack> {
     final matrix = LiveEffectPreview.colorMatrixFor(effect, widget.timeMs);
     if (matrix != null) {
       child = ColorFiltered(colorFilter: ColorFilter.matrix(matrix), child: child);
+    }
+    if (effect.effectId == 'color_grade') {
+      final filter = ColorGradePreview.filterFor(effect, widget.timeMs);
+      if (filter != null) child = ColorFiltered(colorFilter: filter, child: child);
+    }
+    if (effect.effectId == 'colorize') {
+      final hue = value('hue', 210).clamp(0.0, 360.0).toDouble();
+      final saturation = value('saturation', 0.65).clamp(0.0, 1.0).toDouble();
+      final lightness = (0.7 + value('lightness', 0)).clamp(0.0, 1.0).toDouble();
+      final tint = HSVColor.fromAHSV(1, hue, saturation, lightness).toColor();
+      child = ColorFiltered(
+        colorFilter: ColorFilter.mode(
+          tint.withOpacity(value('mix', 0.5).clamp(0.0, 1.0).toDouble()),
+          BlendMode.color,
+        ),
+        child: child,
+      );
     }
     switch (effect.effectId) {
       case 'gaussian_blur':
