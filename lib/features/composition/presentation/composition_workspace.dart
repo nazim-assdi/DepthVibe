@@ -2804,7 +2804,236 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+  Widget _buildStudioLibraryDock(List<CompositionLayer> layers) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final document = _controller.document;
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.panel,
+        border: Border(right: BorderSide(color: palette.border)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: palette.toolbar,
+              border: Border(bottom: BorderSide(color: palette.border)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.video_library_outlined, size: 15, color: palette.accent),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text('MEDIA POOL  ·  ${layers.length}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      letterSpacing: 0.9,
+                      fontWeight: FontWeight.w900,
+                      color: palette.primaryText,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Import video',
+                  onPressed: () => _addLayer(LayerKind.video),
+                  icon: const Icon(Icons.add, size: 17),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Choose media or effects browser',
+                  onSelected: (value) => setState(() => _leftPanel = value),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'Project', child: Text('Media / Layers')),
+                    PopupMenuItem(value: 'Effects & Presets', child: Text('Effects & Presets')),
+                    PopupMenuItem(value: 'Info', child: Text('Composition Info')),
+                  ],
+                  child: const Padding(
+                    padding: EdgeInsets.all(5),
+                    child: Icon(Icons.more_vert, size: 17),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 6,
+            child: _buildProjectPanel(layers, document),
+          ),
+          Container(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: palette.toolbar,
+              border: Border(
+                top: BorderSide(color: palette.border),
+                bottom: BorderSide(color: palette.border),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.auto_awesome, size: 14, color: palette.accent),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text('EFFECTS & PRESETS',
+                    style: TextStyle(
+                      fontSize: 9,
+                      letterSpacing: 0.8,
+                      fontWeight: FontWeight.w900,
+                      color: palette.primaryText,
+                    ),
+                  ),
+                ),
+                Text('${EffectCatalog.all.length} LIVE',
+                  style: TextStyle(fontSize: 7, fontWeight: FontWeight.w900, color: palette.accent),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 5,
+            child: _buildLeftEffectsPanel(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStudioMixerDock(CompositionLayer? layer) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final buses = _controller.document.audioBuses;
+    return Container(
+      height: 184,
+      decoration: BoxDecoration(
+        color: palette.panel,
+        border: Border(
+          top: BorderSide(color: palette.border),
+          left: BorderSide(color: palette.border),
+        ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: palette.toolbar,
+              border: Border(bottom: BorderSide(color: palette.border)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.graphic_eq, size: 14, color: palette.accent),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text('AUDIO MIXER',
+                    style: TextStyle(
+                      color: palette.primaryText,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+                Text('${buses.length} BUSES',
+                  style: TextStyle(color: palette.secondaryText, fontSize: 7, fontWeight: FontWeight.w800),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Open full Audio Bus Mixer',
+                  onPressed: () => setState(() => _panel = 'Bus Mixer'),
+                  icon: const Icon(Icons.open_in_full, size: 13),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: buses.isEmpty
+                ? Center(
+                    child: Text('No audio buses',
+                      style: TextStyle(color: palette.secondaryText, fontSize: 9)),
+                  )
+                : ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+                    children: [
+                      for (final bus in buses)
+                        Container(
+                          width: 102,
+                          margin: const EdgeInsets.only(right: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: palette.panelRaised,
+                            borderRadius: BorderRadius.circular(7),
+                            border: Border.all(color: palette.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(bus.isMaster ? 'MASTER' : bus.name.toUpperCase(),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: bus.isMaster ? const Color(0xFF7EDBCB) : palette.primaryText,
+                                        fontSize: 7,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ),
+                                  InkWell(
+                                    tooltip: bus.muted ? 'Unmute bus' : 'Mute bus',
+                                    onTap: () => _controller.updateAudioBus(bus.copyWith(muted: !bus.muted)),
+                                    child: Icon(
+                                      bus.muted ? Icons.volume_off : Icons.volume_up,
+                                      size: 12,
+                                      color: bus.muted ? const Color(0xFFE39C9C) : palette.secondaryText,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Expanded(
+                                child: Center(
+                                  child: Slider(
+                                    value: bus.gainDb.clamp(-24.0, 12.0).toDouble(),
+                                    min: -24,
+                                    max: 12,
+                                    onChanged: (value) => _controller.updateAudioBus(bus.copyWith(gainDb: value)),
+                                  ),
+                                ),
+                              ),
+                              Text('${bus.gainDb.toStringAsFixed(1)} dB',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: palette.secondaryText, fontSize: 7, fontFeatures: const [ui.FontFeature.tabularFigures()]),
+                              ),
+                              Slider(
+                                value: bus.pan.clamp(-1.0, 1.0).toDouble(),
+                                min: -1,
+                                max: 1,
+                                onChanged: (value) => _controller.updateAudioBus(bus.copyWith(pan: value)),
+                              ),
+                              Text('PAN  ${bus.pan.abs() < 0.01 ? 'C' : bus.pan < 0 ? 'L' : 'R'}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: palette.secondaryText, fontSize: 6, fontWeight: FontWeight.w800),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLayerPanel(List<CompositionLayer> layers) {
+    if (_workspacePreset == 'Studio Edit') {
+      return _buildStudioLibraryDock(layers);
+    }
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     final document = _controller.document;
     return Container(
