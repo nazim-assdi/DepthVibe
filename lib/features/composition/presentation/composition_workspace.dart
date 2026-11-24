@@ -2609,7 +2609,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           const SizedBox(width: 7),
           Expanded(
             child: Text(
-              'Composition: ${document.name}',
+              _workspacePreset == 'Studio Edit'\n                  ? 'PROGRAM  ·  ${document.name}'\n                  : 'Composition: ${document.name}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -2620,7 +2620,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ),
           ),
           Text(
-            hasCamera ? 'ACTIVE CAMERA' : 'ACTIVE VIEW',
+            hasCamera\n                ? 'ACTIVE CAMERA'\n                : _workspacePreset == 'Studio Edit'\n                    ? 'DUAL MONITOR'\n                    : 'ACTIVE VIEW',
             style: TextStyle(
               fontSize: 8,
               letterSpacing: 0.55,
