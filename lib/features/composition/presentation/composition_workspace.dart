@@ -2878,7 +2878,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ),
           _workspaceMenuButton(
             'Workspace',
-            const [
+            [
               PopupMenuItem(value: 'After Effects', child: Text('After Effects · Default')),
               PopupMenuItem(value: 'Standard', child: Text('Standard')),
               PopupMenuItem(value: 'Editing', child: Text('Editing')),
