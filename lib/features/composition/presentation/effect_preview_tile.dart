@@ -142,6 +142,7 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
   }
 
   Widget _buildListCard(EffectDefinition effect) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Row(
       children: [
         GestureDetector(
@@ -160,14 +161,14 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
             children: [
               Text(widget.titleOverride ?? effect.name, maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Color(0xFFE9EFFA),fontSize: 10,fontWeight: FontWeight.w800)),
+                style: TextStyle(color: palette.primaryText,fontSize: 10,fontWeight: FontWeight.w800)),
               const SizedBox(height: 3),
               Text(widget.subtitleOverride ?? (effect.category + ' · ' + effect.id),
                 maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Color(0xFF93A5C0),fontSize: 8)),
+                style: TextStyle(color: palette.secondaryText,fontSize: 8)),
               const SizedBox(height: 3),
               Text(_hovered ? 'LIVE PREVIEW' : 'HOVER TO PREVIEW',
-                style: TextStyle(color: _hovered?palette.accent:const Color(0xFF7185A3),
+                style: TextStyle(color: _hovered?palette.accent:palette.secondaryText,
                   fontSize: 7,fontWeight: FontWeight.w900,letterSpacing: 0.55)),
             ],
           ),
@@ -176,13 +177,14 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
           visualDensity: VisualDensity.compact,
           tooltip: 'Add ' + (widget.titleOverride ?? effect.name),
           onPressed: widget.onApply,
-          icon: const Icon(Icons.add_circle_outline,color: Color(0xFFBBAEFF),size: 19),
+          icon: Icon(Icons.add_circle_outline,color: palette.accent,size: 19),
         ),
       ],
     );
   }
 
   Widget _buildGridCard(EffectDefinition effect) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Tooltip(
       message: effect.description,
       waitDuration: const Duration(milliseconds: 450),
@@ -205,9 +207,9 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
                       top: 5,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: const Color(0xD90A1421),
+                          color: palette.toolbar.withValues(alpha: 0.90),
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: const Color(0x556B80A0)),
+                          border: Border.all(color: palette.border),
                         ),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 5,vertical: 3),
@@ -224,7 +226,7 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
                       child: Icon(
                         _hovered ? Icons.play_circle_fill : Icons.play_circle_outline,
                         size: 17,
-                        color: const Color(0xFFE0D8FF),
+                        color: palette.accent,
                       ),
                     ),
                   ],
@@ -235,11 +237,11 @@ class _EffectPreviewTileState extends State<EffectPreviewTile>
           const SizedBox(height: 6),
           Text(widget.titleOverride ?? effect.name,
             maxLines: 1,overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Color(0xFFE9EFFA),fontSize: 9.5,fontWeight: FontWeight.w800)),
+            style: TextStyle(color: palette.primaryText,fontSize: 9.5,fontWeight: FontWeight.w800)),
           const SizedBox(height: 2),
           Text(widget.subtitleOverride ?? effect.id,
             maxLines: 1,overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Color(0xFF93A5C0),fontSize: 7.5)),
+            style: TextStyle(color: palette.secondaryText,fontSize: 7.5)),
           const SizedBox(height: 4),
           Row(
             children: [
