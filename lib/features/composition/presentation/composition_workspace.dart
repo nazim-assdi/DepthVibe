@@ -2205,17 +2205,13 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                             _workspaceSplitPanelOrders.containsKey('left')) ...[
                           SizedBox(
                             width: _leftPanelWidth,
-                            child: _leftDockPanelOrder.length == 1 &&
-                                    _leftDockPanelOrder.first == 'Project' &&
-                                    !_workspaceSplitPanelOrders.containsKey('left')
-                                ? _buildLayerPanel(doc.layers)
-                                : _buildWorkspaceDockArea(
-                                    'left',
-                                    _leftDockPanelOrder,
-                                    _activeLeftDockPanel,
-                                    doc,
-                                    layer,
-                                  ),
+                            child: _buildWorkspaceDockArea(
+                              'left',
+                              _leftDockPanelOrder,
+                              _activeLeftDockPanel,
+                              doc,
+                              layer,
+                            ),
                           ),
                           _buildWorkspaceSplitter(left: true),
                         ],
@@ -2246,19 +2242,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               if ((_bottomDockPanelOrder.isNotEmpty ||
                       _workspaceSplitPanelOrders.containsKey('bottom')) &&
                   !_floatingWorkspacePanels.contains(_activeBottomDockPanel))
-                if (_bottomDockPanelOrder.length == 1 &&
-                    _activeBottomDockPanel == 'Timeline' &&
-                    !_workspaceSplitPanelOrders.containsKey('bottom'))
-                  _buildPlayheadAwareTimeline(height: _bottomDockHeight)
-                else
-                  _buildWorkspaceDockArea(
-                    'bottom',
-                    _bottomDockPanelOrder,
-                    _activeBottomDockPanel,
-                    doc,
-                    layer,
-                    height: _bottomDockHeight,
-                  ),
+                _buildWorkspaceDockArea(
+                  'bottom',
+                  _bottomDockPanelOrder,
+                  _activeBottomDockPanel,
+                  doc,
+                  layer,
+                  height: _bottomDockHeight,
+                ),
               if (_bottomDockPanelOrder.isNotEmpty ||
                   _workspaceSplitPanelOrders.containsKey('bottom'))
                 _buildWorkspaceVerticalSplitter(top: false),
