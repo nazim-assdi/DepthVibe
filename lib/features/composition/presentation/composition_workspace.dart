@@ -2151,33 +2151,64 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     children: [
                       _buildWorkspaceMenuBar(),
               _buildLayerToolbar(),
+              if (_topDockPanelOrder.isNotEmpty &&
+                  !_floatingWorkspacePanels.contains(_activeTopDockPanel))
+                _buildWorkspaceDockGroup(
+                  'top',
+                  _topDockPanelOrder,
+                  _activeTopDockPanel!,
+                  doc,
+                  layer,
+                  height: 190,
+                ),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final compact = constraints.maxWidth < 1050;
+                    final rightPanels = _rightDockedPanelIds;
                     if (compact) {
                       return Column(
                         children: [
                           Expanded(child: _buildPlayheadAwareCanvas()),
-                          if (!_floatingWorkspacePanels.contains('Inspector:$_panel'))
-                            SizedBox(height: 285, child: _buildActivePanel(layer)),
+                          if (rightPanels.isNotEmpty)
+                            SizedBox(height: 245, child: _buildActivePanel(layer)),
+                          if (_leftDockPanelOrder.isNotEmpty)
+                            SizedBox(
+                              height: 220,
+                              child: _buildWorkspaceDockGroup(
+                                'left',
+                                _leftDockPanelOrder,
+                                _activeLeftDockPanel,
+                                doc,
+                                layer,
+                              ),
+                            ),
                         ],
                       );
                     }
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (!_floatingWorkspacePanels.contains('Project')) ...[
+                        if (_leftDockPanelOrder.isNotEmpty) ...[
                           SizedBox(
                             width: _leftPanelWidth,
-                            child: _buildLayerPanel(doc.layers),
+                            child: _leftDockPanelOrder.length == 1 &&
+                                    _leftDockPanelOrder.first == 'Project'
+                                ? _buildLayerPanel(doc.layers)
+                                : _buildWorkspaceDockGroup(
+                                    'left',
+                                    _leftDockPanelOrder,
+                                    _activeLeftDockPanel,
+                                    doc,
+                                    layer,
+                                  ),
                           ),
                           _buildWorkspaceSplitter(left: true),
                         ],
                         Expanded(
                           child: _buildPlayheadAwareCanvas(),
                         ),
-                        if (!_floatingWorkspacePanels.contains('Inspector:$_panel')) ...[
+                        if (rightPanels.isNotEmpty) ...[
                           _buildWorkspaceSplitter(left: false),
                           SizedBox(
                             width: _rightPanelWidth,
@@ -2189,8 +2220,20 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   },
                 ),
               ),
-              if (!_floatingWorkspacePanels.contains('Timeline'))
-                _buildPlayheadAwareTimeline(),
+              if (_bottomDockPanelOrder.isNotEmpty &&
+                  !_floatingWorkspacePanels.contains(_activeBottomDockPanel))
+                if (_bottomDockPanelOrder.length == 1 &&
+                    _activeBottomDockPanel == 'Timeline')
+                  _buildPlayheadAwareTimeline()
+                else
+                  _buildWorkspaceDockGroup(
+                    'bottom',
+                    _bottomDockPanelOrder,
+                    _activeBottomDockPanel,
+                    doc,
+                    layer,
+                    height: 260,
+                  ),
               if (_rendering || _projectBusy)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -2241,6 +2284,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                     doc,
                     layer,
                   ),
+                  ..._buildWorkspaceDockDropZones(),
                 ],
               );
             },
@@ -2281,6 +2325,16 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       _floatingWorkspacePanels.clear();
       _floatingWorkspacePanelRects.clear();
       _floatingWorkspacePanelOrder.clear();
+      _leftDockPanelOrder
+        ..clear()
+        ..add('Project');
+      _activeLeftDockPanel = 'Project';
+      _topDockPanelOrder.clear();
+      _activeTopDockPanel = null;
+      _bottomDockPanelOrder
+        ..clear()
+        ..add('Timeline');
+      _activeBottomDockPanel = 'Timeline';
       _workspacePreset = preset;
       switch (preset) {
         case 'After Effects':
