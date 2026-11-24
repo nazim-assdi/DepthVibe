@@ -12509,6 +12509,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   ) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final palette = Theme.of(context).extension<DepthVibePalette>()!;
         final labelWidth = math.min(164.0, constraints.maxWidth * 0.34);
         final trackWidth = math.max(0.0, constraints.maxWidth - labelWidth);
         final selectedId = _controller.document.selectedLayerId;
