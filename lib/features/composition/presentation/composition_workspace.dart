@@ -2947,7 +2947,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     if (id == 'Project') return _buildLayerPanel(document.layers);
     if (id == 'Timeline') {
       return _buildPlayheadAwareTimeline(
-        height: math.max(180.0, height - 34).toDouble(),
+        height: math.max(100.0, height - 34).toDouble(),
       );
     }
     if (id.startsWith('Inspector:')) {
