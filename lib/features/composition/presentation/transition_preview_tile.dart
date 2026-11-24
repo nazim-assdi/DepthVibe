@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../data/transition_catalog.dart';
 import '../domain/composition_models.dart';
+import 'transition_live_preview.dart';
 
 /// A lightweight, generated A/B motion sample. Hover to animate; apply the
 /// transition from the same card. The sample is illustrative; final export
@@ -94,9 +95,10 @@ class _TransitionPreviewTileState extends State<TransitionPreviewTile>
                 onTap: _hovered ? _stopPreview : _startPreview,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(6),
-                  child: CustomPaint(
-                    size: const Size(104, 60),
-                    painter: _TransitionSamplePainter(
+                  child: SizedBox(
+                    width: 104,
+                    height: 60,
+                    child: _TransitionSampleWidget(
                       kind: widget.kind,
                       progress: _preview.value,
                     ),
@@ -160,6 +162,138 @@ class _TransitionPreviewTileState extends State<TransitionPreviewTile>
       ),
     );
   }
+}
+
+class _TransitionSampleWidget extends StatelessWidget {
+  const _TransitionSampleWidget({
+    required this.kind,
+    required this.progress,
+  });
+
+  final TransitionKind kind;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    const size = Size(104, 60);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(5),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          TransitionLivePreview.apply(
+            child: const CustomPaint(
+              painter: _TransitionScenePainter(second: false),
+            ),
+            kind: kind,
+            progress: progress,
+            incoming: false,
+            size: size,
+          ),
+          TransitionLivePreview.apply(
+            child: const CustomPaint(
+              painter: _TransitionScenePainter(second: true),
+            ),
+            kind: kind,
+            progress: progress,
+            incoming: true,
+            size: size,
+          ),
+          Positioned(
+            left: 5,
+            top: 4,
+            child: _transitionTag('A'),
+          ),
+          Positioned(
+            right: 5,
+            bottom: 4,
+            child: _transitionTag('B'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _transitionTag(String label) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: const Color(0x990A1421),
+      borderRadius: BorderRadius.circular(3),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+      child: Text(label, style: const TextStyle(
+        color: Colors.white,
+        fontSize: 7,
+        fontWeight: FontWeight.w900,
+      )),
+    ),
+  );
+}
+
+class _TransitionScenePainter extends CustomPainter {
+  const _TransitionScenePainter({required this.second});
+
+  final bool second;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final colors = second
+        ? const [Color(0xFF0C6257), Color(0xFFB96847)]
+        : const [Color(0xFF183D68), Color(0xFF70466F)];
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: colors,
+        ).createShader(rect),
+    );
+    canvas.drawCircle(
+      Offset(size.width * (second ? 0.72 : 0.28), size.height * 0.34),
+      size.height * 0.14,
+      Paint()..color = second
+          ? const Color(0xFFFFD08A)
+          : const Color(0xFFFFE0A0),
+    );
+    final mountain = Path()
+      ..moveTo(0, size.height * 0.78)
+      ..lineTo(size.width * 0.30, size.height * (second ? 0.36 : 0.48))
+      ..lineTo(size.width * 0.52, size.height * 0.78)
+      ..lineTo(size.width * 0.72, size.height * (second ? 0.44 : 0.56))
+      ..lineTo(size.width, size.height * 0.76)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(
+      mountain,
+      Paint()..color = second
+          ? const Color(0xFF124B4A)
+          : const Color(0xFF243B59),
+    );
+    final foreground = Path()
+      ..moveTo(0, size.height * 0.88)
+      ..quadraticBezierTo(
+        size.width * 0.5,
+        size.height * 0.60,
+        size.width,
+        size.height * 0.90,
+      )
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(
+      foreground,
+      Paint()..color = second
+          ? const Color(0xFF0C343C)
+          : const Color(0xFF182B43),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _TransitionScenePainter oldDelegate) =>
+      oldDelegate.second != second;
 }
 
 class _TransitionSamplePainter extends CustomPainter {
