@@ -5082,6 +5082,138 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     });
   }
 
+  Widget _buildSourceMonitor(
+    CompositionDocument doc,
+    CompositionLayer layer,
+  ) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final sourceTime = layer.kind == LayerKind.video
+        ? doc.playheadMs.clamp(layer.startMs, math.max(layer.startMs, layer.endMs - 1)).toInt()
+        : doc.playheadMs;
+    final Widget sourceVisual;
+    if (layer.kind == LayerKind.video) {
+      sourceVisual = FutureBuilder<File?>(
+        future: _videoFrameFor(layer, sourceTime, doc.frameRate),
+        initialData: _lastVideoFrames[layer.id],
+        builder: (context, snapshot) {
+          final frame = snapshot.data ?? _lastVideoFrames[layer.id];
+          if (frame != null) {
+            return Image.file(
+              frame,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.medium,
+              errorBuilder: (_, __, ___) => const Center(
+                child: Icon(Icons.broken_image_outlined, color: Color(0xFFE29A9A), size: 30),
+              ),
+            );
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Source preview failed\\n${snapshot.error}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Color(0xFFE29A9A), fontSize: 9)),
+            );
+          }
+          return const Center(
+            child: CircularProgressIndicator(strokeWidth: 2),
+          );
+        },
+      );
+    } else if (layer.sourceUri != null &&
+        (layer.kind == LayerKind.image || layer.kind == LayerKind.photoshopLayer)) {
+      sourceVisual = Image.file(
+        File(layer.sourceUri!),
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const Center(
+          child: Icon(Icons.broken_image_outlined, color: Color(0xFFE29A9A), size: 30),
+        ),
+      );
+    } else {
+      sourceVisual = const Center(
+        child: Icon(Icons.movie_outlined, color: Color(0xFF8FA4C3), size: 34),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1420),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: palette.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          Container(
+            height: 31,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: palette.toolbar,
+              border: Border(bottom: BorderSide(color: palette.border)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.input, size: 13, color: Color(0xFF78CABB)),
+                const SizedBox(width: 6),
+                const Text('SOURCE',
+                  style: TextStyle(fontSize: 8, letterSpacing: 1, fontWeight: FontWeight.w900)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(layer.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 8, color: palette.secondaryText)),
+                ),
+                Text(_time(sourceTime),
+                  style: TextStyle(fontSize: 8, color: palette.secondaryText,
+                    fontFeatures: const [ui.FontFeature.tabularFigures()])),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: doc.width / doc.height,
+                child: ColoredBox(
+                  color: const Color(0xFF05080E),
+                  child: sourceVisual,
+                ),
+              ),
+            ),
+          ),
+          Container(
+            height: 25,
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            color: palette.toolbar,
+            child: Row(
+              children: [
+                Icon(Icons.circle, size: 6, color: const Color(0xFF78CABB)),
+                const SizedBox(width: 5),
+                Text('ORIGINAL MEDIA',
+                  style: TextStyle(fontSize: 7, letterSpacing: 0.7, color: palette.secondaryText)),
+                const Spacer(),
+                Text('NO EFFECTS',
+                  style: TextStyle(fontSize: 7, letterSpacing: 0.6, color: palette.secondaryText)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCanvas(CompositionDocument doc, CompositionLayer? selected) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final resolvedTransforms = const ParentTransformResolver().resolveAll(
+      timeMs: doc.playheadMs,
+      layers: doc.layers,
+    );
+    final cameraLayer = doc.layers
+        .where((item) => item.kind == LayerKind.camera && item.enabled)
+        .firstOrNull;
+    final cameraTransform = cameraLayer == null
+        ? null
+        : resolvedTransforms[cameraLayer.id];
     Widget buildProgramViewer() => Center(
               child: AspectRatio(
                 aspectRatio: doc.width / doc.height,
@@ -5248,138 +5380,6 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                 ),
               ),
             ),;
-  Widget _buildSourceMonitor(
-    CompositionDocument doc,
-    CompositionLayer layer,
-  ) {
-    final palette = Theme.of(context).extension<DepthVibePalette>()!;
-    final sourceTime = layer.kind == LayerKind.video
-        ? doc.playheadMs.clamp(layer.startMs, math.max(layer.startMs, layer.endMs - 1)).toInt()
-        : doc.playheadMs;
-    final Widget sourceVisual;
-    if (layer.kind == LayerKind.video) {
-      sourceVisual = FutureBuilder<File?>(
-        future: _videoFrameFor(layer, sourceTime, doc.frameRate),
-        initialData: _lastVideoFrames[layer.id],
-        builder: (context, snapshot) {
-          final frame = snapshot.data ?? _lastVideoFrames[layer.id];
-          if (frame != null) {
-            return Image.file(
-              frame,
-              fit: BoxFit.contain,
-              gaplessPlayback: true,
-              filterQuality: FilterQuality.medium,
-              errorBuilder: (_, __, ___) => const Center(
-                child: Icon(Icons.broken_image_outlined, color: Color(0xFFE29A9A), size: 30),
-              ),
-            );
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Source preview failed\\n${snapshot.error}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFFE29A9A), fontSize: 9)),
-            );
-          }
-          return const Center(
-            child: CircularProgressIndicator(strokeWidth: 2),
-          );
-        },
-      );
-    } else if (layer.sourceUri != null &&
-        (layer.kind == LayerKind.image || layer.kind == LayerKind.photoshopLayer)) {
-      sourceVisual = Image.file(
-        File(layer.sourceUri!),
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => const Center(
-          child: Icon(Icons.broken_image_outlined, color: Color(0xFFE29A9A), size: 30),
-        ),
-      );
-    } else {
-      sourceVisual = const Center(
-        child: Icon(Icons.movie_outlined, color: Color(0xFF8FA4C3), size: 34),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D1420),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: palette.border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          Container(
-            height: 31,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: palette.toolbar,
-              border: Border(bottom: BorderSide(color: palette.border)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.input, size: 13, color: Color(0xFF78CABB)),
-                const SizedBox(width: 6),
-                const Text('SOURCE',
-                  style: TextStyle(fontSize: 8, letterSpacing: 1, fontWeight: FontWeight.w900)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(layer.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 8, color: palette.secondaryText)),
-                ),
-                Text(_time(sourceTime),
-                  style: TextStyle(fontSize: 8, color: palette.secondaryText,
-                    fontFeatures: const [ui.FontFeature.tabularFigures()])),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: doc.width / doc.height,
-                child: ColoredBox(
-                  color: const Color(0xFF05080E),
-                  child: sourceVisual,
-                ),
-              ),
-            ),
-          ),
-          Container(
-            height: 25,
-            padding: const EdgeInsets.symmetric(horizontal: 9),
-            color: palette.toolbar,
-            child: Row(
-              children: [
-                Icon(Icons.circle, size: 6, color: const Color(0xFF78CABB)),
-                const SizedBox(width: 5),
-                Text('ORIGINAL MEDIA',
-                  style: TextStyle(fontSize: 7, letterSpacing: 0.7, color: palette.secondaryText)),
-                const Spacer(),
-                Text('NO EFFECTS',
-                  style: TextStyle(fontSize: 7, letterSpacing: 0.6, color: palette.secondaryText)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCanvas(CompositionDocument doc, CompositionLayer? selected) {
-    final palette = Theme.of(context).extension<DepthVibePalette>()!;
-    final resolvedTransforms = const ParentTransformResolver().resolveAll(
-      timeMs: doc.playheadMs,
-      layers: doc.layers,
-    );
-    final cameraLayer = doc.layers
-        .where((item) => item.kind == LayerKind.camera && item.enabled)
-        .firstOrNull;
-    final cameraTransform = cameraLayer == null
-        ? null
-        : resolvedTransforms[cameraLayer.id];
     return Container(
       color: palette.appBackground,
       padding: const EdgeInsets.all(18),
