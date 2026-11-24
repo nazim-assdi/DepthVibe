@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
@@ -6,6 +9,7 @@ import 'package:flutter/widgets.dart';
 import '../data/effect_catalog.dart';
 import '../domain/composition_models.dart';
 import 'color_grade_preview.dart';
+import 'cube_lut_validator.dart';
 
 /// GPU-backed, playhead-aware preview for every built-in DepthVibe effect.
 ///
@@ -240,15 +244,137 @@ class _LiveEffectStack extends StatefulWidget {
 class _LiveEffectStackState extends State<_LiveEffectStack> {
   static final Future<ui.FragmentProgram> _program =
       ui.FragmentProgram.fromAsset('shaders/live_effect_preview.frag');
+  static final Future<ui.FragmentProgram> _lutProgram =
+      ui.FragmentProgram.fromAsset('shaders/lut_preview.frag');
 
   final Map<String, ui.FragmentShader> _shaders = {};
+  final Map<String, ui.FragmentShader> _lutShaders = {};
+  final Map<String, _LutImageData> _lutImages = {};
+  final Map<String, String> _lutRequests = {};
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_syncLutImages());
+  }
+
+  @override
+  void didUpdateWidget(covariant _LiveEffectStack oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    unawaited(_syncLutImages());
+  }
+
+  Future<void> _syncLutImages() async {
+    final active = <String, String>{};
+    for (final effect in widget.effects.where((item) => item.effectId == 'color_lut')) {
+      final path = effect.assetUri;
+      if (path == null || path.trim().isEmpty) continue;
+      active[effect.id] = path;
+      if (_lutRequests[effect.id] == path) continue;
+      _lutRequests[effect.id] = path;
+      _lutImages.remove(effect.id)?.image.dispose();
+      _lutShaders.remove(effect.id)?.dispose();
+      try {
+        final image = await _loadCubeLut(path);
+        if (!mounted || _lutRequests[effect.id] != path) {
+          image.image.dispose();
+          continue;
+        }
+        _lutImages[effect.id] = image;
+        setState(() {});
+      } catch (error) {
+        debugPrint('DepthVibe live LUT preview skipped for $path: $error');
+      }
+    }
+    for (final id in _lutRequests.keys.toList()) {
+      if (active.containsKey(id)) continue;
+      _lutRequests.remove(id);
+      _lutImages.remove(id)?.image.dispose();
+      _lutShaders.remove(id)?.dispose();
+    }
+  }
+
+  Future<_LutImageData> _loadCubeLut(String path) async {
+    final contents = await File(path).readAsString();
+    final info = CubeLutValidator.parse(contents);
+    var domainMin = <double>[0, 0, 0];
+    var domainMax = <double>[1, 1, 1];
+    final values = <List<double>>[];
+    for (final raw in contents.split(RegExp(r'\\r?\\n'))) {
+      final line = raw.trim();
+      if (line.isEmpty || line.startsWith('#') ||
+          line.startsWith('TITLE ') || line.startsWith('LUT_3D_SIZE') ||
+          line.startsWith('DOMAIN_MIN') || line.startsWith('DOMAIN_MAX')) {
+        if (line.startsWith('DOMAIN_MIN')) {
+          domainMin = line.split(RegExp(r'\\s+')).skip(1).map(double.parse).toList();
+        } else if (line.startsWith('DOMAIN_MAX')) {
+          domainMax = line.split(RegExp(r'\\s+')).skip(1).map(double.parse).toList();
+        }
+        continue;
+      }
+      final parts = line.split(RegExp(r'\\s+'));
+      if (parts.length == 3) {
+        values.add(parts.map(double.parse).toList());
+      }
+    }
+    final n = info.size;
+    if (values.length != n * n * n) {
+      throw const FormatException('The .cube LUT data rows changed during live preview loading.');
+    }
+    final width = n * n;
+    final bytes = Uint8List(width * n * 4);
+    for (var blue = 0; blue < n; blue++) {
+      for (var green = 0; green < n; green++) {
+        for (var red = 0; red < n; red++) {
+          final sample = values[(blue * n * n) + (green * n) + red];
+          final target = ((green * width) + (blue * n + red)) * 4;
+          bytes[target] = (sample[0].clamp(0.0, 1.0) * 255).round();
+          bytes[target + 1] = (sample[1].clamp(0.0, 1.0) * 255).round();
+          bytes[target + 2] = (sample[2].clamp(0.0, 1.0) * 255).round();
+          bytes[target + 3] = 255;
+        }
+      }
+    }
+    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+    final descriptor = ui.ImageDescriptor.raw(
+      buffer,
+      width: width,
+      height: n,
+      pixelFormat: ui.PixelFormat.rgba8888,
+    );
+    try {
+      final codec = await descriptor.instantiateCodec();
+      try {
+        final frame = await codec.getNextFrame();
+        return _LutImageData(
+          image: frame.image,
+          size: n,
+          domainMin: domainMin,
+          domainMax: domainMax,
+        );
+      } finally {
+        codec.dispose();
+      }
+    } finally {
+      descriptor.dispose();
+      buffer.dispose();
+    }
+  }
 
   @override
   void dispose() {
     for (final shader in _shaders.values) {
       shader.dispose();
     }
+    for (final shader in _lutShaders.values) {
+      shader.dispose();
+    }
+    for (final lut in _lutImages.values) {
+      lut.image.dispose();
+    }
     _shaders.clear();
+    _lutShaders.clear();
+    _lutImages.clear();
     super.dispose();
   }
 
@@ -266,6 +392,10 @@ class _LiveEffectStackState extends State<_LiveEffectStack> {
         }
         Widget result = widget.child;
         for (final effect in widget.effects) {
+          if (effect.effectId == 'color_lut') {
+            result = _applyLut(result, effect);
+            continue;
+          }
           final code = LiveEffectPreview._shaderCodes[effect.effectId];
           final definition = EffectCatalog.find(effect.effectId);
           if (code == null || definition == null) {
@@ -298,6 +428,39 @@ class _LiveEffectStackState extends State<_LiveEffectStack> {
           );
         }
         return result;
+      },
+    );
+  }
+
+  Widget _applyLut(Widget child, EffectInstance effect) {
+    final texture = _lutImages[effect.id];
+    if (texture == null) return child;
+    return FutureBuilder<ui.FragmentProgram>(
+      future: _lutProgram,
+      builder: (context, snapshot) {
+        final program = snapshot.data;
+        if (program == null || snapshot.hasError) return child;
+        final shader = _lutShaders.putIfAbsent(
+          effect.id,
+          () => program.fragmentShader(),
+        );
+        shader.setFloat(2, texture.size.toDouble());
+        for (var index = 0; index < 3; index++) {
+          shader.setFloat(3 + index, texture.domainMin[index]);
+          shader.setFloat(6 + index, texture.domainMax[index]);
+        }
+        shader.setImageSampler(
+          1,
+          texture.image,
+          filterQuality: ui.FilterQuality.none,
+        );
+        return ImageFiltered(
+          imageFilter: ui.ImageFilter.shader(
+            shader,
+            filterQuality: ui.FilterQuality.medium,
+          ),
+          child: child,
+        );
       },
     );
   }
@@ -452,4 +615,19 @@ class _FallbackTexturePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _FallbackTexturePainter oldDelegate) =>
       oldDelegate.effectId!=effectId||oldDelegate.timeMs!=timeMs;
+}
+
+
+class _LutImageData {
+  const _LutImageData({
+    required this.image,
+    required this.size,
+    required this.domainMin,
+    required this.domainMax,
+  });
+
+  final ui.Image image;
+  final int size;
+  final List<double> domainMin;
+  final List<double> domainMax;
 }
