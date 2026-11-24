@@ -3520,25 +3520,6 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     _scheduleWorkspaceLayoutSave();
   }
 
-  void _moveWorkspacePanel(String id, Offset delta) {
-    final current = _floatingWorkspacePanelRects[id];
-    if (current == null) return;
-    final viewport = _workspaceViewportSize;
-    final left = (current.left + delta.dx)
-        .clamp(-current.width + 110, viewport.width - 110)
-        .toDouble();
-    final top = (current.top + delta.dy)
-        .clamp(0.0, math.max(0.0, viewport.height - 42))
-        .toDouble();
-    setState(() {
-      _floatingWorkspacePanelRects[id] = current.shift(Offset(
-        left - current.left,
-        top - current.top,
-      ));
-    });
-    _scheduleWorkspaceLayoutSave();
-  }
-
   void _resizeWorkspacePanel(String id, Offset delta) {
     final current = _floatingWorkspacePanelRects[id];
     if (current == null) return;
