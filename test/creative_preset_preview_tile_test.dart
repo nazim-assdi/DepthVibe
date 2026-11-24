@@ -38,6 +38,7 @@ void main() {
           description: preset.description,
           kind: CreativePresetPreviewKind.audio,
           audioPreset: preset,
+          onApply: () {},
         ),
       ),
     ));
@@ -55,6 +56,7 @@ void main() {
           description: 'Large centred title.',
           kind: CreativePresetPreviewKind.title,
           sampleText: 'THE JOURNEY',
+          onApply: () {},
         ),
       ),
     ));
