@@ -2758,7 +2758,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         return;
       }
       final decoded = jsonDecode(await file.readAsString());
-      if (decoded is! Map<String, dynamic>) return;
+      if (decoded is! Map<String, dynamic>) {
+        _workspaceLayoutLoaded = true;
+        return;
+      }
       final floating = decoded['floating'];
       final rects = decoded['rects'];
       final validPanels = <String>{
@@ -2827,6 +2830,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
   Future<void> _saveWorkspaceLayout() async {
+    if (!_workspaceLayoutLoaded) return;
     try {
       final file = await _workspaceLayoutFile();
       final data = <String, Object>{
@@ -2963,28 +2967,60 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   Widget _workspacePanelDragHandle(String id) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
-    return Tooltip(
-      message: _floatingWorkspacePanels.contains(id)
-          ? 'Drag to move this floating panel'
-          : 'Drag this handle to detach and move the panel',
-      child: MouseRegion(
-        cursor: SystemMouseCursors.move,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onPanStart: (_) => _beginWorkspacePanelDrag(id),
-          onPanUpdate: (details) => _moveWorkspacePanel(id, details.delta),
-          onPanEnd: (_) => _scheduleWorkspaceLayoutSave(),
-          onPanCancel: _scheduleWorkspaceLayoutSave,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
-            child: Icon(
-              Icons.drag_indicator,
-              size: 16,
-              color: _floatingWorkspacePanels.contains(id)
-                  ? palette.accent
-                  : palette.secondaryText,
-            ),
+    final floating = _floatingWorkspacePanels.contains(id);
+    final handle = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+      child: Icon(
+        Icons.drag_indicator,
+        size: 16,
+        color: floating ? palette.accent : palette.secondaryText,
+      ),
+    );
+    if (floating) {
+      return Tooltip(
+        message: 'Drag to move this floating panel',
+        child: MouseRegion(
+          cursor: SystemMouseCursors.move,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onPanUpdate: (details) => _moveWorkspacePanel(id, details.delta),
+            onPanEnd: (_) => _scheduleWorkspaceLayoutSave(),
+            child: handle,
           ),
+        ),
+      );
+    }
+    return Tooltip(
+      message: 'Drag this handle away from the dock to detach the panel',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: Draggable<String>(
+          data: id,
+          dragAnchorStrategy: pointerDragAnchorStrategy,
+          feedback: Material(
+            color: Colors.transparent,
+            child: Icon(Icons.open_with, size: 25, color: palette.accent),
+          ),
+          childWhenDragging: Opacity(opacity: 0.35, child: handle),
+          onDragEnd: (details) {
+            _beginWorkspacePanelDrag(id);
+            final current = _floatingWorkspacePanelRects[id];
+            if (current == null) return;
+            final viewport = _workspaceViewportSize;
+            final left = (details.offset.dx - 14)
+                .clamp(0.0, math.max(0.0, viewport.width - 110))
+                .toDouble();
+            final top = (details.offset.dy - 58 - 14)
+                .clamp(0.0, math.max(0.0, viewport.height - 42))
+                .toDouble();
+            setState(() {
+              _floatingWorkspacePanelRects[id] = current.shift(
+                Offset(left - current.left, top - current.top),
+              );
+            });
+            _scheduleWorkspaceLayoutSave();
+          },
+          child: handle,
         ),
       ),
     );
@@ -3079,12 +3115,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   .toDouble();
             }
           });
+          _scheduleWorkspaceLayoutSave();
         },
         onDoubleTap: () {
           setState(() {
             _leftPanelWidth = 270;
             _rightPanelWidth = 340;
           });
+          _scheduleWorkspaceLayoutSave();
         },
         child: SizedBox(
           width: 6,
