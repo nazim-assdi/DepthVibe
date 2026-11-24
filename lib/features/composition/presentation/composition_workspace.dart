@@ -5379,7 +5379,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   },
                 ),
               ),
-            ),;
+            );
     return Container(
       color: palette.appBackground,
       padding: const EdgeInsets.all(18),
