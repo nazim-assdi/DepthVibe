@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -824,6 +825,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   Size _previewPenLayerSize = Size.zero;
   double _leftPanelWidth = 270;
   double _rightPanelWidth = 340;
+  final Set<String> _floatingWorkspacePanels = {};
+  final Map<String, Rect> _floatingWorkspacePanelRects = {};
+  final List<String> _floatingWorkspacePanelOrder = [];
+  Size _workspaceViewportSize = const Size(1280, 720);
+  Timer? _workspaceLayoutSaveTimer;
+  bool _workspaceLayoutLoaded = false;
   final Set<String> _expandedTimelineLayers = {};
   String _effectCategory = 'All';
   String _effectSearch = '';
@@ -869,6 +876,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     ExtensionManagerService.instance.addListener(_onExtensionsChanged);
     _motionBroService.addListener(_onMotionBroPacksChanged);
     unawaited(_loadMotionBroPacks());
+    unawaited(_loadWorkspaceLayout());
     _creativeAssetPacks.addListener(_onCreativeAssetPacksChanged);
     unawaited(_loadCreativeAssetPacks());
     AdobeBridgeService.instance.attachController(_controller);
@@ -1961,6 +1969,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   void dispose() {
     _recoveryTimer?.cancel();
     _previewPlaybackTimer?.cancel();
+    _workspaceLayoutSaveTimer?.cancel();
+    unawaited(_saveWorkspaceLayout());
     _renderCancellation?.cancel();
     _controller.removeListener(_onCompositionChanged);
     ExtensionManagerService.instance.removeListener(_onExtensionsChanged);
@@ -2122,9 +2132,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               const SizedBox(width: 6),
             ],
           ),
-          body: Column(
-            children: [
-              _buildWorkspaceMenuBar(),
+          body: LayoutBuilder(
+            builder: (context, bodyConstraints) {
+              _workspaceViewportSize = bodyConstraints.biggest;
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  Column(
+                    children: [
+                      _buildWorkspaceMenuBar(),
               _buildLayerToolbar(),
               Expanded(
                 child: LayoutBuilder(
@@ -2134,32 +2150,38 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                       return Column(
                         children: [
                           Expanded(child: _buildPlayheadAwareCanvas()),
-                          SizedBox(height: 285, child: _buildActivePanel(layer)),
+                          if (!_floatingWorkspacePanels.contains('Inspector:$_panel'))
+                            SizedBox(height: 285, child: _buildActivePanel(layer)),
                         ],
                       );
                     }
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        SizedBox(
-                          width: _leftPanelWidth,
-                          child: _buildLayerPanel(doc.layers),
-                        ),
-                        _buildWorkspaceSplitter(left: true),
+                        if (!_floatingWorkspacePanels.contains('Project')) ...[
+                          SizedBox(
+                            width: _leftPanelWidth,
+                            child: _buildLayerPanel(doc.layers),
+                          ),
+                          _buildWorkspaceSplitter(left: true),
+                        ],
                         Expanded(
                           child: _buildPlayheadAwareCanvas(),
                         ),
-                        _buildWorkspaceSplitter(left: false),
-                        SizedBox(
-                          width: _rightPanelWidth,
-                          child: _buildActivePanel(layer),
-                        ),
+                        if (!_floatingWorkspacePanels.contains('Inspector:$_panel')) ...[
+                          _buildWorkspaceSplitter(left: false),
+                          SizedBox(
+                            width: _rightPanelWidth,
+                            child: _buildActivePanel(layer),
+                          ),
+                        ],
                       ],
                     );
                   },
                 ),
               ),
-              _buildPlayheadAwareTimeline(),
+              if (!_floatingWorkspacePanels.contains('Timeline'))
+                _buildPlayheadAwareTimeline(),
               if (_rendering || _projectBusy)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -2204,6 +2226,15 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                   child: Text(_notice!, style: TextStyle(fontSize: 11, color: palette.secondaryText)),
                 ),
             ],
+                  ),
+                  ..._buildFloatingWorkspacePanels(
+                    _workspaceViewportSize,
+                    doc,
+                    layer,
+                  ),
+                ],
+              );
+            },
           ),
         );
       },
@@ -2238,6 +2269,9 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
 
   void _applyWorkspacePreset(String preset) {
     setState(() {
+      _floatingWorkspacePanels.clear();
+      _floatingWorkspacePanelRects.clear();
+      _floatingWorkspacePanelOrder.clear();
       _workspacePreset = preset;
       switch (preset) {
         case 'After Effects':
@@ -2296,6 +2330,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           _graphEditorVisible = false;
       }
     });
+    _scheduleWorkspaceLayoutSave();
   }
 
   Widget _buildWorkspaceMenuBar() {
@@ -2463,8 +2498,25 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
               PopupMenuItem(value: 'Tracking', child: Text('Tracker')),
               PopupMenuItem(value: 'Parent', child: Text('Parent & Link')),
               PopupMenuItem(value: '3D', child: Text('3D Controls')),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'float-inspector', child: Text('Float Active Inspector Panel')),
+              const PopupMenuItem(value: 'float-project', child: Text('Float Project Panel')),
+              const PopupMenuItem(value: 'float-timeline', child: Text('Float Timeline')),
+              const PopupMenuItem(value: 'dock-all', child: Text('Dock All Panels')),
             ],
-            (panel) => setState(() => _panel = panel),
+            (panel) {
+              if (panel == 'float-inspector') {
+                _beginWorkspacePanelDrag('Inspector:$_panel');
+              } else if (panel == 'float-project') {
+                _beginWorkspacePanelDrag('Project');
+              } else if (panel == 'float-timeline') {
+                _beginWorkspacePanelDrag('Timeline');
+              } else if (panel == 'dock-all') {
+                _dockAllWorkspacePanels();
+              } else {
+                setState(() => _panel = panel);
+              }
+            },
           ),
           _workspaceMenuButton(
             'Workspace',
@@ -2688,6 +2740,327 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
+
+  Future<File> _workspaceLayoutFile() async {
+    final support = await getApplicationSupportDirectory();
+    final directory = Directory(
+      support.path + Platform.pathSeparator + 'DepthVibe',
+    );
+    await directory.create(recursive: true);
+    return File(directory.path + Platform.pathSeparator + 'workspace_layout.json');
+  }
+
+  Future<void> _loadWorkspaceLayout() async {
+    try {
+      final file = await _workspaceLayoutFile();
+      if (!await file.exists()) {
+        _workspaceLayoutLoaded = true;
+        return;
+      }
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map<String, dynamic>) return;
+      final floating = decoded['floating'];
+      final rects = decoded['rects'];
+      final validPanels = <String>{
+        'Project',
+        'Timeline',
+        for (final panel in _rightPanelOrder) 'Inspector:$panel',
+      };
+      if (floating is List) {
+        for (final item in floating) {
+          if (item is String && validPanels.contains(item)) {
+            _floatingWorkspacePanels.add(item);
+            _floatingWorkspacePanelOrder.add(item);
+          }
+        }
+      }
+      if (rects is Map) {
+        for (final entry in rects.entries) {
+          final value = entry.value;
+          if (entry.key is String &&
+              validPanels.contains(entry.key) &&
+              value is List &&
+              value.length == 4 &&
+              value.every((part) => part is num && part.isFinite)) {
+            final rect = Rect.fromLTWH(
+              (value[0] as num).toDouble(),
+              (value[1] as num).toDouble(),
+              (value[2] as num).toDouble(),
+              (value[3] as num).toDouble(),
+            );
+            if (rect.width >= 220 && rect.height >= 180) {
+              _floatingWorkspacePanelRects[entry.key as String] = rect;
+            }
+          }
+        }
+      }
+      final leftWidth = decoded['leftWidth'];
+      final rightWidth = decoded['rightWidth'];
+      if (leftWidth is num && leftWidth.isFinite) {
+        _leftPanelWidth = leftWidth.toDouble().clamp(205.0, 420.0).toDouble();
+      }
+      if (rightWidth is num && rightWidth.isFinite) {
+        _rightPanelWidth = rightWidth.toDouble().clamp(300.0, 560.0).toDouble();
+      }
+      final remaining = _rightPanelOrder.where(
+        (panel) => !_floatingWorkspacePanels.contains('Inspector:$panel'),
+      );
+      if (_floatingWorkspacePanels.contains('Inspector:$_panel') &&
+          remaining.isNotEmpty) {
+        _panel = remaining.first;
+      }
+      _workspaceLayoutLoaded = true;
+      if (mounted) setState(() {});
+    } catch (error) {
+      debugPrint('DepthVibe workspace layout could not be restored: $error');
+      _workspaceLayoutLoaded = true;
+    }
+  }
+
+  void _scheduleWorkspaceLayoutSave() {
+    if (!_workspaceLayoutLoaded) return;
+    _workspaceLayoutSaveTimer?.cancel();
+    _workspaceLayoutSaveTimer = Timer(
+      const Duration(milliseconds: 450),
+      () => unawaited(_saveWorkspaceLayout()),
+    );
+  }
+
+  Future<void> _saveWorkspaceLayout() async {
+    try {
+      final file = await _workspaceLayoutFile();
+      final data = <String, Object>{
+        'floating': _floatingWorkspacePanelOrder
+            .where(_floatingWorkspacePanels.contains)
+            .toList(),
+        'rects': {
+          for (final entry in _floatingWorkspacePanelRects.entries)
+            entry.key: [
+              entry.value.left,
+              entry.value.top,
+              entry.value.width,
+              entry.value.height,
+            ],
+        },
+        'leftWidth': _leftPanelWidth,
+        'rightWidth': _rightPanelWidth,
+      };
+      await file.writeAsString(jsonEncode(data), flush: true);
+    } catch (error) {
+      debugPrint('DepthVibe workspace layout could not be saved: $error');
+    }
+  }
+
+  Rect _defaultWorkspacePanelRect(String id, Size viewport) {
+    final width = math.max(320.0, viewport.width).toDouble();
+    final height = math.max(300.0, viewport.height).toDouble();
+    const top = 72.0;
+    final bodyHeight = math.max(230.0, height - top - 260).toDouble();
+    if (id == 'Project') {
+      return Rect.fromLTWH(
+        0,
+        top,
+        _leftPanelWidth
+            .clamp(230.0, math.max(230.0, width - 100))
+            .toDouble(),
+        bodyHeight,
+      );
+    }
+    if (id == 'Timeline') {
+      return Rect.fromLTWH(
+        12,
+        math.max(72.0, height - 300).toDouble(),
+        math.max(320.0, width - 24).toDouble(),
+        288,
+      );
+    }
+    return Rect.fromLTWH(
+      math.max(0.0, width - _rightPanelWidth).toDouble(),
+      top,
+      _rightPanelWidth
+          .clamp(260.0, math.max(260.0, width - 100))
+          .toDouble(),
+      bodyHeight,
+    );
+  }
+
+  void _beginWorkspacePanelDrag(String id) {
+    if (!_floatingWorkspacePanels.contains(id)) {
+      _floatingWorkspacePanelRects[id] =
+          _defaultWorkspacePanelRect(id, _workspaceViewportSize);
+      _floatingWorkspacePanels.add(id);
+      if (id.startsWith('Inspector:')) {
+        final panelId = id.substring('Inspector:'.length);
+        if (_panel == panelId) {
+          final remaining = _rightPanelOrder.where(
+            (panel) => !_floatingWorkspacePanels.contains('Inspector:$panel'),
+          );
+          if (remaining.isNotEmpty) _panel = remaining.first;
+        }
+      }
+    }
+    _floatingWorkspacePanelOrder.remove(id);
+    _floatingWorkspacePanelOrder.add(id);
+    setState(() {});
+    _scheduleWorkspaceLayoutSave();
+  }
+
+  void _moveWorkspacePanel(String id, Offset delta) {
+    final current = _floatingWorkspacePanelRects[id];
+    if (current == null) return;
+    final viewport = _workspaceViewportSize;
+    final left = (current.left + delta.dx)
+        .clamp(-current.width + 110, viewport.width - 110)
+        .toDouble();
+    final top = (current.top + delta.dy)
+        .clamp(0.0, math.max(0.0, viewport.height - 42))
+        .toDouble();
+    setState(() {
+      _floatingWorkspacePanelRects[id] = current.shift(Offset(
+        left - current.left,
+        top - current.top,
+      ));
+    });
+    _scheduleWorkspaceLayoutSave();
+  }
+
+  void _resizeWorkspacePanel(String id, Offset delta) {
+    final current = _floatingWorkspacePanelRects[id];
+    if (current == null) return;
+    final maxWidth = math.max(260.0, _workspaceViewportSize.width - current.left);
+    final maxHeight = math.max(200.0, _workspaceViewportSize.height - current.top);
+    setState(() {
+      _floatingWorkspacePanelRects[id] = Rect.fromLTWH(
+        current.left,
+        current.top,
+        (current.width + delta.dx).clamp(260.0, maxWidth).toDouble(),
+        (current.height + delta.dy).clamp(200.0, maxHeight).toDouble(),
+      );
+    });
+    _scheduleWorkspaceLayoutSave();
+  }
+
+  void _dockWorkspacePanel(String id) {
+    setState(() {
+      _floatingWorkspacePanels.remove(id);
+      _floatingWorkspacePanelOrder.remove(id);
+      _floatingWorkspacePanelRects.remove(id);
+      if (id.startsWith('Inspector:')) {
+        _panel = id.substring('Inspector:'.length);
+      }
+    });
+    _scheduleWorkspaceLayoutSave();
+  }
+
+  void _dockAllWorkspacePanels() {
+    setState(() {
+      _floatingWorkspacePanels.clear();
+      _floatingWorkspacePanelOrder.clear();
+      _floatingWorkspacePanelRects.clear();
+    });
+    _scheduleWorkspaceLayoutSave();
+  }
+
+  Widget _workspacePanelDragHandle(String id) {
+    final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    return Tooltip(
+      message: _floatingWorkspacePanels.contains(id)
+          ? 'Drag to move this floating panel'
+          : 'Drag this handle to detach and move the panel',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.move,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: (_) => _beginWorkspacePanelDrag(id),
+          onPanUpdate: (details) => _moveWorkspacePanel(id, details.delta),
+          onPanEnd: (_) => _scheduleWorkspaceLayoutSave(),
+          onPanCancel: _scheduleWorkspaceLayoutSave,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+            child: Icon(
+              Icons.drag_indicator,
+              size: 16,
+              color: _floatingWorkspacePanels.contains(id)
+                  ? palette.accent
+                  : palette.secondaryText,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _workspacePanelDockButton(String id) {
+    if (!_floatingWorkspacePanels.contains(id)) return const SizedBox.shrink();
+    return IconButton(
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 25, minHeight: 25),
+      tooltip: 'Dock this panel back into the workspace',
+      onPressed: () => _dockWorkspacePanel(id),
+      icon: const Icon(Icons.vertical_align_bottom, size: 15),
+    );
+  }
+
+  List<Widget> _buildFloatingWorkspacePanels(
+    Size viewport,
+    CompositionDocument document,
+    CompositionLayer? layer,
+  ) {
+    return _floatingWorkspacePanelOrder
+        .where(_floatingWorkspacePanels.contains)
+        .map((id) {
+      final rect = _floatingWorkspacePanelRects[id] ??
+          _defaultWorkspacePanelRect(id, viewport);
+      final panel = id == 'Project'
+          ? _buildLayerPanel(document.layers)
+          : id == 'Timeline'
+              ? _buildPlayheadAwareTimeline(height: rect.height)
+              : _buildActivePanel(
+                  layer,
+                  panelOverride: id.substring('Inspector:'.length),
+                  showTabs: false,
+                );
+      return Positioned.fromRect(
+        rect: rect,
+        child: Material(
+          elevation: 18,
+          color: Theme.of(context).extension<DepthVibePalette>()!.panel,
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              panel,
+              Positioned(
+                right: 1,
+                bottom: 1,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.resizeDownRight,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onPanUpdate: (details) =>
+                        _resizeWorkspacePanel(id, details.delta),
+                    onPanEnd: (_) => _scheduleWorkspaceLayoutSave(),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.drag_handle,
+                        size: 17,
+                        color: Theme.of(context)
+                            .extension<DepthVibePalette>()!
+                            .accent,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }).toList();
+  }
+
   Widget _buildWorkspaceSplitter({required bool left}) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return MouseRegion(
@@ -2745,6 +3118,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ),
             child: Row(
               children: [
+                _workspacePanelDragHandle('Project'),
+                _workspacePanelDockButton('Project'),
                 Icon(
                   _leftPanel == 'Project' ? Icons.folder_open : Icons.auto_awesome,
                   size: 15,
@@ -7061,8 +7436,14 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     });
   }
 
-  Widget _buildActivePanel(CompositionLayer? layer) {
+  Widget _buildActivePanel(
+    CompositionLayer? layer, {
+    String? panelOverride,
+    bool showTabs = true,
+  }) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
+    final activePanelId = panelOverride ?? _panel;
+    final activeWindowId = 'Inspector:$activePanelId';
     const panels = <(String, String, IconData)>[
       ('Transform', 'Transform', Icons.transform),
       ('Effects', 'Effect Controls', Icons.auto_awesome),
@@ -7083,10 +7464,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     ];
     final panelById = {for (final item in panels) item.$1: item};
     final orderedPanels = _rightPanelOrder
-        .where(panelById.containsKey)
+        .where((id) =>
+            panelById.containsKey(id) &&
+            !_floatingWorkspacePanels.contains('Inspector:$id'))
         .map((id) => panelById[id]!)
         .toList();
-    final active = panelById[_panel] ?? panels.first;
+    final active = panelById[activePanelId] ?? panels.first;
 
     return Container(
       decoration: BoxDecoration(
@@ -7095,9 +7478,10 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
       ),
       child: Column(
         children: [
-          SizedBox(
-            height: 39,
-            child: ReorderableListView.builder(
+          if (showTabs)
+            SizedBox(
+              height: 39,
+              child: ReorderableListView.builder(
               scrollDirection: Axis.horizontal,
               buildDefaultDragHandles: true,
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
@@ -7168,6 +7552,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
             ),
             child: Row(
               children: [
+                _workspacePanelDragHandle(activeWindowId),
+                _workspacePanelDockButton(activeWindowId),
                 Icon(active.$3, size: 15, color: palette.accent),
                 const SizedBox(width: 8),
                 Expanded(
@@ -7216,12 +7602,12 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           ),
           Expanded(
             child: layer == null
-                ? _panel == 'Bus Mixer'
+                ? activePanelId == 'Bus Mixer'
                     ? SingleChildScrollView(
                         padding: const EdgeInsets.all(12),
                         child: _buildAudioBusPanel(null),
                       )
-                    : _panel == 'Library'
+                    : activePanelId == 'Library'
                         ? SingleChildScrollView(
                             padding: const EdgeInsets.all(12),
                             child: _buildAssetLibraryPanel(null),
@@ -7231,7 +7617,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
                           )
                 : SingleChildScrollView(
                     padding: const EdgeInsets.all(12),
-                    child: _panelContent(layer),
+                    child: _panelContent(layer, panelOverride: activePanelId),
                   ),
           ),
         ],
@@ -7240,8 +7626,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
   }
 
 
-  Widget _panelContent(CompositionLayer layer) {
-    switch (_panel) {
+  Widget _panelContent(CompositionLayer layer, {String? panelOverride}) {
+    switch (panelOverride ?? _panel) {
       case 'Typography':
         return _buildTypographyPanel(layer);
       case 'Timing':
@@ -11122,7 +11508,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     );
   }
 
-  Widget _buildPlayheadAwareTimeline() {
+  Widget _buildPlayheadAwareTimeline({double height = 260}) {
     final doc = _controller.document;
     return AnimatedBuilder(
       animation: _controller.playhead,
@@ -11133,6 +11519,7 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
           currentDoc.playheadMs,
           currentDoc.durationMs,
           layerRows: layerRows!,
+          height: height,
         );
       },
     );
@@ -11142,10 +11529,11 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
     int playhead,
     int duration, {
     required Widget layerRows,
+    double height = 260,
   }) {
     final palette = Theme.of(context).extension<DepthVibePalette>()!;
     return Container(
-      height: 260,
+      height: height,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: palette.toolbar,
@@ -11155,6 +11543,8 @@ class _CompositionWorkspaceState extends State<CompositionWorkspace>
         children: [
           Row(
             children: [
+              _workspacePanelDragHandle('Timeline'),
+              _workspacePanelDockButton('Timeline'),
               const Icon(Icons.timeline, size: 16),
               const SizedBox(width: 8),
               Text(
